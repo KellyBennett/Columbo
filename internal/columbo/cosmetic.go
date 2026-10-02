@@ -294,114 +294,180 @@ func (a *engine) clusters(d *declaration) []*helperCluster {
 	})
 	return out
 }
+
+type cosmeticInvestigation struct {
+	engine                    *engine
+	parent                    *declaration
+	clusters                  []*helperCluster
+	seen                      map[*declaration]bool
+	helpers                   map[*declaration]bool
+	lines, complexityReceipts []Source
+	complexity                int
+	finding                   *Case
+}
+
 func (a *engine) cosmetic() error {
 	for _, d := range a.declarations {
-		if !d.file.included || d.fn.Body == nil {
-			continue
-		}
-		clusters := []*helperCluster{}
-		seen := map[*declaration]bool{}
-		var discover func(*declaration)
-		discover = func(owner *declaration) {
-			if seen[owner] {
-				return
-			}
-			seen[owner] = true
-			clusters = append(clusters, a.clusters(owner)...)
-			ast.Inspect(owner.fn.Body, func(n ast.Node) bool {
-				if c, ok := n.(*ast.CallExpr); ok {
-					if target := a.calls[c]; target != nil && target.candidate {
-						discover(target)
-					}
-				}
-				return true
-			})
-		}
-		discover(d)
-		if len(clusters) == 0 {
-			continue
-		}
-		trace := expansion{[]string{d.symbol}, []Site{}}
-		lr := a.expandedLines(d, []*declaration{d}, trace)
-		complexity, cr := a.expandedComplexity(d, []*declaration{d}, trace, 0)
-		if int64(len(lr)) <= a.config.Counts["function-lines"] && int64(complexity) <= a.config.Counts["cognitive-complexity"] {
-			continue
-		}
-		c, e := a.newCase(d, "cosmetic-extraction", "")
-		if e != nil {
-			return e
-		}
-		if c == nil {
-			continue
-		}
-		sort.Slice(clusters, func(i, j int) bool {
-			a, b := clusters[i], clusters[j]
-			if a.owner.file.rel != b.owner.file.rel {
-				return a.owner.file.rel < b.owner.file.rel
-			}
-			return a.calls[0].Pos() < b.calls[0].Pos()
-		})
-		addMetric := func(kind string, n int, threshold string) {
-			var limit, op any
-			if int64(n) > a.config.Counts[threshold] {
-				limit = a.config.Counts[threshold]
-				op = ">"
-			}
-			c.Clues = append(c.Clues, metric(kind, d.symbol, n, limit, op))
-		}
-		addMetric("function-lines", d.lines, "function-lines")
-		addMetric("cognitive-complexity", d.complexity, "cognitive-complexity")
-		addMetric("expanded-lines", len(lr), "function-lines")
-		addMetric("expanded-complexity", complexity, "cognitive-complexity")
-		appendSources(c, d.lineReceipts)
-		appendSources(c, d.complexityReceipts)
-		appendSources(c, lr)
-		appendSources(c, cr)
-		includedHelpers := map[*declaration]bool{}
-		for _, cl := range clusters {
-			owner := cl.owner
-			key := fmt.Sprintf("%s:%d", owner.file.rel, owner.file.tf.Offset(cl.calls[0].Pos()))
-			record := Cluster{key, owner.symbol, owner.file.rel, []Member{}}
-			c.Clues = append(c.Clues, metric("helper-count", key, len(cl.helpers), a.config.Counts["cosmetic-min-helpers"], ">="), metric("parent-input-set", key, sortedSet(cl.p), nil, nil), metric("parameter-overlap", key+":mean", rounded(cl.meanP), a.config.Ratios["cosmetic-parameter-overlap"], ">="), metric("dependency-overlap", key+":mean", rounded(cl.meanD), a.config.Ratios["cosmetic-dependency-overlap"], ">="))
-			c.Receipts = append(c.Receipts, owner.declReceipt())
-			for _, call := range cl.calls {
-				helper := a.calls[call]
-				record.Members = append(record.Members, Member{helper.symbol, owner.file.tf.Offset(call.Pos())})
-				subject := key + ":member:" + helper.symbol
-				h := cl.forwarding[call]
-				c.Clues = append(c.Clues, metric("forwarded-input-set", subject, sortedSet(h), nil, nil), metric("parameter-overlap", subject, rounded(fraction(len(h), len(cl.p))), nil, nil))
-				c.Receipts = append(c.Receipts, owner.file.receipt("helper-call", call.Pos(), call.End(), helper.symbol, nil, nil))
-				exprs := append([]ast.Expr{}, call.Args...)
-				if sel, ok := unparen(call.Fun).(*ast.SelectorExpr); ok {
-					if s := owner.file.pkg.TypesInfo.Selections[sel]; s != nil && s.Kind() == types.MethodVal {
-						exprs = append(exprs, sel.X)
-					}
-				}
-				for _, arg := range exprs {
-					if id, ok := unparen(arg).(*ast.Ident); ok {
-						if v, ok := owner.file.pkg.TypesInfo.Uses[id].(*types.Var); ok {
-							if varKey, yes := owner.inputs[v]; yes {
-								c.Receipts = append(c.Receipts, owner.file.receipt("parameter", id.Pos(), id.End(), varKey, nil, nil))
-							}
-						}
-					}
-				}
-			}
-			c.Clusters = append(c.Clusters, record)
-			for pair, r := range cl.pairs {
-				c.Clues = append(c.Clues, metric("dependency-overlap", key+":"+pair, rounded(r), nil, nil))
-			}
-			for _, h := range cl.helpers {
-				if includedHelpers[h] {
-					continue
-				}
-				includedHelpers[h] = true
-				c.Clues = append(c.Clues, metric("dependency-set", h.symbol, sortedSet(h.deps), nil, nil))
-				c.Receipts = append(c.Receipts, h.declReceipt())
-				appendSources(c, h.depReceipts)
+		if d.file.included && d.fn.Body != nil {
+			if e := a.cosmeticParent(d); e != nil {
+				return e
 			}
 		}
-		a.report.Cases = append(a.report.Cases, *c)
 	}
 	return nil
+}
+func (a *engine) cosmeticParent(d *declaration) error {
+	i := &cosmeticInvestigation{engine: a, parent: d, seen: map[*declaration]bool{}, helpers: map[*declaration]bool{}}
+	i.discover(d)
+	if len(i.clusters) == 0 {
+		return nil
+	}
+	i.expand()
+	if !i.exceedsLimits() {
+		return nil
+	}
+	return i.report()
+}
+func (i *cosmeticInvestigation) discover(d *declaration) {
+	if i.seen[d] {
+		return
+	}
+	i.seen[d] = true
+	i.clusters = append(i.clusters, i.engine.clusters(d)...)
+	ast.Inspect(d.fn.Body, i.discoverCall)
+}
+func (i *cosmeticInvestigation) discoverCall(n ast.Node) bool {
+	if c, ok := n.(*ast.CallExpr); ok {
+		if target := i.engine.calls[c]; target != nil && target.candidate {
+			i.discover(target)
+		}
+	}
+	return true
+}
+func (i *cosmeticInvestigation) expand() {
+	d := i.parent
+	trace := expansion{[]string{d.symbol}, []Site{}}
+	i.lines = i.engine.expandedLines(d, []*declaration{d}, trace)
+	i.complexity, i.complexityReceipts = i.engine.expandedComplexity(d, []*declaration{d}, trace, 0)
+}
+func (i *cosmeticInvestigation) exceedsLimits() bool {
+	return int64(len(i.lines)) > i.engine.config.Counts["function-lines"] || int64(i.complexity) > i.engine.config.Counts["cognitive-complexity"]
+}
+func (i *cosmeticInvestigation) report() error {
+	c, e := i.engine.newCase(i.parent, "cosmetic-extraction", "")
+	if e != nil || c == nil {
+		return e
+	}
+	i.finding = c
+	i.metrics()
+	i.originalAndExpandedReceipts()
+	i.sortClusters()
+	for _, cl := range i.clusters {
+		i.cluster(cl)
+	}
+	i.engine.report.Cases = append(i.engine.report.Cases, *c)
+	return nil
+}
+func (i *cosmeticInvestigation) sortClusters() {
+	sort.Slice(i.clusters, func(a, b int) bool {
+		x, y := i.clusters[a], i.clusters[b]
+		if x.owner.file.rel != y.owner.file.rel {
+			return x.owner.file.rel < y.owner.file.rel
+		}
+		return x.calls[0].Pos() < y.calls[0].Pos()
+	})
+}
+func (i *cosmeticInvestigation) metrics() {
+	i.metric("function-lines", i.parent.lines, "function-lines")
+	i.metric("cognitive-complexity", i.parent.complexity, "cognitive-complexity")
+	i.metric("expanded-lines", len(i.lines), "function-lines")
+	i.metric("expanded-complexity", i.complexity, "cognitive-complexity")
+}
+func (i *cosmeticInvestigation) metric(kind string, value int, threshold string) {
+	limit := i.engine.config.Counts[threshold]
+	if int64(value) > limit {
+		i.finding.threshold(kind, value, limit, ">")
+		return
+	}
+	i.finding.value(kind, value)
+}
+func (i *cosmeticInvestigation) originalAndExpandedReceipts() {
+	appendSources(i.finding, i.parent.lineReceipts)
+	appendSources(i.finding, i.parent.complexityReceipts)
+	appendSources(i.finding, i.lines)
+	appendSources(i.finding, i.complexityReceipts)
+}
+func (cl *helperCluster) key() string {
+	return fmt.Sprintf("%s:%d", cl.owner.file.rel, cl.owner.file.tf.Offset(cl.calls[0].Pos()))
+}
+func (i *cosmeticInvestigation) cluster(cl *helperCluster) {
+	record := Cluster{cl.key(), cl.owner.symbol, cl.owner.file.rel, []Member{}}
+	cl.summaryClues(i.finding, i.engine.config)
+	i.finding.Receipts = append(i.finding.Receipts, cl.owner.declReceipt())
+	for _, call := range cl.calls {
+		record.Members = append(record.Members, i.clusterMember(cl, call))
+	}
+	i.finding.Clusters = append(i.finding.Clusters, record)
+	cl.pairClues(i.finding)
+	for _, h := range cl.helpers {
+		i.helper(h)
+	}
+}
+func (cl *helperCluster) summaryClues(c *Case, config Config) {
+	key := cl.key()
+	c.Clues = append(c.Clues, metric("helper-count", key, len(cl.helpers)).compare(config.Counts["cosmetic-min-helpers"], ">="))
+	c.Clues = append(c.Clues, metric("parent-input-set", key, sortedSet(cl.p)))
+	c.Clues = append(c.Clues, metric("parameter-overlap", key+":mean", rounded(cl.meanP)).compare(config.Ratios["cosmetic-parameter-overlap"], ">="))
+	c.Clues = append(c.Clues, metric("dependency-overlap", key+":mean", rounded(cl.meanD)).compare(config.Ratios["cosmetic-dependency-overlap"], ">="))
+}
+func (i *cosmeticInvestigation) clusterMember(cl *helperCluster, call *ast.CallExpr) Member {
+	helper := i.engine.calls[call]
+	cl.memberClues(i.finding, call, helper.symbol)
+	i.finding.Receipts = append(i.finding.Receipts, cl.owner.file.receipt("helper-call", call.Pos(), call.End(), Detail{Subject: helper.symbol}))
+	cl.owner.forwardingReceipts(i.finding, call)
+	return Member{helper.symbol, cl.owner.file.tf.Offset(call.Pos())}
+}
+func (cl *helperCluster) memberClues(c *Case, call *ast.CallExpr, helper string) {
+	subject := cl.key() + ":member:" + helper
+	h := cl.forwarding[call]
+	c.Clues = append(c.Clues, metric("forwarded-input-set", subject, sortedSet(h)), metric("parameter-overlap", subject, rounded(fraction(len(h), len(cl.p)))))
+}
+func (cl *helperCluster) pairClues(c *Case) {
+	for pair, r := range cl.pairs {
+		c.Clues = append(c.Clues, metric("dependency-overlap", cl.key()+":"+pair, rounded(r)))
+	}
+}
+func (i *cosmeticInvestigation) helper(h *declaration) {
+	if i.helpers[h] {
+		return
+	}
+	i.helpers[h] = true
+	i.finding.Clues = append(i.finding.Clues, metric("dependency-set", h.symbol, sortedSet(h.deps)))
+	i.finding.Receipts = append(i.finding.Receipts, h.declReceipt())
+	appendSources(i.finding, h.depReceipts)
+}
+func (d *declaration) forwardingReceipts(c *Case, call *ast.CallExpr) {
+	for _, arg := range forwardedExpressions(d, call) {
+		if id, ok := unparen(arg).(*ast.Ident); ok {
+			d.forwardedIdentifier(c, id)
+		}
+	}
+}
+func (d *declaration) forwardedIdentifier(c *Case, id *ast.Ident) {
+	v, ok := d.file.pkg.TypesInfo.Uses[id].(*types.Var)
+	if !ok {
+		return
+	}
+	if key, yes := d.inputs[v]; yes {
+		c.Receipts = append(c.Receipts, d.file.receipt("parameter", id.Pos(), id.End(), Detail{Subject: key}))
+	}
+}
+func forwardedExpressions(d *declaration, call *ast.CallExpr) []ast.Expr {
+	out := append([]ast.Expr{}, call.Args...)
+	if sel, ok := unparen(call.Fun).(*ast.SelectorExpr); ok {
+		if s := d.file.pkg.TypesInfo.Selections[sel]; s != nil && s.Kind() == types.MethodVal {
+			out = append(out, sel.X)
+		}
+	}
+	return out
 }

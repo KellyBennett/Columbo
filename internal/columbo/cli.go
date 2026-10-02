@@ -1,7 +1,6 @@
 package columbo
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -18,87 +17,143 @@ Investigate Go code smells. Packages default to ./...; flags precede packages.
   --help              print usage
 `
 
-func Run(args []string, dir, version string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("columbo", flag.ContinueOnError)
-	var flagErrors bytes.Buffer
-	fs.SetOutput(&flagErrors)
-	config := fs.String("config", ".columbo.yml", "")
-	format := fs.String("format", "text", "")
-	noHistory := fs.Bool("no-history", false, "")
-	showVersion := fs.Bool("version", false, "")
-	help := fs.Bool("help", false, "")
-	shortHelp := fs.Bool("h", false, "")
-	fatal := func(err error) int { fmt.Fprintf(stderr, "columbo: %v\n", err); return 2 }
-	deliver := func(b []byte) error {
-		n, e := stdout.Write(b)
-		if e != nil {
-			return e
-		}
-		if n != len(b) {
-			return io.ErrShortWrite
-		}
-		return nil
+type Invocation struct {
+	Dir, Version   string
+	Stdout, Stderr io.Writer
+}
+type commandOptions struct {
+	config, format                                    string
+	noHistory, showVersion, help, shortHelp, explicit bool
+	patterns                                          []string
+}
+type command struct {
+	invocation Invocation
+	options    commandOptions
+	config     Config
+	report     Report
+}
+
+func Run(args []string, invocation Invocation) int {
+	c := &command{invocation: invocation}
+	if e := c.options.parse(args); e != nil {
+		return c.fatal(e)
 	}
+	if c.options.help || c.options.shortHelp {
+		return c.deliver([]byte(usage))
+	}
+	if c.options.showVersion {
+		return c.deliver(c.invocation.versionText())
+	}
+	return c.analyze()
+}
+func (i Invocation) versionText() []byte {
+	version := i.Version
+	if version == "" {
+		version = "dev"
+	}
+	return []byte("columbo " + version + "\n")
+}
+func (o *commandOptions) parse(args []string) error {
+	fs := o.flagSet()
 	if e := fs.Parse(args); e != nil {
-		return fatal(e)
+		return e
 	}
-	if *format != "text" && *format != "json" {
-		return fatal(fmt.Errorf("invalid format %q", *format))
-	}
-	if *help || *shortHelp {
-		if e := deliver([]byte(usage)); e != nil {
-			return fatal(e)
-		}
-		return 0
-	}
-	if *showVersion {
-		if version == "" {
-			version = "dev"
-		}
-		if e := deliver([]byte("columbo " + version + "\n")); e != nil {
-			return fatal(e)
-		}
-		return 0
-	}
-	explicit := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "config" {
-			explicit = true
+			o.explicit = true
 		}
 	})
-	path := *config
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(dir, path)
+	o.patterns = fs.Args()
+	if o.format != "text" && o.format != "json" {
+		return fmt.Errorf("invalid format %q", o.format)
 	}
-	c, e := LoadConfig(path, explicit)
+	return nil
+}
+func (o *commandOptions) flags(fs *flag.FlagSet) {
+	fs.StringVar(&o.config, "config", ".columbo.yml", "")
+	fs.StringVar(&o.format, "format", "text", "")
+	fs.BoolVar(&o.noHistory, "no-history", false, "")
+	fs.BoolVar(&o.showVersion, "version", false, "")
+	fs.BoolVar(&o.help, "help", false, "")
+	fs.BoolVar(&o.shortHelp, "h", false, "")
+}
+func (c *command) fatal(err error) int {
+	fmt.Fprintf(c.invocation.Stderr, "columbo: %v\n", err)
+	return 2
+}
+func (c *command) deliver(b []byte) int {
+	if e := writeOutput(c.invocation.Stdout, b); e != nil {
+		return c.fatal(e)
+	}
+	return 0
+}
+func writeOutput(w io.Writer, b []byte) error {
+	n, e := w.Write(b)
 	if e != nil {
-		return fatal(e)
+		return e
 	}
-	if *noHistory {
-		c.History = false
+	if n != len(b) {
+		return io.ErrShortWrite
 	}
-	patterns := fs.Args()
+	return nil
+}
+func (c *command) loadConfig() error {
+	path := c.options.config
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(c.invocation.Dir, path)
+	}
+	cfg, e := LoadConfig(path, c.options.explicit)
+	if e != nil {
+		return e
+	}
+	if c.options.noHistory {
+		cfg.History = false
+	}
+	c.config = cfg
+	return nil
+}
+func (c *command) analyze() int {
+	if e := c.loadConfig(); e != nil {
+		return c.fatal(e)
+	}
+	patterns := c.options.patterns
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	r, e := Analyze(dir, patterns, c)
+	r, e := Analyze(c.invocation.Dir, patterns, c.config)
 	if e != nil {
-		return fatal(e)
+		return c.fatal(e)
 	}
-	b, e := Serialize(r, *format)
+	c.report = r
+	return c.output()
+}
+func (c *command) output() int {
+	b, e := Serialize(c.report, c.options.format)
 	if e != nil {
-		return fatal(e)
+		return c.fatal(e)
 	}
-	for _, w := range r.Warnings {
-		if *format == "text" || w.Code == "history-unavailable" {
-			fmt.Fprintln(stderr, w.Message)
-		}
+	c.warnings()
+	if e = writeOutput(c.invocation.Stdout, b); e != nil {
+		return c.fatal(fmt.Errorf("output write failed: %w", e))
 	}
-	if e = deliver(b); e != nil {
-		return fatal(fmt.Errorf("output write failed: %w", e))
-	}
-	if r.Summary.Failed > 0 {
+	if c.report.Summary.Failed > 0 {
 		return 1
 	}
 	return 0
 }
+func (c *command) warnings() {
+	for _, w := range c.report.Warnings {
+		if c.options.format == "text" || w.Code == "history-unavailable" {
+			c.invocation.warning(w.Message)
+		}
+	}
+}
+
+func (o *commandOptions) flagSet() *flag.FlagSet {
+	fs := flag.NewFlagSet("columbo", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	o.flags(fs)
+	return fs
+}
+
+func (i Invocation) warning(message string) { fmt.Fprintln(i.Stderr, message) }

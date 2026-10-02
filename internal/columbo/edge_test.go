@@ -14,54 +14,43 @@ import (
 	"testing"
 )
 
-func TestFixedToolchain(t *testing.T) {
-	if runtime.Version() != "go1.25.1" {
-		t.Fatalf("acceptance fixtures require go1.25.1, got %s", runtime.Version())
-	}
+func (t *testHarness) TestFixedToolchain() {
+	t.requiref(runtime.Version() == "go1.25.1", "acceptance fixtures require go1.25.1, got %s", runtime.Version())
 }
-func TestMaximalClusters(t *testing.T) {
+func TestFixedToolchain(t *testing.T) { (&testHarness{T: t}).TestFixedToolchain() }
+
+func (t *testHarness) TestMaximalClusters() {
 	src := "package fixture\nfunc Parent(a,b int){one(a,b);two(a,b);three(a,a)}\n" + helpers + "\nfunc three(a,b int){println(a)}\n"
-	dir := fixture(t, src)
+	dir := t.fixture(src)
 	c := cosmeticConfig()
 	c.Ratios["cosmetic-parameter-overlap"] = .9
-	r := investigate(t, dir, c)
-	if len(r.Cases) > 0 {
-		t.Fatal("searched passing subsequence", r)
-	}
+	r := t.investigate(dir, c)
+	t.require(len(r.Cases) <= 0, "searched passing subsequence", r)
 }
-func TestNamedInterfaceDependencies(t *testing.T) {
-	dir := fixture(t, `package fixture
-type Named[T any] interface{M(T)}
-type Alias = Named[int]
-func F(a Alias,b interface{},c interface{M(int)},d Named[string]){}
-`)
+func TestMaximalClusters(t *testing.T) { (&testHarness{T: t}).TestMaximalClusters() }
+
+func (t *testHarness) TestNamedInterfaceDependencies() {
+	dir := t.fixture(edgeSource0)
 	a, e := load(dir, []string{"./..."}, quiet())
-	if e != nil {
-		t.Fatal(e)
-	}
+	t.require(e == nil, e)
 	d := a.declarations[0]
 	d.measure(a)
 	for _, s := range []string{"type:fixture.Named[int]", "type:fixture.Named[string]", "interface:interface{}", "interface:interface{M(int)}"} {
-		if !d.deps[s] {
-			t.Error("missing", s, d.deps)
-		}
+		t.check(d.deps[s], "missing", s, d.deps)
 	}
 	for s := range d.deps {
-		if strings.HasPrefix(s, "interface:fixture.Named") {
-			t.Fatal(s)
-		}
+		t.require(!(strings.HasPrefix(s, "interface:fixture.Named")), s)
 	}
 }
-func TestDependencySiteRanges(t *testing.T) {
-	src := `package fixture
-import "bytes"
-func F(b *bytes.Buffer) []byte { x := b.Bytes();return append(x,b.Bytes()...) }
-`
-	dir := fixture(t, src)
+func TestNamedInterfaceDependencies(t *testing.T) {
+	(&testHarness{T: t}).TestNamedInterfaceDependencies()
+}
+
+func (t *testHarness) TestDependencySiteRanges() {
+	src := edgeSource1
+	dir := t.fixture(src)
 	a, e := load(dir, []string{"./..."}, quiet())
-	if e != nil {
-		t.Fatal(e)
-	}
+	t.require(e == nil, e)
 	d := a.declarations[0]
 	d.measure(a)
 	sites := map[string]bool{}
@@ -72,123 +61,110 @@ func F(b *bytes.Buffer) []byte { x := b.Bytes();return append(x,b.Bytes()...) }
 		}
 	}
 	for _, want := range []string{"*bytes.Buffer", "bytes.Buffer", "b.Bytes"} {
-		if !sites[want] {
-			t.Error("missing designated range", want, sites)
-		}
+		t.check(sites[want], "missing designated range", want, sites)
 	}
 	seen := map[string]bool{}
 	for _, r := range d.depReceipts {
 		k := canonical(r)
-		if seen[k] {
-			t.Fatal("duplicate dependency receipt")
-		}
+		t.require(!(seen[k]), "duplicate dependency receipt")
 		seen[k] = true
 	}
 }
-func TestComplexityReceipts(t *testing.T) {
-	dir := fixture(t, `package fixture
-func F(a,b,c,d bool){ if a && b || c && d {} }
-`)
+func TestDependencySiteRanges(t *testing.T) { (&testHarness{T: t}).TestDependencySiteRanges() }
+
+func (t *testHarness) TestComplexityReceipts() {
+	dir := t.fixture(edgeSource2)
 	c := quiet()
 	c.Severity["high-cognitive-complexity"] = "fail"
 	c.Counts["cognitive-complexity"] = 1
-	cc := one(t, investigate(t, dir, c), "high-cognitive-complexity")
-	reconcile(t, cc, "cognitive-complexity")
+	cc := t.one(t.investigate(dir, c), "high-cognitive-complexity")
+	t.reconcile(cc, "cognitive-complexity")
 	aggregated := false
 	for _, rr := range cc.Receipts {
 		if r, ok := rr.(Source); ok && r.Detail.Subject == "cognitive-complexity" {
-			if r.Detail.Value == 3 && r.Detail.Nesting == 0 && string(read(t, filepath.Join(dir, r.File))[r.StartOffset:r.EndOffset]) == "||" {
+			if r.Detail.Value == 3 && r.Detail.Nesting == 0 && string(t.read(filepath.Join(dir, r.File))[r.StartOffset:r.EndOffset]) == "||" {
 				aggregated = true
 			}
 		}
 	}
-	if !aggregated {
-		t.Fatal(cc.Receipts)
-	}
+	t.require(aggregated, cc.Receipts)
 }
-func TestCosmeticDistinctBoundaries(t *testing.T) {
-	dir := fixture(t, "package fixture\nfunc Parent(a,b int){one(a,a);two(b,b)}\n"+helpers)
+func TestComplexityReceipts(t *testing.T) { (&testHarness{T: t}).TestComplexityReceipts() }
+
+func (t *testHarness) TestCosmeticDistinctBoundaries() {
+	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,a);two(b,b)}\n" + helpers)
 	c := cosmeticConfig()
 	c.Ratios["cosmetic-parameter-overlap"] = .75
-	if r := investigate(t, dir, c); len(r.Cases) > 0 {
-		t.Fatal(r)
-	}
+	r := t.investigate(dir, c)
+	t.require(len(r.Cases) <= 0, r)
 }
-func TestExpansionBoundaries(t *testing.T) {
-	dir := fixture(t, "package fixture\nfunc Parent(a bool){helper(a)}\nfunc helper(a bool){if a {Parent(a)}}\n")
+func TestCosmeticDistinctBoundaries(t *testing.T) {
+	(&testHarness{T: t}).TestCosmeticDistinctBoundaries()
+}
+
+func (t *testHarness) TestExpansionBoundaries() {
+	dir := t.fixture("package fixture\nfunc Parent(a bool){helper(a)}\nfunc helper(a bool){if a {Parent(a)}}\n")
 	a, e := load(dir, []string{"./..."}, quiet())
-	if e != nil {
-		t.Fatal(e)
-	}
+	t.require(e == nil, e)
 	d := a.declarations[0]
 	n, _ := a.expandedComplexity(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}}, 0)
-	if n != 1 {
-		t.Fatalf("cycle cutoff score %d", n)
-	}
+	t.requiref(n == 1, "cycle cutoff score %d", n)
 	ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
-	if len(ss) != 1 {
-		t.Fatal(ss)
-	}
+	t.require(len(ss) == 1, ss)
 }
-func TestHistoryWarningGoldens(t *testing.T) {
-	dir := fixture(t, "package fixture\nfunc F(a,b,c,d,e int){}\n")
+func TestExpansionBoundaries(t *testing.T) { (&testHarness{T: t}).TestExpansionBoundaries() }
+
+func (t *testHarness) TestHistoryWarningGoldens() {
+	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
 	c := quiet()
 	c.Severity["long-parameter-list"] = "fail"
 	c.History = true
-	r := investigate(t, dir, c)
+	r := t.investigate(dir, c)
 	for _, format := range []string{"text", "json"} {
 		b, e := Serialize(r, format)
-		if e != nil {
-			t.Fatal(e)
-		}
+		t.require(e == nil, e)
 		path := filepath.Join("testdata", "history-"+format+".golden")
 		if os.Getenv("UPDATE_GOLDEN") == "1" {
 			os.WriteFile(path, b, 0600)
 		}
-		if !bytes.Equal(read(t, path), b) {
-			t.Fatalf("%s history golden", format)
-		}
+		t.requiref(bytes.Equal(t.read(path), b), "%s history golden", format)
 	}
 }
-func TestCgoPhysicalSource(t *testing.T) {
+func TestHistoryWarningGoldens(t *testing.T) { (&testHarness{T: t}).TestHistoryWarningGoldens() }
+
+func (t *testHarness) TestCgoPhysicalSource() {
 	t.Setenv("CGO_ENABLED", "1")
-	dir := fixture(t, "package fixture\n/* int answer(void) { return 42; } */\nimport \"C\"\nfunc Answer() int{return int(C.answer())}\n")
+	dir := t.fixture("package fixture\n/* int answer(void) { return 42; } */\nimport \"C\"\nfunc Answer() int{return int(C.answer())}\n")
 	var out, err bytes.Buffer
-	code := Run([]string{"--no-history"}, dir, "", &out, &err)
-	if code != 2 || out.Len() != 0 || (!strings.Contains(err.String(), "physical-source/type correspondence") && !strings.Contains(err.String(), "package loading failed")) {
-		t.Fatalf("cgo correspondence failed nonatomically: %d %s %s", code, out.String(), err.String())
+	code := Run([]string{"--no-history"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	t.requiref(code == 2 && out.Len() == 0 && (strings.Contains(err.String(), "physical-source/type correspondence") || strings.Contains(err.String(), "package loading failed")), "cgo correspondence failed nonatomically: %d %s %s", code, out.String(), err.String())
+}
+func TestCgoPhysicalSource(t *testing.T) { (&testHarness{T: t}).TestCgoPhysicalSource() }
+
+func (t *testHarness) TestInterfaceDispatchNotCandidate() {
+	dir := t.fixture("package fixture\ntype I interface{work(int)}\ntype Box struct{}\nfunc (Box) work(x int){}\nfunc Parent(i I){i.work(1)}\n")
+	a, e := load(dir, []string{"./..."}, quiet())
+	t.require(e == nil, e)
+	for _, d := range a.declarations {
+		t.require(d.fn.Name.Name != "work" || !(d.candidate), "interface dispatch resolved statically")
 	}
 }
 func TestInterfaceDispatchNotCandidate(t *testing.T) {
-	dir := fixture(t, "package fixture\ntype I interface{work(int)}\ntype Box struct{}\nfunc (Box) work(x int){}\nfunc Parent(i I){i.work(1)}\n")
-	a, e := load(dir, []string{"./..."}, quiet())
-	if e != nil {
-		t.Fatal(e)
-	}
-	for _, d := range a.declarations {
-		if d.fn.Name.Name == "work" && d.candidate {
-			t.Fatal("interface dispatch resolved statically")
-		}
-	}
+	(&testHarness{T: t}).TestInterfaceDispatchNotCandidate()
 }
-func TestHelperCallsFromTests(t *testing.T) {
-	dir := fixture(t, "package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n"+helpers)
-	write(t, dir, "source_test.go", "package fixture\nfunc Example(){one(1,2)}\n")
-	r := investigate(t, dir, cosmeticConfig())
-	if len(r.Cases) != 0 {
-		t.Fatal("test caller did not disqualify helper", r)
-	}
+
+func (t *testHarness) TestHelperCallsFromTests() {
+	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
+	t.write(dir, "source_test.go", "package fixture\nfunc Example(){one(1,2)}\n")
+	r := t.investigate(dir, cosmeticConfig())
+	t.require(len(r.Cases) == 0, "test caller did not disqualify helper", r)
 }
-func TestExpansionChildCopies(t *testing.T) {
-	dir := fixture(t, `package fixture
-func Parent(a int){outer(func()int{return inner(a)}())}
-func outer(f int){println(f)}
-func inner(a int)int{return a}
-`)
+func TestHelperCallsFromTests(t *testing.T) { (&testHarness{T: t}).TestHelperCallsFromTests() }
+
+func (t *testHarness) TestExpansionChildCopies() {
+	dir := t.fixture(edgeSource3)
 	a, e := load(dir, []string{"./..."}, quiet())
-	if e != nil {
-		t.Fatal(e)
-	}
+	t.require(e == nil, e)
 	d := a.declarations[0]
 	ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
 	paths := map[string]bool{}
@@ -197,42 +173,39 @@ func inner(a int)int{return a}
 			paths[canonical(r.Detail.ExpansionSites)] = true
 		}
 	}
-	if len(paths) != 1 {
-		t.Fatal(paths)
-	}
+	t.require(len(paths) == 1, paths)
 }
-func TestCanonicalTypeMatchesGoFormatting(t *testing.T) {
+func TestExpansionChildCopies(t *testing.T) { (&testHarness{T: t}).TestExpansionChildCopies() }
+
+func (t *testHarness) TestCanonicalTypeMatchesGoFormatting() {
 	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, nil, "ignored", types.NewSlice(types.Typ[types.Byte]))), types.NewTuple(types.NewVar(token.NoPos, nil, "ignored", types.Typ[types.Rune])), false)
 	want := "func([]uint8) int32"
-	if got := canonicalType(sig, nil); got != want {
-		t.Fatalf("%s != %s", got, want)
-	}
+	got := canonicalType(sig, nil)
+	t.requiref(got == want, "%s != %s", got, want)
 }
-func TestClusterSchema(t *testing.T) {
-	dir := fixture(t, "package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n"+helpers)
-	r := investigate(t, dir, cosmeticConfig())
+func TestCanonicalTypeMatchesGoFormatting(t *testing.T) {
+	(&testHarness{T: t}).TestCanonicalTypeMatchesGoFormatting()
+}
+
+func (t *testHarness) TestClusterSchema() {
+	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
+	r := t.investigate(dir, cosmeticConfig())
 	b, _ := Serialize(r, "json")
 	var m map[string]any
-	if e := json.Unmarshal(b, &m); e != nil {
-		t.Fatal(e)
-	}
+	e := json.Unmarshal(b, &m)
+	t.require(e == nil, e)
 	cc := m["cases"].([]any)[0].(map[string]any)
-	if len(cc) != 16 {
-		t.Fatal("case field count", len(cc))
-	}
+	t.require(len(cc) == 16, "case field count", len(cc))
 	cluster := cc["clusters"].([]any)[0].(map[string]any)
-	if len(cluster) != 4 {
-		t.Fatal(cluster)
-	}
+	t.require(len(cluster) == 4, cluster)
 	member := cluster["members"].([]any)[0].(map[string]any)
-	if len(member) != 2 {
-		t.Fatal(member)
-	}
+	t.require(len(member) == 2, member)
 }
+func TestClusterSchema(t *testing.T) { (&testHarness{T: t}).TestClusterSchema() }
 
 var _ ast.Node
 
-func TestLargeClosedClump(t *testing.T) {
+func (t *testHarness) TestLargeClosedClump() {
 	var src strings.Builder
 	src.WriteString("package fixture\n")
 	params := []string{}
@@ -244,11 +217,31 @@ func TestLargeClosedClump(t *testing.T) {
 	for _, name := range []string{"One", "Two", "Three"} {
 		fmt.Fprintf(&src, "func %s(%s){}\n", name, strings.Join(params, ","))
 	}
-	dir := fixture(t, src.String())
+	dir := t.fixture(src.String())
 	c := quiet()
 	c.Severity["data-clump"] = "fail"
-	cc := one(t, investigate(t, dir, c), "data-clump")
-	if clueValue(t, cc, "clump-size") != 32 {
-		t.Fatal(cc)
-	}
+	cc := t.one(t.investigate(dir, c), "data-clump")
+	t.require(t.clueValue(cc, "clump-size") == 32, cc)
 }
+func TestLargeClosedClump(t *testing.T) { (&testHarness{T: t}).TestLargeClosedClump() }
+
+const edgeSource0 = `package fixture
+type Named[T any] interface{M(T)}
+type Alias = Named[int]
+func F(a Alias,b interface{},c interface{M(int)},d Named[string]){}
+`
+
+const edgeSource1 = `package fixture
+import "bytes"
+func F(b *bytes.Buffer) []byte { x := b.Bytes();return append(x,b.Bytes()...) }
+`
+
+const edgeSource2 = `package fixture
+func F(a,b,c,d bool){ if a && b || c && d {} }
+`
+
+const edgeSource3 = `package fixture
+func Parent(a int){outer(func()int{return inner(a)}())}
+func outer(f int){println(f)}
+func inner(a int)int{return a}
+`

@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"math"
 	"math/big"
+	"reflect"
 	"sort"
 	"strconv"
 )
@@ -26,78 +27,140 @@ func canonicalType(t types.Type, sig *types.Signature) string {
 }
 
 // Rebuild only structural components. Named underlying types remain opaque.
+type typeNormalizer struct {
+	vars     map[*types.TypeParam]*types.TypeParam
+	handlers map[reflect.Type]normalization
+}
+type normalization func(*typeNormalizer, types.Type) types.Type
+
+var normalizations = map[reflect.Type]normalization{
+	reflect.TypeOf((*types.Basic)(nil)):     (*typeNormalizer).basic,
+	reflect.TypeOf((*types.TypeParam)(nil)): (*typeNormalizer).typeParam,
+	reflect.TypeOf((*types.Named)(nil)):     (*typeNormalizer).named,
+	reflect.TypeOf((*types.Pointer)(nil)):   (*typeNormalizer).pointer,
+	reflect.TypeOf((*types.Slice)(nil)):     (*typeNormalizer).slice,
+	reflect.TypeOf((*types.Array)(nil)):     (*typeNormalizer).array,
+	reflect.TypeOf((*types.Map)(nil)):       (*typeNormalizer).mapping,
+	reflect.TypeOf((*types.Chan)(nil)):      (*typeNormalizer).channel,
+	reflect.TypeOf((*types.Struct)(nil)):    (*typeNormalizer).structure,
+	reflect.TypeOf((*types.Signature)(nil)): (*typeNormalizer).signature,
+	reflect.TypeOf((*types.Interface)(nil)): (*typeNormalizer).iface,
+	reflect.TypeOf((*types.Union)(nil)):     (*typeNormalizer).union,
+}
+
 func normalType(t types.Type, vars map[*types.TypeParam]*types.TypeParam) types.Type {
+	return (&typeNormalizer{vars: vars, handlers: normalizations}).normalize(t)
+}
+func (n *typeNormalizer) normalize(t types.Type) types.Type {
 	t = types.Unalias(t)
-	switch t := t.(type) {
-	case *types.Basic:
-		return types.Typ[t.Kind()]
-	case *types.TypeParam:
-		if v := vars[t]; v != nil {
-			return v
-		}
-		return t
-	case *types.Named:
-		if t.TypeArgs().Len() == 0 {
-			return t
-		}
-		args := []types.Type{}
-		for i := 0; i < t.TypeArgs().Len(); i++ {
-			args = append(args, normalType(t.TypeArgs().At(i), vars))
-		}
-		n, e := types.Instantiate(nil, t.Origin(), args, false)
-		if e == nil {
-			return n
-		}
-		return t
-	case *types.Pointer:
-		return types.NewPointer(normalType(t.Elem(), vars))
-	case *types.Slice:
-		return types.NewSlice(normalType(t.Elem(), vars))
-	case *types.Array:
-		return types.NewArray(normalType(t.Elem(), vars), t.Len())
-	case *types.Map:
-		return types.NewMap(normalType(t.Key(), vars), normalType(t.Elem(), vars))
-	case *types.Chan:
-		return types.NewChan(t.Dir(), normalType(t.Elem(), vars))
-	case *types.Struct:
-		fields := []*types.Var{}
-		tags := []string{}
-		for i := 0; i < t.NumFields(); i++ {
-			f := t.Field(i)
-			fields = append(fields, types.NewField(f.Pos(), f.Pkg(), f.Name(), normalType(f.Type(), vars), f.Embedded()))
-			tags = append(tags, t.Tag(i))
-		}
-		return types.NewStruct(fields, tags)
-	case *types.Signature:
-		tuple := func(old *types.Tuple) *types.Tuple {
-			vs := []*types.Var{}
-			for i := 0; i < old.Len(); i++ {
-				v := old.At(i)
-				vs = append(vs, types.NewVar(v.Pos(), v.Pkg(), "", normalType(v.Type(), vars)))
-			}
-			return types.NewTuple(vs...)
-		}
-		return types.NewSignatureType(nil, nil, nil, tuple(t.Params()), tuple(t.Results()), t.Variadic())
-	case *types.Interface:
-		methods := []*types.Func{}
-		embedded := []types.Type{}
-		for i := 0; i < t.NumExplicitMethods(); i++ {
-			m := t.ExplicitMethod(i)
-			methods = append(methods, types.NewFunc(m.Pos(), m.Pkg(), m.Name(), normalType(m.Type(), vars).(*types.Signature)))
-		}
-		for i := 0; i < t.NumEmbeddeds(); i++ {
-			embedded = append(embedded, normalType(t.EmbeddedType(i), vars))
-		}
-		return types.NewInterfaceType(methods, embedded).Complete()
-	case *types.Union:
-		terms := []*types.Term{}
-		for i := 0; i < t.Len(); i++ {
-			term := t.Term(i)
-			terms = append(terms, types.NewTerm(term.Tilde(), normalType(term.Type(), vars)))
-		}
-		return types.NewUnion(terms)
+	if f := n.handlers[reflect.TypeOf(t)]; f != nil {
+		return f(n, t)
 	}
 	return t
+}
+func (n *typeNormalizer) basic(t types.Type) types.Type { return types.Typ[t.(*types.Basic).Kind()] }
+func (n *typeNormalizer) typeParam(t types.Type) types.Type {
+	if v := n.vars[t.(*types.TypeParam)]; v != nil {
+		return v
+	}
+	return t
+}
+func (n *typeNormalizer) named(t types.Type) types.Type {
+	named := t.(*types.Named)
+	if named.TypeArgs().Len() == 0 {
+		return t
+	}
+	args := n.typeArguments(named.TypeArgs())
+	out, e := types.Instantiate(nil, named.Origin(), args, false)
+	if e == nil {
+		return out
+	}
+	return t
+}
+func (n *typeNormalizer) typeArguments(ts *types.TypeList) []types.Type {
+	out := []types.Type{}
+	for i := 0; i < ts.Len(); i++ {
+		out = append(out, n.normalize(ts.At(i)))
+	}
+	return out
+}
+func (n *typeNormalizer) pointer(t types.Type) types.Type {
+	return types.NewPointer(n.normalize(t.(*types.Pointer).Elem()))
+}
+func (n *typeNormalizer) slice(t types.Type) types.Type {
+	return types.NewSlice(n.normalize(t.(*types.Slice).Elem()))
+}
+func (n *typeNormalizer) array(t types.Type) types.Type {
+	a := t.(*types.Array)
+	return types.NewArray(n.normalize(a.Elem()), a.Len())
+}
+func (n *typeNormalizer) mapping(t types.Type) types.Type {
+	m := t.(*types.Map)
+	return types.NewMap(n.normalize(m.Key()), n.normalize(m.Elem()))
+}
+func (n *typeNormalizer) channel(t types.Type) types.Type {
+	c := t.(*types.Chan)
+	return types.NewChan(c.Dir(), n.normalize(c.Elem()))
+}
+func (n *typeNormalizer) structure(t types.Type) types.Type {
+	s := t.(*types.Struct)
+	fields := []*types.Var{}
+	tags := []string{}
+	for i := 0; i < s.NumFields(); i++ {
+		fields = append(fields, n.field(s.Field(i)))
+		tags = append(tags, s.Tag(i))
+	}
+	return types.NewStruct(fields, tags)
+}
+func (n *typeNormalizer) field(f *types.Var) *types.Var {
+	return types.NewField(f.Pos(), f.Pkg(), f.Name(), n.normalize(f.Type()), f.Embedded())
+}
+func (n *typeNormalizer) signature(t types.Type) types.Type {
+	s := t.(*types.Signature)
+	return types.NewSignatureType(nil, nil, nil, n.tuple(s.Params()), n.tuple(s.Results()), s.Variadic())
+}
+func (n *typeNormalizer) tuple(old *types.Tuple) *types.Tuple {
+	vs := []*types.Var{}
+	for i := 0; i < old.Len(); i++ {
+		v := old.At(i)
+		vs = append(vs, n.variable(v))
+	}
+	return types.NewTuple(vs...)
+}
+func (n *typeNormalizer) variable(v *types.Var) *types.Var {
+	return types.NewVar(v.Pos(), v.Pkg(), "", n.normalize(v.Type()))
+}
+func (n *typeNormalizer) iface(t types.Type) types.Type {
+	i := t.(*types.Interface)
+	return types.NewInterfaceType(n.interfaceMethods(i), n.embeddedInterfaces(i)).Complete()
+}
+func (n *typeNormalizer) interfaceMethods(i *types.Interface) []*types.Func {
+	out := []*types.Func{}
+	for k := 0; k < i.NumExplicitMethods(); k++ {
+		out = append(out, n.method(i.ExplicitMethod(k)))
+	}
+	return out
+}
+func (n *typeNormalizer) method(m *types.Func) *types.Func {
+	return types.NewFunc(m.Pos(), m.Pkg(), m.Name(), n.normalize(m.Type()).(*types.Signature))
+}
+func (n *typeNormalizer) embeddedInterfaces(i *types.Interface) []types.Type {
+	out := []types.Type{}
+	for k := 0; k < i.NumEmbeddeds(); k++ {
+		out = append(out, n.normalize(i.EmbeddedType(k)))
+	}
+	return out
+}
+func (n *typeNormalizer) union(t types.Type) types.Type {
+	u := t.(*types.Union)
+	out := []*types.Term{}
+	for i := 0; i < u.Len(); i++ {
+		out = append(out, n.term(u.Term(i)))
+	}
+	return types.NewUnion(out)
+}
+func (n *typeNormalizer) term(t *types.Term) *types.Term {
+	return types.NewTerm(t.Tilde(), n.normalize(t.Type()))
 }
 
 func (a *engine) collectDependencies(d *declaration, t types.Type, set map[string]bool) {
@@ -158,7 +221,7 @@ func (d *declaration) measure(a *engine) {
 		a.collectDependencies(d, t, set)
 		for id := range set {
 			d.deps[id] = true
-			r := d.file.receipt("dependency", node.Pos(), node.End(), id, nil, nil)
+			r := d.file.receipt("dependency", node.Pos(), node.End(), Detail{Subject: id, Value: nil, Nesting: nil})
 			sites[canonical(r)] = r
 		}
 	}
@@ -177,7 +240,7 @@ func (d *declaration) measure(a *engine) {
 			if obj != nil && obj.Pkg() != nil && obj.Pkg().Path() != d.file.pkg.PkgPath {
 				id := "package:" + obj.Pkg().Path()
 				d.deps[id] = true
-				r := d.file.receipt("dependency", n.Pos(), n.End(), id, nil, nil)
+				r := d.file.receipt("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
 				sites[canonical(r)] = r
 			}
 		case *ast.CallExpr:
@@ -220,7 +283,7 @@ func (d *declaration) event(ev diagnostic, kind string) Source {
 			break
 		}
 	}
-	return d.file.receipt("metric-contribution", ev.Pos, end, kind, ev.Inc, ev.Nesting)
+	return d.file.receipt("metric-contribution", ev.Pos, end, Detail{Subject: kind, Value: ev.Inc, Nesting: ev.Nesting})
 }
 func (d *declaration) linesEvidence(kind string, removed map[token.Pos]bool, trace *expansion) []Source {
 	if d.fn.Body == nil {
@@ -247,7 +310,7 @@ func (d *declaration) linesEvidence(kind string, removed map[token.Pos]bool, tra
 		if l < d.file.tf.LineCount() {
 			end = d.file.tf.LineStart(l + 1)
 		}
-		r := d.file.receipt("metric-contribution", start, end, kind, 1, nil)
+		r := d.file.receipt("metric-contribution", start, end, Detail{Subject: kind, Value: 1, Nesting: nil})
 		r.EndLine = l
 		if trace != nil {
 			r.Detail.Expansion = append([]string{}, trace.names...)
@@ -289,7 +352,7 @@ func (a *engine) ordinary(d *declaration) error {
 		if c == nil {
 			continue
 		}
-		c.Clues = append(c.Clues, metric(x.kind, d.symbol, x.value, a.config.Counts[x.kind], ">"))
+		c.Clues = append(c.Clues, metric(x.kind, d.symbol, x.value).compare(a.config.Counts[x.kind], ">"))
 		appendSources(c, x.receipts)
 		if x.smell == "long-parameter-list" {
 			for _, p := range d.params {
@@ -301,7 +364,7 @@ func (a *engine) ordinary(d *declaration) error {
 	return a.envy(d)
 }
 func (d *declaration) parameterReceipt(p parameter) Source {
-	return d.file.receipt("parameter", p.field.Pos(), p.field.End(), strconv.Itoa(p.index)+":"+canonicalType(p.typ, d.signature), max(1, len(p.field.Names)), nil)
+	return d.file.receipt("parameter", p.field.Pos(), p.field.End(), Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, d.signature), Value: max(1, len(p.field.Names)), Nesting: nil})
 }
 func sortedSet(m map[string]bool) []string {
 	out := []string{}

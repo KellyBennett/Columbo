@@ -35,128 +35,169 @@ func LoadConfig(path string, explicit bool) (Config, error) {
 	if e != nil {
 		return c, e
 	}
+	return decodeConfig(b, c)
+}
+func decodeConfig(b []byte, c Config) (Config, error) {
+	n, e := configDocument(b)
+	if e != nil || n == nil {
+		return c, e
+	}
+	if e = validateYAML(n); e != nil {
+		return c, e
+	}
+	return c, mapping(n, c.set)
+}
+func configDocument(b []byte) (*yaml.Node, error) {
 	d := yaml.NewDecoder(strings.NewReader(string(b)))
 	var n yaml.Node
-	if e = d.Decode(&n); e == io.EOF {
-		return c, nil
-	}
-	if e != nil {
-		return c, e
+	if e := d.Decode(&n); e != nil {
+		if e == io.EOF {
+			return nil, nil
+		}
+		return nil, e
 	}
 	var extra yaml.Node
-	if e = d.Decode(&extra); e != io.EOF {
-		return c, fmt.Errorf("configuration must contain exactly one YAML document")
+	if e := d.Decode(&extra); e != io.EOF {
+		return nil, fmt.Errorf("configuration must contain exactly one YAML document")
 	}
 	if len(n.Content) != 1 || n.Content[0].Kind != yaml.MappingNode {
-		return c, fmt.Errorf("configuration root must be a mapping")
+		return nil, fmt.Errorf("configuration root must be a mapping")
 	}
-	if e = validateYAML(n.Content[0]); e != nil {
-		return c, e
+	return n.Content[0], nil
+}
+func (c *Config) set(k string, v *yaml.Node) error {
+	switch k {
+	case "version":
+		return configVersion(v)
+	case "severity":
+		return mapping(v, c.setSeverity)
+	case "thresholds":
+		return mapping(v, c.setThreshold)
+	case "history":
+		return mapping(v, c.setHistory)
+	case "exclude":
+		return c.setExclude(v)
 	}
-	err := mapping(n.Content[0], func(k string, v *yaml.Node) error {
-		switch k {
-		case "version":
-			i, e := integer(v)
-			if e != nil || i != 1 {
-				return fmt.Errorf("version must be integer 1")
-			}
-		case "severity":
-			return mapping(v, func(k string, v *yaml.Node) error {
-				if _, ok := c.Severity[k]; !ok {
-					return fmt.Errorf("unknown smell %s", k)
-				}
-				s, e := str(v)
-				if e != nil {
-					return e
-				}
-				if s != "off" && s != "warn" && s != "fail" {
-					return fmt.Errorf("invalid severity %s", s)
-				}
-				c.Severity[k] = s
-				return nil
-			})
-		case "thresholds":
-			return mapping(v, func(k string, v *yaml.Node) error {
-				if _, ok := c.Counts[k]; ok {
-					i, e := integer(v)
-					if e != nil || i < 1 || k == "cosmetic-min-helpers" && i < 2 {
-						return fmt.Errorf("invalid positive integer threshold %s", k)
-					}
-					c.Counts[k] = i
-					return nil
-				}
-				if _, ok := c.Ratios[k]; !ok {
-					return fmt.Errorf("unknown threshold %s", k)
-				}
-				if v.Kind != yaml.ScalarNode || (v.Tag != "!!int" && v.Tag != "!!float") {
-					return fmt.Errorf("%s must be numeric", k)
-				}
-				var f float64
-				if e := v.Decode(&f); e != nil {
-					return e
-				}
-				if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 || k == "feature-envy-ratio" && f == 0 || k != "feature-envy-ratio" && f > 1 {
-					return fmt.Errorf("invalid ratio %s", k)
-				}
-				c.Ratios[k] = f
-				return nil
-			})
-		case "history":
-			return mapping(v, func(k string, v *yaml.Node) error {
-				switch k {
-				case "enabled":
-					if v.Tag != "!!bool" || v.Kind != yaml.ScalarNode {
-						return fmt.Errorf("history.enabled must be boolean")
-					}
-					return v.Decode(&c.History)
-				case "max-commits":
-					i, e := integer(v)
-					if e != nil || i < 1 {
-						return fmt.Errorf("history.max-commits must be positive integer")
-					}
-					c.MaxCommits = i
-					return nil
-				default:
-					return fmt.Errorf("unknown history key %s", k)
-				}
-			})
-		case "exclude":
-			if v.Kind != yaml.SequenceNode {
-				return fmt.Errorf("exclude must be a sequence")
-			}
-			c.Exclude = []string{}
-			for _, x := range v.Content {
-				s, e := str(x)
-				if e != nil {
-					return e
-				}
-				if !doublestar.ValidatePattern(s) {
-					return fmt.Errorf("invalid exclusion glob %q", s)
-				}
-				c.Exclude = append(c.Exclude, s)
-			}
-		default:
-			return fmt.Errorf("unknown configuration key %s", k)
+	return fmt.Errorf("unknown configuration key %s", k)
+}
+func configVersion(v *yaml.Node) error {
+	i, e := integer(v)
+	if e != nil || i != 1 {
+		return fmt.Errorf("version must be integer 1")
+	}
+	return nil
+}
+func (c *Config) setSeverity(k string, v *yaml.Node) error {
+	if _, ok := c.Severity[k]; !ok {
+		return fmt.Errorf("unknown smell %s", k)
+	}
+	s, e := str(v)
+	if e != nil {
+		return e
+	}
+	if s != "off" && s != "warn" && s != "fail" {
+		return fmt.Errorf("invalid severity %s", s)
+	}
+	c.Severity[k] = s
+	return nil
+}
+func (c *Config) setThreshold(k string, v *yaml.Node) error {
+	if _, ok := c.Counts[k]; ok {
+		return c.setCount(k, v)
+	}
+	if _, ok := c.Ratios[k]; !ok {
+		return fmt.Errorf("unknown threshold %s", k)
+	}
+	f, e := configRatio(k, v)
+	if e != nil {
+		return e
+	}
+	c.Ratios[k] = f
+	return nil
+}
+func (c *Config) setCount(k string, v *yaml.Node) error {
+	i, e := integer(v)
+	if e != nil || i < 1 || k == "cosmetic-min-helpers" && i < 2 {
+		return fmt.Errorf("invalid positive integer threshold %s", k)
+	}
+	c.Counts[k] = i
+	return nil
+}
+func configRatio(k string, v *yaml.Node) (float64, error) {
+	if v.Kind != yaml.ScalarNode || (v.Tag != "!!int" && v.Tag != "!!float") {
+		return 0, fmt.Errorf("%s must be numeric", k)
+	}
+	var f float64
+	if e := v.Decode(&f); e != nil {
+		return 0, e
+	}
+	if invalidRatio(k, f) {
+		return 0, fmt.Errorf("invalid ratio %s", k)
+	}
+	return f, nil
+}
+func invalidRatio(k string, f float64) bool {
+	if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
+		return true
+	}
+	if k == "feature-envy-ratio" {
+		return f == 0
+	}
+	return f > 1
+}
+func (c *Config) setHistory(k string, v *yaml.Node) error {
+	switch k {
+	case "enabled":
+		return historyEnabled(v, &c.History)
+	case "max-commits":
+		return c.setMaxCommits(v)
+	}
+	return fmt.Errorf("unknown history key %s", k)
+}
+func historyEnabled(v *yaml.Node, dst *bool) error {
+	if v.Tag != "!!bool" || v.Kind != yaml.ScalarNode {
+		return fmt.Errorf("history.enabled must be boolean")
+	}
+	return v.Decode(dst)
+}
+func (c *Config) setMaxCommits(v *yaml.Node) error {
+	i, e := integer(v)
+	if e != nil || i < 1 {
+		return fmt.Errorf("history.max-commits must be positive integer")
+	}
+	c.MaxCommits = i
+	return nil
+}
+func (c *Config) setExclude(v *yaml.Node) error {
+	if v.Kind != yaml.SequenceNode {
+		return fmt.Errorf("exclude must be a sequence")
+	}
+	c.Exclude = []string{}
+	for _, x := range v.Content {
+		if e := c.addExclude(x); e != nil {
+			return e
 		}
-		return nil
-	})
-	return c, err
+	}
+	return nil
+}
+func (c *Config) addExclude(v *yaml.Node) error {
+	s, e := str(v)
+	if e != nil {
+		return e
+	}
+	if !doublestar.ValidatePattern(s) {
+		return fmt.Errorf("invalid exclusion glob %q", s)
+	}
+	c.Exclude = append(c.Exclude, s)
+	return nil
 }
 func validateYAML(n *yaml.Node) error {
 	if n.Kind == yaml.AliasNode || n.Tag == "!!null" || n.Tag == "!!merge" {
 		return fmt.Errorf("nulls, aliases, anchors and merge keys are not allowed")
 	}
 	if n.Kind == yaml.MappingNode {
-		seen := map[string]bool{}
-		for i := 0; i < len(n.Content); i += 2 {
-			k := n.Content[i]
-			if k.Kind != yaml.ScalarNode || k.Tag != "!!str" {
-				return fmt.Errorf("mapping keys must be strings")
-			}
-			if seen[k.Value] {
-				return fmt.Errorf("duplicate key %s", k.Value)
-			}
-			seen[k.Value] = true
+		if e := validateKeys(n); e != nil {
+			return e
 		}
 	}
 	for _, x := range n.Content {
@@ -164,6 +205,25 @@ func validateYAML(n *yaml.Node) error {
 			return e
 		}
 	}
+	return nil
+}
+func validateKeys(n *yaml.Node) error {
+	seen := map[string]bool{}
+	for i := 0; i < len(n.Content); i += 2 {
+		if e := uniqueKey(n.Content[i], seen); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+func uniqueKey(k *yaml.Node, seen map[string]bool) error {
+	if k.Kind != yaml.ScalarNode || k.Tag != "!!str" {
+		return fmt.Errorf("mapping keys must be strings")
+	}
+	if seen[k.Value] {
+		return fmt.Errorf("duplicate key %s", k.Value)
+	}
+	seen[k.Value] = true
 	return nil
 }
 func mapping(n *yaml.Node, f func(string, *yaml.Node) error) error {

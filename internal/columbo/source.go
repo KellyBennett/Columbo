@@ -85,146 +85,241 @@ func load(dir string, patterns []string, c Config) (*engine, error) {
 	if e != nil {
 		return nil, e
 	}
-	a := &engine{root: root, dir: dir, config: c, fset: token.NewFileSet(), objects: map[*types.Func]*declaration{}, calls: map[*ast.CallExpr]*declaration{}, callOwner: map[*ast.CallExpr]*declaration{}, private: map[*types.TypeName]bool{}, identities: map[string]string{}, report: Report{Version: 1, Cases: []Case{}, Suppressions: []Suppression{}, Warnings: []Warning{}}}
-	pc := &packages.Config{Dir: dir, Tests: true, Fset: a.fset, Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps | packages.NeedExportFile | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedModule, ParseFile: func(fs *token.FileSet, p string, b []byte) (*ast.File, error) {
-		return parser.ParseFile(fs, p, b, parser.ParseComments)
-	}}
-	pkgs, e := packages.Load(pc, patterns...)
+	a := newEngine(root, dir, c)
+	pkgs, e := a.loadPackages(patterns)
+	if e != nil {
+		return nil, e
+	}
+	if e = a.loadSources(pkgs); e != nil {
+		return nil, e
+	}
+	a.findPrivate()
+	a.findInterfaces(pkgs)
+	a.findCalls()
+	return a, nil
+}
+func newEngine(root, dir string, c Config) *engine {
+	return &engine{root: root, dir: dir, config: c, fset: token.NewFileSet(), objects: map[*types.Func]*declaration{}, calls: map[*ast.CallExpr]*declaration{}, callOwner: map[*ast.CallExpr]*declaration{}, private: map[*types.TypeName]bool{}, identities: map[string]string{}, report: emptyReport()}
+}
+func emptyReport() Report {
+	return Report{Version: 1, Cases: []Case{}, Suppressions: []Suppression{}, Warnings: []Warning{}}
+}
+func (a *engine) packageConfig() *packages.Config {
+	return &packages.Config{Dir: a.dir, Tests: true, Fset: a.fset, Mode: packageLoadMode, ParseFile: parsePhysicalFile}
+}
+
+const packageLoadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps | packages.NeedExportFile | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedModule
+
+func parsePhysicalFile(fs *token.FileSet, p string, b []byte) (*ast.File, error) {
+	return parser.ParseFile(fs, p, b, parser.ParseComments)
+}
+func (a *engine) loadPackages(patterns []string) ([]*packages.Package, error) {
+	pkgs, e := packages.Load(a.packageConfig(), patterns...)
 	if e != nil {
 		return nil, e
 	}
 	if len(pkgs) == 0 {
 		return nil, fmt.Errorf("no packages matched")
 	}
+	if e = packageErrors(pkgs); e != nil {
+		return nil, e
+	}
+	return pkgs, nil
+}
+func packageErrors(pkgs []*packages.Package) error {
 	var errors []string
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
 		for _, e := range p.Errors {
 			errors = append(errors, e.Error())
 		}
 	})
-	if len(errors) > 0 {
-		sort.Strings(errors)
-		return nil, fmt.Errorf("package loading failed:\n%s", strings.Join(errors, "\n"))
+	if len(errors) == 0 {
+		return nil
 	}
-	seen := map[string]bool{}
+	sort.Strings(errors)
+	return fmt.Errorf("package loading failed:\n%s", strings.Join(errors, "\n"))
+}
+
+type sourceLoader struct {
+	engine *engine
+	seen   map[string]bool
+}
+
+func (a *engine) loadSources(pkgs []*packages.Package) error {
+	l := &sourceLoader{engine: a, seen: map[string]bool{}}
 	for _, p := range pkgs {
-		if p.Name == "main" && strings.HasSuffix(p.PkgPath, ".test") {
-			continue
-		}
-		if p.Module == nil || filepath.Clean(p.Module.Dir) != root {
-			return nil, fmt.Errorf("selected package %s is outside invocation module", p.PkgPath)
-		}
-		original := map[string]bool{}
-		for _, p := range p.GoFiles {
-			original[filepath.Clean(p)] = true
-		}
-		for _, f := range p.Syntax {
-			path := filepath.Clean(a.fset.PositionFor(f.Pos(), false).Filename)
-			if !original[path] {
-				continue
-			}
-			if seen[path] {
-				continue
-			}
-			seen[path] = true
-			rel, e := filepath.Rel(root, path)
-			if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return nil, fmt.Errorf("source outside module: %s", path)
-			}
-			b, e := os.ReadFile(path)
-			if e != nil {
-				return nil, e
-			}
-			sf := &file{fset: a.fset, path: path, rel: filepath.ToSlash(rel), data: b, ast: f, tf: a.fset.File(f.Pos()), pkg: p, included: true}
-			sf.scan()
-			sf.included = !generated(b)
-			for _, pattern := range c.Exclude {
-				match, e := doublestar.Match(pattern, sf.rel)
-				if e != nil {
-					return nil, e
-				}
-				if match {
-					sf.included = false
-				}
-			}
-			a.files = append(a.files, sf)
-		}
-		// cgo must never silently substitute generated compiler source for physical declarations.
-		for path := range original {
-			if !seen[path] {
-				return nil, fmt.Errorf("physical-source/type correspondence unavailable for %s", path)
-			}
+		if e := l.packageSources(p); e != nil {
+			return e
 		}
 	}
 	sort.Slice(a.files, func(i, j int) bool { return a.files[i].rel < a.files[j].rel })
 	for _, f := range a.files {
-		inits, blanks := 0, 0
-		for _, node := range f.ast.Decls {
-			fn, ok := node.(*ast.FuncDecl)
-			if !ok {
-				continue
-			}
-			obj, _ := f.pkg.TypesInfo.Defs[fn.Name].(*types.Func)
-			name := fn.Name.Name
-			if name == "init" {
-				inits++
-				name = "init#" + strconv.Itoa(inits)
-			}
-			if name == "_" {
-				blanks++
-				name = "_#" + strconv.Itoa(blanks)
-			}
-			symbol := f.pkg.PkgPath + "." + name
-			var sig *types.Signature
-			if obj != nil {
-				sig, _ = obj.Type().(*types.Signature)
-			}
-			if sig == nil {
-				sig, _ = f.pkg.TypesInfo.TypeOf(fn.Type).(*types.Signature)
-			}
-			if sig == nil {
-				return nil, fmt.Errorf("missing physical signature for %s:%d", f.rel, f.tf.Offset(fn.Pos()))
-			}
-			if sig.Recv() != nil {
-				rt := types.Unalias(sig.Recv().Type())
-				prefix := ""
-				if p, ok := rt.(*types.Pointer); ok {
-					prefix = "*"
-					rt = types.Unalias(p.Elem())
-				}
-				if n, ok := rt.(*types.Named); ok {
-					symbol = f.pkg.PkgPath + ".(" + prefix + n.Obj().Name() + ")." + name
-				}
-			}
-			d := &declaration{fn: fn, file: f, obj: obj, symbol: symbol, signature: sig, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
-			idx := 0
-			for _, field := range fn.Type.Params.List {
-				count := len(field.Names)
-				if count == 0 {
-					count = 1
-				}
-				for k := 0; k < count; k++ {
-					v := sig.Params().At(idx)
-					d.params = append(d.params, parameter{v.Type(), field, idx, v})
-					if v.Name() != "" && v.Name() != "_" {
-						d.inputs[v] = d.variable(v)
-					}
-					idx++
-				}
-			}
-			if sig.Recv() != nil && sig.Recv().Name() != "" && sig.Recv().Name() != "_" {
-				d.inputs[sig.Recv()] = d.variable(sig.Recv())
-			}
-			a.declarations = append(a.declarations, d)
-			if obj != nil {
-				a.objects[obj.Origin()] = d
+		if e := a.fileDeclarations(f); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+func (l *sourceLoader) packageSources(p *packages.Package) error {
+	if p.Name == "main" && strings.HasSuffix(p.PkgPath, ".test") {
+		return nil
+	}
+	if p.Module == nil || filepath.Clean(p.Module.Dir) != l.engine.root {
+		return fmt.Errorf("selected package %s is outside invocation module", p.PkgPath)
+	}
+	original := originalSources(p)
+	for _, f := range p.Syntax {
+		if e := l.physicalFile(p, f, original); e != nil {
+			return e
+		}
+	}
+	return l.verifyOriginals(original)
+}
+func originalSources(p *packages.Package) map[string]bool {
+	original := map[string]bool{}
+	for _, p := range p.GoFiles {
+		original[filepath.Clean(p)] = true
+	}
+	return original
+}
+func (l *sourceLoader) verifyOriginals(original map[string]bool) error {
+	for p := range original {
+		if !l.seen[p] {
+			return fmt.Errorf("physical-source/type correspondence unavailable for %s", p)
+		}
+	}
+	return nil
+}
+func (l *sourceLoader) physicalFile(p *packages.Package, f *ast.File, original map[string]bool) error {
+	path := filepath.Clean(l.engine.fset.PositionFor(f.Pos(), false).Filename)
+	if !original[path] || l.seen[path] {
+		return nil
+	}
+	l.seen[path] = true
+	sf, e := l.engine.readSource(p, f, path)
+	if e != nil {
+		return e
+	}
+	l.engine.files = append(l.engine.files, sf)
+	return nil
+}
+func (a *engine) relativeSource(path string) (string, error) {
+	rel, e := filepath.Rel(a.root, path)
+	if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("source outside module: %s", path)
+	}
+	return filepath.ToSlash(rel), nil
+}
+func (a *engine) readSource(p *packages.Package, f *ast.File, path string) (*file, error) {
+	rel, e := a.relativeSource(path)
+	if e != nil {
+		return nil, e
+	}
+	b, e := os.ReadFile(path)
+	if e != nil {
+		return nil, e
+	}
+	sf := &file{fset: a.fset, path: path, rel: rel, data: b, ast: f, tf: a.fset.File(f.Pos()), pkg: p, included: !generated(b)}
+	sf.scan()
+	return sf, sf.exclude(a.config.Exclude)
+}
+func (f *file) exclude(patterns []string) error {
+	for _, p := range patterns {
+		match, e := doublestar.Match(p, f.rel)
+		if e != nil {
+			return e
+		}
+		if match {
+			f.included = false
+		}
+	}
+	return nil
+}
+func (a *engine) fileDeclarations(f *file) error {
+	ordinals := map[string]int{}
+	for _, node := range f.ast.Decls {
+		if fn, ok := node.(*ast.FuncDecl); ok {
+			if e := a.addDeclaration(f, fn, ordinals); e != nil {
+				return e
 			}
 		}
 	}
-	a.findPrivate()
-	a.findInterfaces(pkgs)
-	a.findCalls()
-	return a, nil
+	return nil
+}
+func declarationName(name string, ordinals map[string]int) string {
+	if name != "init" && name != "_" {
+		return name
+	}
+	ordinals[name]++
+	return name + "#" + strconv.Itoa(ordinals[name])
+}
+func (a *engine) addDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) error {
+	d := &declaration{fn: fn, file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
+	if e := d.resolveSignature(); e != nil {
+		return e
+	}
+	d.symbol = d.symbolName(declarationName(fn.Name.Name, ordinals))
+	d.initializeInputs()
+	a.declarations = append(a.declarations, d)
+	if d.obj != nil {
+		a.objects[d.obj.Origin()] = d
+	}
+	return nil
+}
+func (d *declaration) resolveSignature() error {
+	d.obj, _ = d.file.pkg.TypesInfo.Defs[d.fn.Name].(*types.Func)
+	if d.obj != nil {
+		d.signature, _ = d.obj.Type().(*types.Signature)
+	}
+	if d.signature == nil {
+		d.signature, _ = d.file.pkg.TypesInfo.TypeOf(d.fn.Type).(*types.Signature)
+	}
+	if d.signature == nil {
+		return fmt.Errorf("missing physical signature for %s:%d", d.file.rel, d.file.tf.Offset(d.fn.Pos()))
+	}
+	return nil
+}
+func (d *declaration) symbolName(name string) string {
+	prefix := d.file.pkg.PkgPath
+	if d.signature.Recv() == nil {
+		return prefix + "." + name
+	}
+	receiver := receiverName(d.signature.Recv().Type())
+	if receiver == "" {
+		return prefix + "." + name
+	}
+	return prefix + ".(" + receiver + ")." + name
+}
+func receiverName(t types.Type) string {
+	t = types.Unalias(t)
+	prefix := ""
+	if p, ok := t.(*types.Pointer); ok {
+		prefix = "*"
+		t = types.Unalias(p.Elem())
+	}
+	if n, ok := t.(*types.Named); ok {
+		return prefix + n.Obj().Name()
+	}
+	return ""
+}
+func (d *declaration) initializeInputs() {
+	for _, f := range d.fn.Type.Params.List {
+		d.fieldParameters(f)
+	}
+	d.addInput(d.signature.Recv())
+}
+func (d *declaration) fieldParameters(f *ast.Field) {
+	for k := 0; k < max(1, len(f.Names)); k++ {
+		idx := len(d.params)
+		v := d.signature.Params().At(idx)
+		d.params = append(d.params, parameter{v.Type(), f, idx, v})
+		d.addInput(v)
+	}
+}
+func (d *declaration) addInput(v *types.Var) {
+	if v != nil && v.Name() != "" && v.Name() != "_" {
+		d.inputs[v] = d.variable(v)
+	}
 }
 
 var generatedRE = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
@@ -263,19 +358,21 @@ func (f *file) scan() {
 		f.tokens = append(f.tokens, lexToken{p, p + token.Pos(n), t})
 	}
 }
-func (f *file) receipt(kind string, start, end token.Pos, subject string, value, nesting any) Source {
+func (f *file) receipt(kind string, start, end token.Pos, detail Detail) Source {
+	detail.Expansion = []string{}
+	detail.ExpansionSites = []Site{}
 	p := f.tf.PositionFor(start, false)
 	q := f.tf.PositionFor(end, false)
 	if end > start {
 		q = f.tf.PositionFor(end-1, false)
 	}
-	return Source{kind, f.rel, p.Line, q.Line, f.tf.Offset(start), f.tf.Offset(end), Detail{subject, value, nesting, []string{}, []Site{}}}
+	return Source{kind, f.rel, p.Line, q.Line, f.tf.Offset(start), f.tf.Offset(end), detail}
 }
 func (d *declaration) variable(v *types.Var) string {
 	return fmt.Sprintf("%s:%s@%d", d.symbol, v.Name(), d.file.fset.PositionFor(v.Pos(), false).Offset)
 }
 func (d *declaration) declReceipt() Source {
-	return d.file.receipt("declaration", d.fn.Pos(), d.fn.End(), d.symbol, nil, nil)
+	return d.file.receipt("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
 func (a *engine) newCase(d *declaration, smell, key string) (*Case, error) {
 	severity := a.config.Severity[smell]
