@@ -1,0 +1,290 @@
+CASE C-b10bccb46b — fixture.LongFunction
+VERDICT
+  FAIL
+SMELL
+  long-function
+CLUES
+  function-lines fixture.LongFunction: 11 (limit > 10)
+WHY THIS MATTERS
+  Long functions can obscure responsibility boundaries and ownership.
+DIAGNOSIS
+  fixture.LongFunction exceeds the configured source-line limit; this may indicate responsibilities that deserve separate boundaries.
+LEADS
+  → Look for cohesive responsibilities with different reasons to change.
+  → Move behavior toward the object that owns its data.
+AVOID
+  ✗ Extracting arbitrary helpers solely to reduce the line count.
+  ✗ Moving the same procedure into another file.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.LongFunction","value":null},"end_line":24,"end_offset":293,"file":"all.go","kind":"declaration","start_line":12,"start_offset":92}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":13,"end_offset":130,"file":"all.go","kind":"metric-contribution","start_line":13,"start_offset":114}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":14,"end_offset":146,"file":"all.go","kind":"metric-contribution","start_line":14,"start_offset":130}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":15,"end_offset":162,"file":"all.go","kind":"metric-contribution","start_line":15,"start_offset":146}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":16,"end_offset":178,"file":"all.go","kind":"metric-contribution","start_line":16,"start_offset":162}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":17,"end_offset":194,"file":"all.go","kind":"metric-contribution","start_line":17,"start_offset":178}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":18,"end_offset":210,"file":"all.go","kind":"metric-contribution","start_line":18,"start_offset":194}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":19,"end_offset":226,"file":"all.go","kind":"metric-contribution","start_line":19,"start_offset":210}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":20,"end_offset":242,"file":"all.go","kind":"metric-contribution","start_line":20,"start_offset":226}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":21,"end_offset":258,"file":"all.go","kind":"metric-contribution","start_line":21,"start_offset":242}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":22,"end_offset":275,"file":"all.go","kind":"metric-contribution","start_line":22,"start_offset":258}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":23,"end_offset":292,"file":"all.go","kind":"metric-contribution","start_line":23,"start_offset":275}
+
+CASE C-ad03ea5957 — fixture.Parameters
+VERDICT
+  FAIL
+SMELL
+  long-parameter-list
+CLUES
+  parameters fixture.Parameters: 5 (limit > 4)
+WHY THIS MATTERS
+  Many parameters can obscure which inputs belong together.
+DIAGNOSIS
+  fixture.Parameters exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities.
+LEADS
+  → Examine whether inputs form a cohesive domain object.
+  → Separate responsibilities that require different inputs.
+AVOID
+  ✗ Bundling unrelated inputs into an opaque bag solely to reduce the count.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parameters","value":null},"end_line":25,"end_offset":331,"file":"all.go","kind":"declaration","start_line":25,"start_offset":294}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:int","value":5},"end_line":25,"end_offset":327,"file":"all.go","kind":"parameter","start_line":25,"start_offset":310}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:int","value":5},"end_line":25,"end_offset":327,"file":"all.go","kind":"parameter","start_line":25,"start_offset":310}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:int","value":5},"end_line":25,"end_offset":327,"file":"all.go","kind":"parameter","start_line":25,"start_offset":310}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"3:int","value":5},"end_line":25,"end_offset":327,"file":"all.go","kind":"parameter","start_line":25,"start_offset":310}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"4:int","value":5},"end_line":25,"end_offset":327,"file":"all.go","kind":"parameter","start_line":25,"start_offset":310}
+
+CASE C-3d6d2adfd3 — fixture.Complex
+VERDICT
+  FAIL
+SMELL
+  high-cognitive-complexity
+CLUES
+  cognitive-complexity fixture.Complex: 10 (limit > 7)
+WHY THIS MATTERS
+  Deep or repeated decision structures make behavior harder to follow.
+DIAGNOSIS
+  fixture.Complex exceeds the configured cognitive-complexity limit; its decision structure may need simplification.
+LEADS
+  → Clarify early exits and simplify nested decisions.
+  → Examine whether variants deserve meaningful abstractions.
+AVOID
+  ✗ Moving the same decision tree into trivial helpers solely to hide its score.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Complex","value":null},"end_line":36,"end_offset":427,"file":"all.go","kind":"declaration","start_line":26,"start_offset":332}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":0,"subject":"cognitive-complexity","value":1},"end_line":27,"end_offset":361,"file":"all.go","kind":"metric-contribution","start_line":27,"start_offset":359}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":1,"subject":"cognitive-complexity","value":2},"end_line":28,"end_offset":370,"file":"all.go","kind":"metric-contribution","start_line":28,"start_offset":368}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":2,"subject":"cognitive-complexity","value":3},"end_line":29,"end_offset":381,"file":"all.go","kind":"metric-contribution","start_line":29,"start_offset":378}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":3,"subject":"cognitive-complexity","value":4},"end_line":30,"end_offset":392,"file":"all.go","kind":"metric-contribution","start_line":30,"start_offset":390}
+
+CASE C-4fb5041cb7 — fixture.Dependencies
+VERDICT
+  FAIL
+SMELL
+  excessive-dependencies
+CLUES
+  dependencies fixture.Dependencies: 10 (limit > 5)
+WHY THIS MATTERS
+  Broad dependency sets can indicate excessive coordination or coupling.
+DIAGNOSIS
+  fixture.Dependencies exceeds the configured dependency limit; it may coordinate responsibilities with separate ownership.
+LEADS
+  → Inspect the contributing dependencies for cohesive ownership boundaries.
+  → Move behavior toward the data and collaborators it primarily uses.
+AVOID
+  ✗ Introducing a facade whose only purpose is hiding the dependency count.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Dependencies","value":null},"end_line":37,"end_offset":522,"file":"all.go","kind":"declaration","start_line":37,"start_offset":428}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:bytes.Buffer","value":null},"end_line":37,"end_offset":460,"file":"all.go","kind":"dependency","start_line":37,"start_offset":448}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:bytes","value":null},"end_line":37,"end_offset":460,"file":"all.go","kind":"dependency","start_line":37,"start_offset":454}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:strings.Reader","value":null},"end_line":37,"end_offset":478,"file":"all.go","kind":"dependency","start_line":37,"start_offset":464}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:strings","value":null},"end_line":37,"end_offset":478,"file":"all.go","kind":"dependency","start_line":37,"start_offset":472}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:time.Time","value":null},"end_line":37,"end_offset":491,"file":"all.go","kind":"dependency","start_line":37,"start_offset":482}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:time","value":null},"end_line":37,"end_offset":491,"file":"all.go","kind":"dependency","start_line":37,"start_offset":487}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:net/url.URL","value":null},"end_line":37,"end_offset":502,"file":"all.go","kind":"dependency","start_line":37,"start_offset":495}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:net/url","value":null},"end_line":37,"end_offset":502,"file":"all.go","kind":"dependency","start_line":37,"start_offset":499}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:encoding/json.Decoder","value":null},"end_line":37,"end_offset":518,"file":"all.go","kind":"dependency","start_line":37,"start_offset":506}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:encoding/json","value":null},"end_line":37,"end_offset":518,"file":"all.go","kind":"dependency","start_line":37,"start_offset":511}
+
+CASE C-cf8ec1ee12 — fixture.Dependencies
+VERDICT
+  FAIL
+SMELL
+  long-parameter-list
+CLUES
+  parameters fixture.Dependencies: 5 (limit > 4)
+WHY THIS MATTERS
+  Many parameters can obscure which inputs belong together.
+DIAGNOSIS
+  fixture.Dependencies exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities.
+LEADS
+  → Examine whether inputs form a cohesive domain object.
+  → Separate responsibilities that require different inputs.
+AVOID
+  ✗ Bundling unrelated inputs into an opaque bag solely to reduce the count.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Dependencies","value":null},"end_line":37,"end_offset":522,"file":"all.go","kind":"declaration","start_line":37,"start_offset":428}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:bytes.Buffer","value":1},"end_line":37,"end_offset":460,"file":"all.go","kind":"parameter","start_line":37,"start_offset":446}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:strings.Reader","value":1},"end_line":37,"end_offset":478,"file":"all.go","kind":"parameter","start_line":37,"start_offset":462}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:time.Time","value":1},"end_line":37,"end_offset":491,"file":"all.go","kind":"parameter","start_line":37,"start_offset":480}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"3:net/url.URL","value":1},"end_line":37,"end_offset":502,"file":"all.go","kind":"parameter","start_line":37,"start_offset":493}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"4:encoding/json.Decoder","value":1},"end_line":37,"end_offset":518,"file":"all.go","kind":"parameter","start_line":37,"start_offset":504}
+
+CASE C-4063b2b57c — fixture.(Own).Envy
+VERDICT
+  FAIL
+SMELL
+  feature-envy
+CLUES
+  foreign-accesses fixture.(Own).Envy:f@597: 5 (limit >= 5)
+  foreign-own-ratio fixture.(Own).Envy:f@597: 0
+  own-accesses fixture.(Own).Envy: 0
+WHY THIS MATTERS
+  Concentrated access to another value can indicate misplaced behavior.
+DIAGNOSIS
+  fixture.(Own).Envy meets the configured foreign-access and ratio conditions; behavior may belong nearer a qualifying foreign value. Zero own accesses satisfies the ratio condition once the foreign minimum is met.
+LEADS
+  → Review each qualifying foreign value and its contributing accesses.
+  → Consider moving cohesive behavior toward the owner of that data.
+AVOID
+  ✗ Renaming or aliasing a collaborator solely to split the access count.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy","value":null},"end_line":44,"end_offset":651,"file":"all.go","kind":"declaration","start_line":42,"start_offset":579}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy:f@597","value":null},"end_line":43,"end_offset":625,"file":"all.go","kind":"foreign-access","start_line":43,"start_offset":622}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy:f@597","value":null},"end_line":43,"end_offset":631,"file":"all.go","kind":"foreign-access","start_line":43,"start_offset":628}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy:f@597","value":null},"end_line":43,"end_offset":637,"file":"all.go","kind":"foreign-access","start_line":43,"start_offset":634}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy:f@597","value":null},"end_line":43,"end_offset":643,"file":"all.go","kind":"foreign-access","start_line":43,"start_offset":640}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.(Own).Envy:f@597","value":null},"end_line":43,"end_offset":649,"file":"all.go","kind":"foreign-access","start_line":43,"start_offset":646}
+
+CASE C-47c5c497d6 — fixture.ClumpA
+VERDICT
+  FAIL
+SMELL
+  data-clump
+CLUES
+  clump-occurrences fixture.ClumpA: 3 (limit >= 3)
+  clump-size fixture.ClumpA: 3 (limit >= 3)
+  clump-types fixture.ClumpA: ["bool","int","string"]
+WHY THIS MATTERS
+  Repeated groups of parameter types can indicate a missing shared concept.
+DIAGNOSIS
+  The parameter multiset anchored at fixture.ClumpA recurs at the configured support and size; it may represent a missing domain object.
+LEADS
+  → Inspect the participating signatures for a shared domain concept.
+  → Introduce a parameter object only if the values belong together.
+AVOID
+  ✗ Bundling unrelated values solely to silence the repeated-type rule.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.ClumpA","value":null},"end_line":45,"end_offset":691,"file":"all.go","kind":"declaration","start_line":45,"start_offset":652}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:int","value":1},"end_line":45,"end_offset":669,"file":"all.go","kind":"parameter","start_line":45,"start_offset":664}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:string","value":1},"end_line":45,"end_offset":679,"file":"all.go","kind":"parameter","start_line":45,"start_offset":671}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:bool","value":1},"end_line":45,"end_offset":687,"file":"all.go","kind":"parameter","start_line":45,"start_offset":681}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.ClumpB","value":null},"end_line":46,"end_offset":731,"file":"all.go","kind":"declaration","start_line":46,"start_offset":692}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:int","value":1},"end_line":46,"end_offset":709,"file":"all.go","kind":"parameter","start_line":46,"start_offset":704}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:string","value":1},"end_line":46,"end_offset":719,"file":"all.go","kind":"parameter","start_line":46,"start_offset":711}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:bool","value":1},"end_line":46,"end_offset":727,"file":"all.go","kind":"parameter","start_line":46,"start_offset":721}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.ClumpC","value":null},"end_line":47,"end_offset":771,"file":"all.go","kind":"declaration","start_line":47,"start_offset":732}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:int","value":1},"end_line":47,"end_offset":749,"file":"all.go","kind":"parameter","start_line":47,"start_offset":744}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:string","value":1},"end_line":47,"end_offset":759,"file":"all.go","kind":"parameter","start_line":47,"start_offset":751}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:bool","value":1},"end_line":47,"end_offset":767,"file":"all.go","kind":"parameter","start_line":47,"start_offset":761}
+
+CASE C-5522b4859c — fixture.Parent
+VERDICT
+  FAIL
+SMELL
+  cosmetic-extraction
+CLUES
+  cluster all.go:797 owner=fixture.Parent file=all.go
+    fixture.stepOne call_offset=797
+    fixture.stepTwo call_offset=812
+  cognitive-complexity fixture.Parent: 0
+  dependency-overlap all.go:797:["fixture.stepOne","fixture.stepTwo"]: 1
+  dependency-overlap all.go:797:mean: 1 (limit >= 0.75)
+  dependency-set fixture.stepOne: ["interface:interface{}","package:fmt","type:error"]
+  dependency-set fixture.stepTwo: ["interface:interface{}","package:fmt","type:error"]
+  expanded-complexity fixture.Parent: 0
+  expanded-lines fixture.Parent: 12 (limit > 10)
+  forwarded-input-set all.go:797:member:fixture.stepOne: ["fixture.Parent:a@784","fixture.Parent:b@787"]
+  forwarded-input-set all.go:797:member:fixture.stepTwo: ["fixture.Parent:a@784","fixture.Parent:b@787"]
+  function-lines fixture.Parent: 2
+  helper-count all.go:797: 2 (limit >= 2)
+  parameter-overlap all.go:797:mean: 1 (limit >= 0.75)
+  parameter-overlap all.go:797:member:fixture.stepOne: 1
+  parameter-overlap all.go:797:member:fixture.stepTwo: 1
+  parent-input-set all.go:797: ["fixture.Parent:a@784","fixture.Parent:b@787"]
+WHY THIS MATTERS
+  Single-use helper sequences can retain the original procedure's coupling while hiding its metrics.
+DIAGNOSIS
+  fixture.Parent has helper clusters meeting the configured overlap conditions, and candidate expansion exceeds a configured metric limit; this may be cosmetic decomposition even if the helper names sound meaningful.
+LEADS
+  → Review the qualifying helpers with their shared inputs and dependencies.
+  → Establish cohesive boundaries with distinct ownership and collaboration.
+AVOID
+  ✗ Creating stepOne/stepTwo/stepThree helpers solely to satisfy metrics.
+  ✗ Treating a meaningful name as proof of a meaningful boundary.
+  ✗ Suppressing the case without documented justification.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parent","value":null},"end_line":51,"end_offset":827,"file":"all.go","kind":"declaration","start_line":48,"start_offset":772}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":49,"end_offset":811,"file":"all.go","kind":"metric-contribution","start_line":49,"start_offset":796}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.stepOne","value":null},"end_line":49,"end_offset":810,"file":"all.go","kind":"helper-call","start_line":49,"start_offset":797}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parent:a@784","value":null},"end_line":49,"end_offset":806,"file":"all.go","kind":"parameter","start_line":49,"start_offset":805}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parent:b@787","value":null},"end_line":49,"end_offset":809,"file":"all.go","kind":"parameter","start_line":49,"start_offset":808}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"function-lines","value":1},"end_line":50,"end_offset":826,"file":"all.go","kind":"metric-contribution","start_line":50,"start_offset":811}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.stepTwo","value":null},"end_line":50,"end_offset":825,"file":"all.go","kind":"helper-call","start_line":50,"start_offset":812}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parent:a@784","value":null},"end_line":50,"end_offset":821,"file":"all.go","kind":"parameter","start_line":50,"start_offset":820}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.Parent:b@787","value":null},"end_line":50,"end_offset":824,"file":"all.go","kind":"parameter","start_line":50,"start_offset":823}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.stepOne","value":null},"end_line":59,"end_offset":950,"file":"all.go","kind":"declaration","start_line":52,"start_offset":828}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":53,"end_offset":869,"file":"all.go","kind":"metric-contribution","start_line":53,"start_offset":853}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":53,"end_offset":868,"file":"all.go","kind":"dependency","start_line":53,"start_offset":854}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":53,"end_offset":868,"file":"all.go","kind":"dependency","start_line":53,"start_offset":854}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":53,"end_offset":865,"file":"all.go","kind":"dependency","start_line":53,"start_offset":858}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":54,"end_offset":885,"file":"all.go","kind":"metric-contribution","start_line":54,"start_offset":869}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":54,"end_offset":884,"file":"all.go","kind":"dependency","start_line":54,"start_offset":870}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":54,"end_offset":884,"file":"all.go","kind":"dependency","start_line":54,"start_offset":870}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":54,"end_offset":881,"file":"all.go","kind":"dependency","start_line":54,"start_offset":874}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":55,"end_offset":901,"file":"all.go","kind":"metric-contribution","start_line":55,"start_offset":885}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":55,"end_offset":900,"file":"all.go","kind":"dependency","start_line":55,"start_offset":886}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":55,"end_offset":900,"file":"all.go","kind":"dependency","start_line":55,"start_offset":886}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":55,"end_offset":897,"file":"all.go","kind":"dependency","start_line":55,"start_offset":890}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":56,"end_offset":917,"file":"all.go","kind":"metric-contribution","start_line":56,"start_offset":901}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":56,"end_offset":916,"file":"all.go","kind":"dependency","start_line":56,"start_offset":902}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":56,"end_offset":916,"file":"all.go","kind":"dependency","start_line":56,"start_offset":902}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":56,"end_offset":913,"file":"all.go","kind":"dependency","start_line":56,"start_offset":906}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":57,"end_offset":933,"file":"all.go","kind":"metric-contribution","start_line":57,"start_offset":917}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":57,"end_offset":932,"file":"all.go","kind":"dependency","start_line":57,"start_offset":918}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":57,"end_offset":932,"file":"all.go","kind":"dependency","start_line":57,"start_offset":918}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":57,"end_offset":929,"file":"all.go","kind":"dependency","start_line":57,"start_offset":922}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepOne"],"expansion_sites":[{"call_offset":797,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":58,"end_offset":949,"file":"all.go","kind":"metric-contribution","start_line":58,"start_offset":933}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":58,"end_offset":948,"file":"all.go","kind":"dependency","start_line":58,"start_offset":934}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":58,"end_offset":948,"file":"all.go","kind":"dependency","start_line":58,"start_offset":934}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":58,"end_offset":945,"file":"all.go","kind":"dependency","start_line":58,"start_offset":938}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.stepTwo","value":null},"end_line":67,"end_offset":1073,"file":"all.go","kind":"declaration","start_line":60,"start_offset":951}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":61,"end_offset":992,"file":"all.go","kind":"metric-contribution","start_line":61,"start_offset":976}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":61,"end_offset":991,"file":"all.go","kind":"dependency","start_line":61,"start_offset":977}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":61,"end_offset":991,"file":"all.go","kind":"dependency","start_line":61,"start_offset":977}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":61,"end_offset":988,"file":"all.go","kind":"dependency","start_line":61,"start_offset":981}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":62,"end_offset":1008,"file":"all.go","kind":"metric-contribution","start_line":62,"start_offset":992}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":62,"end_offset":1007,"file":"all.go","kind":"dependency","start_line":62,"start_offset":993}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":62,"end_offset":1007,"file":"all.go","kind":"dependency","start_line":62,"start_offset":993}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":62,"end_offset":1004,"file":"all.go","kind":"dependency","start_line":62,"start_offset":997}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":63,"end_offset":1024,"file":"all.go","kind":"metric-contribution","start_line":63,"start_offset":1008}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":63,"end_offset":1023,"file":"all.go","kind":"dependency","start_line":63,"start_offset":1009}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":63,"end_offset":1023,"file":"all.go","kind":"dependency","start_line":63,"start_offset":1009}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":63,"end_offset":1020,"file":"all.go","kind":"dependency","start_line":63,"start_offset":1013}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":64,"end_offset":1040,"file":"all.go","kind":"metric-contribution","start_line":64,"start_offset":1024}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":64,"end_offset":1039,"file":"all.go","kind":"dependency","start_line":64,"start_offset":1025}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":64,"end_offset":1039,"file":"all.go","kind":"dependency","start_line":64,"start_offset":1025}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":64,"end_offset":1036,"file":"all.go","kind":"dependency","start_line":64,"start_offset":1029}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":65,"end_offset":1056,"file":"all.go","kind":"metric-contribution","start_line":65,"start_offset":1040}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":65,"end_offset":1055,"file":"all.go","kind":"dependency","start_line":65,"start_offset":1041}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":65,"end_offset":1055,"file":"all.go","kind":"dependency","start_line":65,"start_offset":1041}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":65,"end_offset":1052,"file":"all.go","kind":"dependency","start_line":65,"start_offset":1045}
+  {"detail":{"expansion":["fixture.Parent","fixture.stepTwo"],"expansion_sites":[{"call_offset":812,"file":"all.go"}],"nesting":null,"subject":"expanded-lines","value":1},"end_line":66,"end_offset":1072,"file":"all.go","kind":"metric-contribution","start_line":66,"start_offset":1056}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"interface:interface{}","value":null},"end_line":66,"end_offset":1071,"file":"all.go","kind":"dependency","start_line":66,"start_offset":1057}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"type:error","value":null},"end_line":66,"end_offset":1071,"file":"all.go","kind":"dependency","start_line":66,"start_offset":1057}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"package:fmt","value":null},"end_line":66,"end_offset":1068,"file":"all.go","kind":"dependency","start_line":66,"start_offset":1061}
+DOGFOODING POLICY REVIEW
+  CE-001
+  This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+
+Columbo: 8 failed, 0 warned, 0 suppressed

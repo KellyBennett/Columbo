@@ -12,7 +12,13 @@ Named after the persistent TV detective, Columbo keeps following the clues and a
 
 ## How to use it
 
-**Coming soon:** this repository currently contains the specification; the CLI isn't implemented yet. Once available, run it from your Go module:
+Build with Go 1.25.1, then run from the Go module you want to investigate:
+
+```bash
+go install github.com/KellyBennett/Columbo/cmd/columbo@latest
+# Or, from a checkout:
+go build -o columbo ./cmd/columbo
+```
 
 ```bash
 # Investigate all packages
@@ -30,3 +36,17 @@ Use `.columbo.yml` to adjust thresholds and choose which smells warn, fail, or s
 In CI, `0` means no failing cases, `1` means there's a case to solve, and `2` means something prevented the investigation.
 
 Curious about the full case file? See [SPEC.md](SPEC.md).
+
+## Development
+
+```bash
+go test ./...
+go vet ./...
+```
+
+Acceptance tests pin Go 1.25.1, Linux/amd64, and a fixed build environment. The suite includes all seven default FAIL smells and checked-in text/JSON goldens. Refresh goldens deliberately with `UPDATE_GOLDEN=1 go test ./internal/columbo`.
+
+CE-001 is a provisional dogfooding policy. Ordinary builds and tests support it; `go run ./cmd/releasecheck` deliberately fails until the policy is resolved before public v1 release.
+
+Cgo inputs are rejected with exit 2 when the loader cannot establish original physical-source/type correspondence; generated compiler wrappers never substitute for source receipts.
+
