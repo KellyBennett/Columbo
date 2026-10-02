@@ -10,19 +10,196 @@ Columbo MUST detect deterministic clues, derive defined smells, report each smel
 
 Core CI enforcement MUST NOT require an LLM. Identical source, Go toolchain, Git history, and configuration MUST produce identical enforcement results.
 
-## Concepts
+## Motivation
 
-**Clue:** deterministic observation, e.g. function length 27, complexity 11, or a helper with one caller.
+Agentic coding changes the economics of strict CI enforcement. Columbo is intended to run in CI even when developers or coding agents never run it locally. A red build is deliberate feedback: code is submitted, Columbo detects architectural pressure, CI fails, and the coding agent receives enough evidence and guidance to make another design pass.
 
-**Smell:** a defined rule over clues. v1 smells: Long Function, Long Parameter List, High Cognitive Complexity, Excessive Dependencies, Feature Envy, Data Clump, Cosmetic Extraction.
+Merely enforcing metrics is insufficient because coding agents can satisfy metrics literally. A 30-line function can become five tiny private helpers while preserving exactly the same responsibility structure. Columbo therefore treats metrics as clues and attempts to distinguish meaningful decomposition from cosmetic decomposition.
 
-**Case:** the reporting/enforcement unit. In v1, one triggered smell produces one case; Columbo does not merge smells automatically.
+The inconvenience is intentional. In an agentic workflow, the CI failure is the trigger that sends the agent back to reconsider the architecture.
 
-**Diagnosis:** qualified, evidence-backed explanation of likely design pressure. Use language such as "appears to" or "may indicate," not claims that a principle is mechanically proven.
+## Design Principles
 
-**Lead:** concrete direction toward better cohesion, ownership, responsibility, or dependency boundaries.
+### Evidence Before Interpretation
 
-**Verdict:** `WARN` or `FAIL`. No case means pass.
+Every higher-level conclusion must be traceable back to concrete evidence:
+
+```text
+Diagnosis
+    ↓
+Case
+    ↓
+Smell
+    ↓
+Clues
+    ↓
+Source / AST / type information / call graph / repository history
+```
+
+A developer or agent must always be able to ask why Columbo reached a conclusion and receive concrete receipts.
+
+### Strict by Design
+
+Columbo is not a passive suggestion engine. Teams may deliberately configure aggressive thresholds so ordinary development regularly encounters its guardrails. CI failure is a feature.
+
+### Architecture Over Metrics
+
+Metrics are evidence, not the objective. Columbo prefers better design over smaller numbers. Whenever practical, it detects attempts to satisfy structural metrics without improving cohesion, coupling, ownership, or responsibility boundaries.
+
+### Make the Correct Fix Easier Than the Fake Fix
+
+A failure must explain what Columbo observed, why it matters, where the evidence occurs, what design pressure it suggests, promising refactoring directions, and superficial fixes that will not resolve the case.
+
+> **A Columbo violation should be harder to silence than to properly refactor.**
+
+### Deterministic Core
+
+Clues, smell rules, policy evaluation, case identity, and CI verdicts are deterministic. Architectural language may be heuristic, but it must be generated from deterministic evidence and templates. An LLM is not required for enforcement.
+
+
+
+# Vocabulary and Reasoning Model
+
+Columbo uses a deliberate reasoning ladder:
+
+> **Clue → Smell → Case → Diagnosis → Lead → Verdict**
+
+The distinction separates what Columbo observes, what it infers, what it investigates, what it suggests, and what CI enforces.
+
+## Clue
+
+A **Clue** is an objective, deterministic observation about the codebase.
+
+Examples:
+
+```text
+ProcessOrder is 27 lines.
+ProcessOrder has cognitive complexity 11.
+ProcessOrder accepts 7 parameters.
+PaymentGateway is referenced 9 times.
+sendReceipt has exactly one caller.
+Three private helpers share 87% of their dependency set.
+```
+
+Clues are mechanically reproducible and do not claim that code is bad. They are evidence.
+
+## Smell
+
+A **Smell** is a recognized design heuristic supported by one or more clues.
+
+Examples include Long Function, Long Parameter List, High Cognitive Complexity, Excessive Dependencies, Feature Envy, Data Clump, and Cosmetic Extraction.
+
+The metaphor is intentional: a smell is a **scent worth following**, not a declaration that code "stinks." A smell says that something about the structure deserves investigation; it does not prove the architecture is wrong.
+
+## Case
+
+A **Case** is the primary investigative and reporting unit presented to developers, agents, and CI. It contains the smell, its clues, receipts, diagnosis, leads, avoid guidance, severity, and verdict.
+
+Conceptually, multiple observations may point toward a common architectural cause. For v1, however, case formation is deliberately deterministic: **one triggered smell produces one case**. Columbo does not automatically merge multiple smells into a larger case in v1. Future versions may correlate cases without changing the meaning of the underlying vocabulary.
+
+## Diagnosis
+
+A **Diagnosis** is Columbo's evidence-backed hypothesis about the underlying design problem suggested by a case.
+
+Example:
+
+```text
+ProcessOrder appears to coordinate three independently
+meaningful responsibilities:
+
+  • payment authorization
+  • order persistence
+  • customer notification
+```
+
+Diagnoses are interpretations, not mechanically proven facts. They use qualified language such as "appears to", "suggests", or "may indicate".
+
+Prefer:
+
+```text
+These responsibilities appear to change independently.
+```
+
+over:
+
+```text
+This type violates SRP.
+```
+
+Every diagnosis must be navigable backward to its receipts.
+
+## Lead
+
+A **Lead** is a promising direction for resolving a case.
+
+Examples:
+
+```text
+Move payment behavior toward the object that owns payment state.
+Consider introducing an abstraction around notification.
+The repeated customer fields may represent a missing domain object.
+Consider replacing variant conditional behavior with polymorphism.
+```
+
+Leads point toward architectural improvement without prescribing a blind mechanical transformation. They may reference established refactorings where appropriate.
+
+## Verdict
+
+A **Verdict** is the CI policy outcome for a case: `WARN` or `FAIL`. No case means pass.
+
+The critical distinction is:
+
+> **Architectural uncertainty does not imply enforcement uncertainty.**
+
+Columbo may be cautious about a diagnosis while being completely certain that a configured deterministic threshold was exceeded.
+
+## Agent-Oriented CI Output
+
+Columbo messages are inputs to the next coding-agent iteration. An obscure metric error encourages the most naive workaround, so every failing case must include clues, why the smell matters, a diagnosis, leads, avoid guidance, and receipts.
+
+Bad:
+
+```text
+funlen: ProcessOrder is 23 lines (max 10)
+```
+
+Preferred:
+
+```text
+CASE C-... — ProcessOrder
+
+VERDICT
+  FAIL
+
+SMELL
+  Long Function
+
+CLUES
+  ProcessOrder is 23 lines (limit: 10)
+  Cognitive complexity is 9 (limit: 7)
+
+WHY THIS MATTERS
+  Long functions can indicate multiple responsibilities
+  or a missing abstraction.
+
+DIAGNOSIS
+  ProcessOrder appears to coordinate payment,
+  persistence, and notification behavior.
+
+LEADS
+  → Look for responsibilities with different reasons to change.
+  → Prefer moving behavior toward the object that owns its data.
+  → Extract cohesive concepts rather than arbitrary blocks.
+
+AVOID
+  ✗ Extracting helpers solely to satisfy the line limit.
+  ✗ Creating stepOne/stepTwo/stepThree functions.
+  ✗ Moving the same procedural sequence into another file.
+  ✗ Suppressing the rule without documented justification.
+
+RECEIPTS
+  internal/orders/service.go:38-64
+```
 
 ## CLI and exit codes
 
