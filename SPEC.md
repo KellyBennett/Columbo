@@ -201,6 +201,48 @@ RECEIPTS
   internal/orders/service.go:38-64
 ```
 
+## Dogfooding policies
+
+A **dogfooding policy** is an explicitly provisional product or enforcement decision being evaluated through real use. It is first-class specification metadata, distinct from objective clues, diagnoses, source suppressions, and configuration. Multiple smells may use this mechanism. A provisional policy MUST have a fully defined deterministic enforcement rule; uncertainty about its desirability MUST NOT leave implementation behavior unresolved.
+
+### Decision register
+
+This specification is the authoritative register. Each entry MUST contain:
+
+- a unique, stable policy ID;
+- status: `provisional`, `retained`, `revised`, or `removed`;
+- the decision and rationale;
+- an exact applicability rule identifying which cases carry its review note;
+- the literal review note and human-review prompt;
+- the evidence required to evaluate the decision;
+- for a resolved entry, the resolution rationale and named regression fixtures covering the resulting behavior.
+
+Policy IDs MUST NOT be reused. Resolved entries remain in the register for future agents and release audits. Policy metadata is not user-configurable in v1 and introduces no new CLI flag.
+
+### Case output and agent handoff
+
+Every emitted case matching a provisional entry MUST include that entry's review note and prompt, including WARN cases and cases displayed as suppressed. Disabled smells produce no cases or policy-review notes. If several entries apply, order them by policy ID.
+
+Text output appends an optional `DOGFOODING POLICY REVIEW` section after `RECEIPTS`, with each entry's ID, note, and prompt. Every JSON case includes `policy_reviews`, an array of objects with exactly the string fields `id`, `note`, and `review_prompt`; use an empty array when none apply. The strings are the literal registered templates. Resolved entries are not included in case output.
+
+Policy notes MUST NOT change smell triggers, thresholds, severity, verdicts, suppressions, case IDs, summary counts, or exit codes. They are not clues and MUST NOT suggest that the tool has established the author's intent. Columbo reports the handoff instruction; it does not itself contact a human, invoke an agent, modify code, or create a suppression.
+
+### Public-release gate
+
+Provisional entries are permitted during dogfooding. Before public v1 release, every entry MUST be explicitly resolved as retained, revised, or removed, with rationale and regression fixtures. Public-release validation MUST reject a nonempty set of provisional entries. Ordinary dogfooding builds MUST NOT be blocked merely because an entry is provisional. Fixtures MUST verify deterministic text/JSON review notes and that adding or removing review metadata does not change enforcement results or case identity. Public-release output MUST contain no provisional review notes.
+
+### CE-001: strict Cosmetic Extraction during dogfooding
+
+- **Status:** `provisional`.
+- **Decision:** Trigger Cosmetic Extraction whenever its four defined structural conditions hold, even when the helpers might represent meaningful responsibilities. Do not require proof of cosmetic intent or architectural invalidity.
+- **Rationale:** Strict CI feedback is intentional. Dogfooding will establish whether the structural rule rejects too many worthwhile decompositions.
+- **Applicability:** Every emitted `cosmetic-extraction` case.
+- **Review note:** "This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict."
+- **Human-review prompt:** "Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression."
+- **Required evidence:** Receipts identify the parent, helper declarations, and qualifying call sites. Clues report the forwarded-input sets, dependency sets, calculated overlaps and configured thresholds, and original and expanded metrics. Multiple qualifying clusters are individually identifiable in the evidence.
+- **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
+- **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
+
 ## CLI and exit codes
 
 ```bash
@@ -251,7 +293,7 @@ exclude:
   - "**/vendor/**"
 ```
 
-Allowed severity values: `off`, `warn`, `fail`. Unknown keys are errors. Numeric thresholds must be positive; overlaps must be in `[0,1]`.
+Allowed severity values: `off`, `warn`, `fail`. Unknown keys are errors. Numeric thresholds must be positive; overlaps must be in `[0,1]`. `cosmetic-min-helpers` MUST be an integer >=2 because cluster dependency overlap is a mean over distinct helper pairs.
 
 If the default config is absent, use defaults. If an explicitly supplied config is absent, exit 2. `--no-history` overrides config.
 
@@ -311,7 +353,7 @@ Trigger Cosmetic Extraction only when:
 3. mean dependency overlap >= `cosmetic-dependency-overlap` (default 0.75); and
 4. virtual inlining makes the parent violate Long Function or High Cognitive Complexity.
 
-Weak names such as `stepOne` may be additional clues but MUST NOT affect verdicts.
+Weak names such as `stepOne` may be additional clues but MUST NOT affect verdicts. During dogfooding, policy CE-001 applies: satisfying the four conditions is sufficient even when decomposition may be meaningful; architectural intent is not an additional trigger condition.
 
 ## Virtual inlining
 
@@ -383,7 +425,7 @@ Use ANSI only when stdout is a TTY.
 {"version":1,"summary":{"failed":0,"warned":0,"suppressed":0},"cases":[],"suppressions":[],"warnings":[]}
 ```
 
-Each case includes: `id`, `smell`, `verdict`, `symbol`, `file`, `start_line`, `end_line`, `clues`, `why`, `diagnosis`, `leads`, `avoid`, and `receipts`. Arrays and cases use deterministic ordering. Fatal execution diagnostics go to stderr; JSON analysis warnings belong in `warnings`.
+Each case includes: `id`, `smell`, `verdict`, `symbol`, `file`, `start_line`, `end_line`, `clues`, `why`, `diagnosis`, `leads`, `avoid`, `receipts`, and `policy_reviews` as defined under Dogfooding policies. Arrays and cases use deterministic ordering. Fatal execution diagnostics go to stderr; JSON analysis warnings belong in `warnings`.
 
 ## Implementation constraints
 
@@ -406,7 +448,9 @@ The repository MUST include fixture-based tests proving:
 9. refactoring into helpers with sufficiently distinct parameter/dependency sets clears Cosmetic Extraction when other configured smells also clear;
 10. history availability never changes a v1 verdict;
 11. generated/excluded files are ignored;
-12. suppressions require justification and are auditable.
+12. suppressions require justification and are auditable;
+13. provisional dogfooding policies appear on exactly their applicable cases, in deterministic text/JSON output, without changing case identity or enforcement;
+14. public-release validation rejects unresolved provisional policies and public-release output has no provisional review notes.
 
 Include adversarial fixtures where a long function is "fixed" using `stepOne/stepTwo/stepThree`-style helpers. Columbo MUST still fail when the defined Cosmetic Extraction conditions are met.
 
