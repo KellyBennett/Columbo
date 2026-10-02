@@ -44,6 +44,8 @@ go test ./...
 go vet ./...
 ```
 
+CI also builds Columbo from the checked-out revision and runs `./columbo ./...` in a separate **Columbo self-check** job. This includes the application's tests and enforces the default FAIL severities and thresholds. Findings fail the job and include evidence and refactoring leads in its log. A green acceptance-test job does not imply a green self-check; existing findings must be addressed for the full workflow to pass.
+
 Acceptance tests pin Go 1.25.1, Linux/amd64, and a fixed build environment. The suite includes all seven default FAIL smells and checked-in text/JSON goldens. Refresh goldens deliberately with `UPDATE_GOLDEN=1 go test ./internal/columbo`.
 
 CE-001 is a provisional dogfooding policy. Ordinary builds and tests support it; `go run ./cmd/releasecheck` deliberately fails until the policy is resolved before public v1 release.
