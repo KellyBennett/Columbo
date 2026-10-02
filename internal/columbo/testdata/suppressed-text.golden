@@ -9,8 +9,8 @@ CLUES
     fixture.one call_offset=108
     fixture.two call_offset=117
   cognitive-complexity fixture.Parent: 0
-  dependency-overlap source.go:108:["fixture.one","fixture.two"]: 0
-  dependency-overlap source.go:108:mean: 0 (limit >= 0)
+  dependency-overlap source.go:108:["fixture.one","fixture.two"]: 0.000000
+  dependency-overlap source.go:108:mean: 0.000000 (limit >= 0.000000)
   dependency-set fixture.one: []
   dependency-set fixture.two: []
   expanded-complexity fixture.Parent: 0
@@ -19,9 +19,9 @@ CLUES
   forwarded-input-set source.go:108:member:fixture.two: ["fixture.Parent:a@99","fixture.Parent:b@101"]
   function-lines fixture.Parent: 1
   helper-count source.go:108: 2 (limit >= 2)
-  parameter-overlap source.go:108:mean: 1 (limit >= 0.75)
-  parameter-overlap source.go:108:member:fixture.one: 1
-  parameter-overlap source.go:108:member:fixture.two: 1
+  parameter-overlap source.go:108:mean: 1.000000 (limit >= 0.750000)
+  parameter-overlap source.go:108:member:fixture.one: 1.000000
+  parameter-overlap source.go:108:member:fixture.two: 1.000000
   parent-input-set source.go:108: ["fixture.Parent:a@99","fixture.Parent:b@101"]
 WHY THIS MATTERS
   Single-use helper sequences can retain the original procedure's coupling while hiding its metrics.

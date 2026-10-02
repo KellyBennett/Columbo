@@ -251,6 +251,18 @@ func (r *Report) finish() {
 		return fmt.Sprintf("%s\x00%s\x00%09d\x00%s", a.Code, a.File, a.Line, a.Message) < fmt.Sprintf("%s\x00%s\x00%09d\x00%s", b.Code, b.File, b.Line, b.Message)
 	})
 }
+func textClueNumber(kind string, v any) string {
+	if kind == "parameter-overlap" || kind == "dependency-overlap" || kind == "foreign-own-ratio" {
+		switch n := v.(type) {
+		case float64:
+			return fmt.Sprintf("%.6f", n)
+		case int:
+			return fmt.Sprintf("%.6f", float64(n))
+		}
+	}
+	return canonical(v)
+}
+
 func Serialize(r Report, format string) ([]byte, error) {
 	var b bytes.Buffer
 	if format == "json" {
@@ -281,9 +293,9 @@ func Serialize(r Report, format string) ([]byte, error) {
 			}
 		}
 		for _, q := range c.Clues {
-			fmt.Fprintf(&b, "  %s %s: %s", q.Kind, q.Subject, canonical(q.Value))
+			fmt.Fprintf(&b, "  %s %s: %s", q.Kind, q.Subject, textClueNumber(q.Kind, q.Value))
 			if q.Limit != nil {
-				fmt.Fprintf(&b, " (limit %v %s)", q.Operator, canonical(q.Limit))
+				fmt.Fprintf(&b, " (limit %v %s)", q.Operator, textClueNumber(q.Kind, q.Limit))
 			}
 			fmt.Fprintln(&b)
 		}

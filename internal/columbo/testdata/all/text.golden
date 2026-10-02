@@ -136,7 +136,7 @@ SMELL
   feature-envy
 CLUES
   foreign-accesses fixture.(Own).Envy:f@597: 5 (limit >= 5)
-  foreign-own-ratio fixture.(Own).Envy:f@597: 0
+  foreign-own-ratio fixture.(Own).Envy:f@597: 0.000000
   own-accesses fixture.(Own).Envy: 0
 WHY THIS MATTERS
   Concentrated access to another value can indicate misplaced behavior.
@@ -197,8 +197,8 @@ CLUES
     fixture.stepOne call_offset=797
     fixture.stepTwo call_offset=812
   cognitive-complexity fixture.Parent: 0
-  dependency-overlap all.go:797:["fixture.stepOne","fixture.stepTwo"]: 1
-  dependency-overlap all.go:797:mean: 1 (limit >= 0.75)
+  dependency-overlap all.go:797:["fixture.stepOne","fixture.stepTwo"]: 1.000000
+  dependency-overlap all.go:797:mean: 1.000000 (limit >= 0.750000)
   dependency-set fixture.stepOne: ["interface:interface{}","package:fmt","type:error"]
   dependency-set fixture.stepTwo: ["interface:interface{}","package:fmt","type:error"]
   expanded-complexity fixture.Parent: 0
@@ -207,9 +207,9 @@ CLUES
   forwarded-input-set all.go:797:member:fixture.stepTwo: ["fixture.Parent:a@784","fixture.Parent:b@787"]
   function-lines fixture.Parent: 2
   helper-count all.go:797: 2 (limit >= 2)
-  parameter-overlap all.go:797:mean: 1 (limit >= 0.75)
-  parameter-overlap all.go:797:member:fixture.stepOne: 1
-  parameter-overlap all.go:797:member:fixture.stepTwo: 1
+  parameter-overlap all.go:797:mean: 1.000000 (limit >= 0.750000)
+  parameter-overlap all.go:797:member:fixture.stepOne: 1.000000
+  parameter-overlap all.go:797:member:fixture.stepTwo: 1.000000
   parent-input-set all.go:797: ["fixture.Parent:a@784","fixture.Parent:b@787"]
 WHY THIS MATTERS
   Single-use helper sequences can retain the original procedure's coupling while hiding its metrics.
