@@ -3,6 +3,7 @@ package columbo
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -230,3 +231,24 @@ func TestClusterSchema(t *testing.T) {
 }
 
 var _ ast.Node
+
+func TestLargeClosedClump(t *testing.T) {
+	var src strings.Builder
+	src.WriteString("package fixture\n")
+	params := []string{}
+	for i := 0; i < 32; i++ {
+		name := fmt.Sprintf("A%02d", i)
+		fmt.Fprintf(&src, "type %s struct{}\n", name)
+		params = append(params, fmt.Sprintf("p%d %s", i, name))
+	}
+	for _, name := range []string{"One", "Two", "Three"} {
+		fmt.Fprintf(&src, "func %s(%s){}\n", name, strings.Join(params, ","))
+	}
+	dir := fixture(t, src.String())
+	c := quiet()
+	c.Severity["data-clump"] = "fail"
+	cc := one(t, investigate(t, dir, c), "data-clump")
+	if clueValue(t, cc, "clump-size") != 32 {
+		t.Fatal(cc)
+	}
+}

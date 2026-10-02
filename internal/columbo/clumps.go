@@ -1,14 +1,9 @@
 package columbo
 
-import (
-	"sort"
-)
+import "sort"
 
-type clump struct {
-	types   []string
-	support []*declaration
-}
-
+// Closed frequent multisets are intersections of supporting signatures. Mining
+// distinct intersections avoids enumerating every subset of a large signature.
 func (a *engine) clumps() error {
 	packages := map[string][]*declaration{}
 	for _, d := range a.declarations {
@@ -17,102 +12,87 @@ func (a *engine) clumps() error {
 		}
 	}
 	for _, ds := range packages {
+		sort.Slice(ds, func(i, j int) bool {
+			if ds[i].file.rel != ds[j].file.rel {
+				return ds[i].file.rel < ds[j].file.rel
+			}
+			return ds[i].fn.Pos() < ds[j].fn.Pos()
+		})
 		sets := map[*declaration]map[string]int{}
-		all := map[string]bool{}
+		patterns := []map[string]int{}
+		seen := map[string]bool{}
+		serialize := func(m map[string]int) []string {
+			out := []string{}
+			for t, n := range m {
+				for i := 0; i < n; i++ {
+					out = append(out, t)
+				}
+			}
+			sort.Strings(out)
+			return out
+		}
+		add := func(m map[string]int) {
+			types := serialize(m)
+			if int64(len(types)) < a.config.Counts["data-clump-size"] {
+				return
+			}
+			key := canonical(types)
+			if !seen[key] {
+				seen[key] = true
+				patterns = append(patterns, m)
+			}
+		}
 		for _, d := range ds {
 			m := map[string]int{}
 			for _, p := range d.params {
-				s := canonicalType(p.typ, d.signature)
-				m[s]++
-				all[s] = true
+				m[canonicalType(p.typ, d.signature)]++
 			}
 			sets[d] = m
+			add(m)
 		}
-		universe := sortedSet(all)
-		freq := []clump{}
-		var search func(int, []string, []*declaration)
-		search = func(start int, key []string, support []*declaration) {
-			for i := start; i < len(universe); i++ {
-				typ := universe[i]
-				count := 1
-				for _, t := range key {
-					if t == typ {
-						count++
+		for i := 0; i < len(patterns); i++ {
+			for _, d := range ds {
+				m := map[string]int{}
+				for t, n := range patterns[i] {
+					if k := sets[d][t]; k > 0 {
+						m[t] = min(n, k)
 					}
 				}
-				next := []*declaration{}
-				for _, d := range support {
-					if sets[d][typ] >= count {
-						next = append(next, d)
-					}
-				}
-				if int64(len(next)) < a.config.Counts["data-clump-occurrences"] {
-					continue
-				}
-				k := append(append([]string{}, key...), typ)
-				if int64(len(k)) >= a.config.Counts["data-clump-size"] {
-					freq = append(freq, clump{k, next})
-				}
-				search(i, k, next)
+				add(m)
 			}
 		}
-		search(0, []string{}, ds)
-		for _, f := range freq {
-			closed := true
-			for _, g := range freq {
-				if len(g.types) <= len(f.types) || len(g.support) != len(f.support) {
-					continue
-				}
-				same := true
-				for i := range f.support {
-					if f.support[i] != g.support[i] {
-						same = false
+		for _, m := range patterns {
+			support := []*declaration{}
+			for _, d := range ds {
+				contains := true
+				for t, n := range m {
+					if sets[d][t] < n {
+						contains = false
 						break
 					}
 				}
-				if !same {
-					continue
-				}
-				m := map[string]int{}
-				for _, s := range g.types {
-					m[s]++
-				}
-				contains := true
-				for _, s := range f.types {
-					m[s]--
-					if m[s] < 0 {
-						contains = false
-					}
-				}
 				if contains {
-					closed = false
-					break
+					support = append(support, d)
 				}
 			}
-			if !closed {
+			if int64(len(support)) < a.config.Counts["data-clump-occurrences"] {
 				continue
 			}
-			sort.Slice(f.support, func(i, j int) bool {
-				d, e := f.support[i], f.support[j]
-				if d.file.rel != e.file.rel {
-					return d.file.rel < e.file.rel
-				}
-				return d.fn.Pos() < e.fn.Pos()
-			})
-			d := f.support[0]
-			c, e := a.newCase(d, "data-clump", canonical(f.types))
+			ts := serialize(m)
+			d := support[0]
+			c, e := a.newCase(d, "data-clump", canonical(ts))
 			if e != nil {
 				return e
 			}
 			if c == nil {
 				continue
 			}
-			c.Clues = append(c.Clues, metric("clump-types", d.symbol, f.types, nil, nil), metric("clump-size", d.symbol, len(f.types), a.config.Counts["data-clump-size"], ">="), metric("clump-occurrences", d.symbol, len(f.support), a.config.Counts["data-clump-occurrences"], ">="))
-			for _, s := range f.support {
+			c.Clues = append(c.Clues, metric("clump-types", d.symbol, ts, nil, nil), metric("clump-size", d.symbol, len(ts), a.config.Counts["data-clump-size"], ">="), metric("clump-occurrences", d.symbol, len(support), a.config.Counts["data-clump-occurrences"], ">="))
+			for _, s := range support {
 				c.Receipts = append(c.Receipts, s.declReceipt())
 				need := map[string]int{}
-				for _, t := range f.types {
-					need[t]++
+				for t, n := range m {
+					need[t] = n
 				}
 				for _, p := range s.params {
 					t := canonicalType(p.typ, s.signature)
