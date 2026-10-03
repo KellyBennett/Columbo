@@ -47,38 +47,63 @@ func decodeConfig(b []byte, c Config) (Config, error) {
 	}
 	return c, mapping(n, c.set)
 }
-func configDocument(b []byte) (*yaml.Node, error) {
-	d := yaml.NewDecoder(strings.NewReader(string(b)))
-	var n yaml.Node
-	if e := d.Decode(&n); e != nil {
-		if e == io.EOF {
+
+type configReader struct{ decoder *yaml.Decoder }
+
+func newConfigReader(data []byte) *configReader {
+	return &configReader{yaml.NewDecoder(strings.NewReader(string(data)))}
+}
+func configDocument(data []byte) (*yaml.Node, error) { return newConfigReader(data).document() }
+func (r *configReader) document() (*yaml.Node, error) {
+	var document yaml.Node
+	if err := r.decoder.Decode(&document); err != nil {
+		if err == io.EOF {
 			return nil, nil
 		}
-		return nil, e
+		return nil, err
 	}
+	if err := r.singleDocument(); err != nil {
+		return nil, err
+	}
+	return configRoot(&document)
+}
+func (r *configReader) singleDocument() error {
 	var extra yaml.Node
-	if e := d.Decode(&extra); e != io.EOF {
-		return nil, fmt.Errorf("configuration must contain exactly one YAML document")
+	if err := r.decoder.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("configuration must contain exactly one YAML document")
 	}
-	if len(n.Content) != 1 || n.Content[0].Kind != yaml.MappingNode {
+	return nil
+}
+func configRoot(document *yaml.Node) (*yaml.Node, error) {
+	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("configuration root must be a mapping")
 	}
-	return n.Content[0], nil
+	return document.Content[0], nil
 }
-func (c *Config) set(k string, v *yaml.Node) error {
-	switch k {
-	case "version":
-		return configVersion(v)
-	case "severity":
-		return mapping(v, c.setSeverity)
-	case "thresholds":
-		return mapping(v, c.setThreshold)
-	case "history":
-		return mapping(v, c.setHistory)
-	case "exclude":
-		return c.setExclude(v)
+
+// The section schema dispatches assignment without changing validation order.
+type configSetter func(*Config, *yaml.Node) error
+
+func mappingSetter(set func(*Config, string, *yaml.Node) error) configSetter {
+	return func(config *Config, node *yaml.Node) error {
+		return mapping(node, func(key string, value *yaml.Node) error { return set(config, key, value) })
 	}
-	return fmt.Errorf("unknown configuration key %s", k)
+}
+
+var configSections = map[string]configSetter{
+	"version":    func(_ *Config, node *yaml.Node) error { return configVersion(node) },
+	"severity":   mappingSetter((*Config).setSeverity),
+	"thresholds": mappingSetter((*Config).setThreshold),
+	"history":    mappingSetter((*Config).setHistory),
+	"exclude":    (*Config).setExclude,
+}
+
+func (c *Config) set(key string, value *yaml.Node) error {
+	set := configSections[key]
+	if set == nil {
+		return fmt.Errorf("unknown configuration key %s", key)
+	}
+	return set(c, value)
 }
 func configVersion(v *yaml.Node) error {
 	i, e := integer(v)
@@ -191,19 +216,23 @@ func (c *Config) addExclude(v *yaml.Node) error {
 	c.Exclude = append(c.Exclude, s)
 	return nil
 }
-func validateYAML(n *yaml.Node) error {
-	if n.Kind == yaml.AliasNode || n.Tag == "!!null" || n.Tag == "!!merge" {
+func validateYAML(node *yaml.Node) error {
+	if err := validateYAMLNode(node); err != nil {
+		return err
+	}
+	for _, child := range node.Content {
+		if err := validateYAML(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func validateYAMLNode(node *yaml.Node) error {
+	if node.Kind == yaml.AliasNode || node.Tag == "!!null" || node.Tag == "!!merge" {
 		return fmt.Errorf("nulls, aliases, anchors and merge keys are not allowed")
 	}
-	if n.Kind == yaml.MappingNode {
-		if e := validateKeys(n); e != nil {
-			return e
-		}
-	}
-	for _, x := range n.Content {
-		if e := validateYAML(x); e != nil {
-			return e
-		}
+	if node.Kind == yaml.MappingNode {
+		return validateKeys(node)
 	}
 	return nil
 }

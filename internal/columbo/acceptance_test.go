@@ -157,6 +157,8 @@ func (t *testHarness) TestConfigInvalid() {
 			t.require(e != nil, "accepted invalid config")
 		})
 	}
+}
+func (t *testHarness) TestConfigRatioEndpoints() {
 	for _, n := range []string{"0", "1"} {
 		d := t.TempDir()
 		t.write(d, "c", "thresholds: {cosmetic-parameter-overlap: "+n+"}")
@@ -164,7 +166,8 @@ func (t *testHarness) TestConfigInvalid() {
 		t.require(e == nil, e)
 	}
 }
-func TestConfigInvalid(t *testing.T) { (&testHarness{T: t}).TestConfigInvalid() }
+func TestConfigRatioEndpoints(t *testing.T) { (&testHarness{T: t}).TestConfigRatioEndpoints() }
+func TestConfigInvalid(t *testing.T)        { (&testHarness{T: t}).TestConfigInvalid() }
 
 func (t *testHarness) TestPhysicalLines() {
 	for _, x := range []struct {
@@ -445,3 +448,32 @@ func (t *testHarness) TestLeadingGeneratedSources() {
 	}
 }
 func TestLeadingGeneratedSources(t *testing.T) { (&testHarness{T: t}).TestLeadingGeneratedSources() }
+
+var configDocumentCases = []struct{ source, message string }{
+	{"", ""},
+	{" \n# comment only\n", ""},
+	{"{}", ""},
+	{"[]", "configuration root must be a mapping"},
+	{"null", "configuration root must be a mapping"},
+	{"{}\n---\n{}", "configuration must contain exactly one YAML document"},
+	{"{}\n---\n{", "configuration must contain exactly one YAML document"},
+	{"unknown: 1", "unknown configuration key unknown"},
+	{"unknown: 1\nseverity: {long-function: null}", "nulls, aliases, anchors and merge keys are not allowed"},
+	{"severity: {long-function: warn, long-function: fail}", "duplicate key long-function"},
+}
+
+func (t *testHarness) TestConfigDocumentErrors() {
+	for _, x := range configDocumentCases {
+		t.configDocumentError(x.source, x.message)
+	}
+}
+func (t *testHarness) configDocumentError(source, message string) {
+	_, err := decodeConfig([]byte(source), Defaults())
+	if message == "" {
+		t.require(err == nil, source, err)
+		return
+	}
+	t.require(err != nil, "expected configuration error", source)
+	t.require(err.Error() == message, source, err)
+}
+func TestConfigDocumentErrors(t *testing.T) { (&testHarness{T: t}).TestConfigDocumentErrors() }
