@@ -397,95 +397,6 @@ func appendSources(c *Case, ss []Source) {
 		c.Receipts = append(c.Receipts, s)
 	}
 }
-func (a *engine) findPrivate() {
-	cross := map[string]bool{}
-	key := func(t *types.TypeName) string {
-		p := a.fset.PositionFor(t.Pos(), false)
-		return fmt.Sprintf("%s:%d", p.Filename, p.Offset)
-	}
-	for _, f := range a.files {
-		ast.Inspect(f.ast, func(n ast.Node) bool {
-			if id, ok := n.(*ast.Ident); ok {
-				if t, ok := f.pkg.TypesInfo.Uses[id].(*types.TypeName); ok {
-					if a.fset.PositionFor(t.Pos(), false).Filename != f.path {
-						cross[key(t)] = true
-					}
-				}
-			}
-			return true
-		})
-	}
-	for _, f := range a.files {
-		for _, obj := range f.pkg.TypesInfo.Defs {
-			if t, ok := obj.(*types.TypeName); ok && !t.Exported() {
-				a.private[t] = !cross[key(t)]
-			}
-		}
-	}
-}
-
-func (a *engine) findInterfaces(pkgs []*packages.Package) {
-	seen := map[types.Type]bool{}
-	var walk func(types.Type)
-	walk = func(t types.Type) {
-		if t == nil {
-			return
-		}
-		t = types.Unalias(t)
-		if seen[t] {
-			return
-		}
-		seen[t] = true
-		switch t := t.(type) {
-		case *types.Named:
-			if _, ok := t.Underlying().(*types.Interface); ok {
-				a.interfaces = append(a.interfaces, t)
-			}
-			walk(t.Underlying())
-		case *types.Interface:
-			a.interfaces = append(a.interfaces, t)
-			for i := 0; i < t.NumMethods(); i++ {
-				walk(t.Method(i).Type())
-			}
-		case *types.Pointer:
-			walk(t.Elem())
-		case *types.Slice:
-			walk(t.Elem())
-		case *types.Array:
-			walk(t.Elem())
-		case *types.Map:
-			walk(t.Key())
-			walk(t.Elem())
-		case *types.Chan:
-			walk(t.Elem())
-		case *types.Struct:
-			for i := 0; i < t.NumFields(); i++ {
-				walk(t.Field(i).Type())
-			}
-		case *types.Signature:
-			for i := 0; i < t.Params().Len(); i++ {
-				walk(t.Params().At(i).Type())
-			}
-			for i := 0; i < t.Results().Len(); i++ {
-				walk(t.Results().At(i).Type())
-			}
-		}
-	}
-	packages.Visit(pkgs, func(p *packages.Package) bool {
-		if p.Types != nil {
-			s := p.Types.Scope()
-			for _, name := range s.Names() {
-				walk(s.Lookup(name).Type())
-			}
-		}
-		if p.TypesInfo != nil {
-			for _, tv := range p.TypesInfo.Types {
-				walk(tv.Type)
-			}
-		}
-		return true
-	}, nil)
-}
 func unparen(e ast.Expr) ast.Expr {
 	for {
 		p, ok := e.(*ast.ParenExpr)
@@ -494,29 +405,6 @@ func unparen(e ast.Expr) ast.Expr {
 		}
 		e = p.X
 	}
-}
-func callObject(info *types.Info, c *ast.CallExpr) *types.Func {
-	e := unparen(c.Fun)
-	switch x := e.(type) {
-	case *ast.IndexExpr:
-		e = unparen(x.X)
-	case *ast.IndexListExpr:
-		e = unparen(x.X)
-	}
-	switch x := e.(type) {
-	case *ast.Ident:
-		f, _ := info.Uses[x].(*types.Func)
-		return f
-	case *ast.SelectorExpr:
-		if sel := info.Selections[x]; sel != nil {
-			if _, yes := types.Unalias(stripPointer(sel.Recv())).Underlying().(*types.Interface); yes {
-				return nil
-			}
-		}
-		f, _ := info.Uses[x.Sel].(*types.Func)
-		return f
-	}
-	return nil
 }
 func stripPointer(t types.Type) types.Type {
 	for {
@@ -540,122 +428,13 @@ func (a *engine) target(obj *types.Func) *declaration {
 	}
 	pos := a.fset.PositionFor(obj.Pos(), false)
 	for _, d := range a.declarations {
-		if d.obj != nil && d.obj.Name() == obj.Name() && d.file.path == pos.Filename && d.file.tf.Offset(d.obj.Pos()) == pos.Offset {
+		if d.matchesObject(obj, pos) {
 			return d
 		}
 	}
 	return nil
 }
 
-func (a *engine) findCalls() {
-	counts := map[*declaration]int{}
-	firstclass := map[*declaration]bool{}
-	directIds := map[*ast.Ident]bool{}
-	unique := map[*declaration]*ast.CallExpr{}
-	for _, d := range a.declarations {
-		if d.fn.Body == nil {
-			continue
-		}
-		ast.Inspect(d.fn.Body, func(n ast.Node) bool {
-			c, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			obj := callObject(d.file.pkg.TypesInfo, c)
-			if obj == nil {
-				return true
-			}
-			target := a.target(obj)
-			if target == nil {
-				return true
-			}
-			a.calls[c] = target
-			a.callOwner[c] = d
-			counts[target]++
-			unique[target] = c
-			e := unparen(c.Fun)
-			switch x := e.(type) {
-			case *ast.IndexExpr:
-				e = unparen(x.X)
-			case *ast.IndexListExpr:
-				e = unparen(x.X)
-			}
-			switch x := e.(type) {
-			case *ast.Ident:
-				directIds[x] = true
-			case *ast.SelectorExpr:
-				directIds[x.Sel] = true
-			}
-			return true
-		})
-	}
-	for _, f := range a.files {
-		ast.Inspect(f.ast, func(n ast.Node) bool {
-			// Package-level calls count too; a unique call outside a body
-			// cannot become a lexical cluster member.
-			if call, ok := n.(*ast.CallExpr); ok && a.calls[call] == nil {
-				if obj := callObject(f.pkg.TypesInfo, call); obj != nil {
-					if d := a.target(obj); d != nil {
-						counts[d]++
-						firstclass[d] = true
-					}
-				}
-			}
-			id, ok := n.(*ast.Ident)
-			if !ok {
-				return true
-			}
-			fn, ok := f.pkg.TypesInfo.Uses[id].(*types.Func)
-			if !ok {
-				return true
-			}
-			if d := a.target(fn); d != nil && !directIds[id] {
-				firstclass[d] = true
-			}
-			return true
-		})
-	}
-	for _, d := range a.declarations {
-		d.candidate = d.file.included && d.fn.Body != nil && d.obj != nil && !d.obj.Exported() && d.fn.Name.Name != "_" && counts[d] == 1 && !firstclass[d]
-		if !d.candidate || d.signature.Recv() == nil {
-			continue
-		}
-		c := unique[d]
-		owner := a.callOwner[c]
-		e := unparen(c.Fun)
-		switch x := e.(type) {
-		case *ast.IndexExpr:
-			e = x.X
-		case *ast.IndexListExpr:
-			e = x.X
-		}
-		selExpr, ok := e.(*ast.SelectorExpr)
-		if !ok {
-			continue
-		}
-		sel := owner.file.pkg.TypesInfo.Selections[selExpr]
-		if sel == nil {
-			continue
-		}
-		rt := stripPointer(sel.Recv())
-		for _, t := range a.interfaces {
-			iface, ok := t.Underlying().(*types.Interface)
-			if !ok {
-				continue
-			}
-			has := false
-			for i := 0; i < iface.NumMethods(); i++ {
-				if iface.Method(i).Name() == d.obj.Name() {
-					has = true
-				}
-			}
-			if has && (types.Implements(rt, iface) || types.Implements(types.NewPointer(rt), iface)) {
-				d.candidate = false
-				break
-			}
-		}
-	}
-}
 func (a *engine) Analyze() (Report, error) {
 	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.suppressions} {
 		if e := stage(); e != nil {
@@ -686,4 +465,68 @@ func Analyze(dir string, patterns []string, c Config) (Report, error) {
 		return Report{}, e
 	}
 	return a.Analyze()
+}
+
+// Physical source owns token and parameter ranges used by metric receipts.
+func (d *declaration) bodyRange() (token.Pos, token.Pos) {
+	if d.fn.Body == nil {
+		return 0, 0
+	}
+	return d.fn.Body.Lbrace, d.fn.Body.Rbrace
+}
+func (f *file) tokenEnd(pos token.Pos) token.Pos {
+	for _, t := range f.tokens {
+		if t.pos == pos {
+			return t.end
+		}
+	}
+	return pos + 1
+}
+func (f *file) lineReceipt(line int, kind string) Source {
+	start := f.tf.LineStart(line)
+	end := f.tf.Pos(f.tf.Size())
+	if line < f.tf.LineCount() {
+		end = f.tf.LineStart(line + 1)
+	}
+	r := f.receipt("metric-contribution", start, end, Detail{Subject: kind, Value: 1, Nesting: nil})
+	r.EndLine = line
+	return r
+}
+func (p parameter) detail(sig *types.Signature) Detail {
+	return Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, sig), Value: max(1, len(p.field.Names)), Nesting: nil}
+}
+func (d *declaration) parameterReceipt(p parameter) Source {
+	return d.file.receipt("parameter", p.field.Pos(), p.field.End(), p.detail(d.signature))
+}
+
+func (a *engine) privateType(obj *types.TypeName, path string) bool {
+	return a.private[obj] && a.fset.PositionFor(obj.Pos(), false).Filename == path
+}
+func (t lexToken) within(start, end token.Pos) bool { return t.pos > start && t.pos < end }
+func (t lexToken) countsAsCode() bool {
+	return t.tok != token.COMMENT && t.tok != token.LBRACE && t.tok != token.RBRACE && t.tok != token.SEMICOLON
+}
+
+func (f *file) typeInfo() *types.Info     { return f.pkg.TypesInfo }
+func (f *file) packagePath() string       { return f.pkg.PkgPath }
+func (d *declaration) hasReceiver() bool  { return d.signature.Recv() != nil }
+func (d *declaration) methodName() string { return d.obj.Name() }
+func (d *declaration) hasBody() bool      { return d.fn.Body != nil }
+func (d *declaration) inspectBody(visit func(ast.Node) bool) {
+	if d.hasBody() {
+		ast.Inspect(d.fn.Body, visit)
+	}
+}
+
+func (a *engine) typePosition(obj *types.TypeName) token.Position {
+	return a.fset.PositionFor(obj.Pos(), false)
+}
+func (a *engine) typeKey(obj *types.TypeName) string {
+	p := a.typePosition(obj)
+	return fmt.Sprintf("%s:%d", p.Filename, p.Offset)
+}
+
+// Physical identity, rather than pointer equality, joins normal/test type objects.
+func (d *declaration) matchesObject(obj *types.Func, pos token.Position) bool {
+	return d.obj != nil && d.obj.Name() == obj.Name() && d.file.path == pos.Filename && d.file.tf.Offset(d.obj.Pos()) == pos.Offset
 }

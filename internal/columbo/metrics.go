@@ -12,18 +12,28 @@ import (
 )
 
 func canonicalType(t types.Type, sig *types.Signature) string {
-	vars := map[*types.TypeParam]*types.TypeParam{}
+	n := newTypeNormalizer(sig)
+	return types.TypeString(n.normalize(t), func(p *types.Package) string { return p.Path() })
+}
+func newTypeNormalizer(sig *types.Signature) *typeNormalizer {
+	n := &typeNormalizer{vars: map[*types.TypeParam]*types.TypeParam{}, handlers: normalizations}
 	if sig != nil {
-		for i := 0; i < sig.RecvTypeParams().Len(); i++ {
-			old := sig.RecvTypeParams().At(i)
-			vars[old] = types.NewTypeParam(types.NewTypeName(token.NoPos, nil, "R"+strconv.Itoa(i), nil), old.Constraint())
-		}
-		for i := 0; i < sig.TypeParams().Len(); i++ {
-			old := sig.TypeParams().At(i)
-			vars[old] = types.NewTypeParam(types.NewTypeName(token.NoPos, nil, "T"+strconv.Itoa(i), nil), old.Constraint())
-		}
+		n.bindParameters(sig.RecvTypeParams(), "R")
+		n.bindParameters(sig.TypeParams(), "T")
 	}
-	return types.TypeString(normalType(t, vars), func(p *types.Package) string { return p.Path() })
+	return n
+}
+func alphaParameter(old *types.TypeParam, name string) *types.TypeParam {
+	return types.NewTypeParam(parameterTypeName(name), old.Constraint())
+}
+func parameterTypeName(name string) *types.TypeName {
+	return types.NewTypeName(token.NoPos, nil, name, nil)
+}
+func (n *typeNormalizer) bindParameters(list *types.TypeParamList, prefix string) {
+	for i := 0; i < list.Len(); i++ {
+		old := list.At(i)
+		n.vars[old] = alphaParameter(old, prefix+strconv.Itoa(i))
+	}
 }
 
 // Rebuild only structural components. Named underlying types remain opaque.
@@ -107,13 +117,13 @@ func (n *typeNormalizer) structure(t types.Type) types.Type {
 	fields := []*types.Var{}
 	tags := []string{}
 	for i := 0; i < s.NumFields(); i++ {
-		fields = append(fields, n.field(s.Field(i)))
+		fields = append(fields, normalizedField(s.Field(i), n.normalize))
 		tags = append(tags, s.Tag(i))
 	}
 	return types.NewStruct(fields, tags)
 }
-func (n *typeNormalizer) field(f *types.Var) *types.Var {
-	return types.NewField(f.Pos(), f.Pkg(), f.Name(), n.normalize(f.Type()), f.Embedded())
+func normalizedField(f *types.Var, normalize func(types.Type) types.Type) *types.Var {
+	return types.NewField(f.Pos(), f.Pkg(), f.Name(), normalize(f.Type()), f.Embedded())
 }
 func (n *typeNormalizer) signature(t types.Type) types.Type {
 	s := t.(*types.Signature)
@@ -163,225 +173,294 @@ func (n *typeNormalizer) term(t *types.Term) *types.Term {
 	return types.NewTerm(t.Tilde(), n.normalize(t.Type()))
 }
 
-func (a *engine) collectDependencies(d *declaration, t types.Type, set map[string]bool) {
+// dependencyCollector owns recursive type policy; dependencyScan owns source sites.
+type dependencyCollector struct {
+	engine      *engine
+	declaration *declaration
+	identities  map[string]bool
+	packages    map[string]bool
+	signature   *types.Signature
+}
+
+func (c *dependencyCollector) walk(t types.Type) {
 	if t == nil {
 		return
 	}
 	t = types.Unalias(t)
 	switch t := t.(type) {
 	case *types.Named:
-		obj := t.Obj()
-		excluded := a.private[obj] && a.fset.PositionFor(obj.Pos(), false).Filename == d.file.path
-		if d.signature.Recv() != nil {
-			if recv, ok := stripPointer(d.signature.Recv().Type()).(*types.Named); ok && recv.Origin() == t.Origin() {
-				excluded = true
-			}
-		}
-		if !excluded {
-			set["type:"+canonicalType(t, d.signature)] = true
-			if obj.Pkg() != nil && d.depTypePackages != nil {
-				d.depTypePackages[obj.Pkg().Path()] = true
-			}
-		}
-		for i := 0; i < t.TypeArgs().Len(); i++ {
-			a.collectDependencies(d, t.TypeArgs().At(i), set)
-		}
+		c.named(t)
 	case *types.Interface:
-		set["interface:"+canonicalType(t, d.signature)] = true
-	case *types.Pointer:
-		a.collectDependencies(d, t.Elem(), set)
-	case *types.Array:
-		a.collectDependencies(d, t.Elem(), set)
-	case *types.Slice:
-		a.collectDependencies(d, t.Elem(), set)
-	case *types.Map:
-		a.collectDependencies(d, t.Key(), set)
-		a.collectDependencies(d, t.Elem(), set)
-	case *types.Chan:
-		a.collectDependencies(d, t.Elem(), set)
-	case *types.Struct:
-		for i := 0; i < t.NumFields(); i++ {
-			a.collectDependencies(d, t.Field(i).Type(), set)
-		}
-	case *types.Signature:
-		for i := 0; i < t.Params().Len(); i++ {
-			a.collectDependencies(d, t.Params().At(i).Type(), set)
-		}
-		for i := 0; i < t.Results().Len(); i++ {
-			a.collectDependencies(d, t.Results().At(i).Type(), set)
-		}
+		c.identities["interface:"+canonicalType(t, c.signature)] = true
+	default:
+		c.components(t)
 	}
 }
-func (d *declaration) measure(a *engine) {
-	d.depReceipts = []Source{}
+func (c *dependencyCollector) components(t types.Type) {
+	for _, part := range typeComponents(t) {
+		c.walk(part)
+	}
+}
+func (c *dependencyCollector) named(t *types.Named) {
+	c.recordNamed(t)
+	for i := 0; i < t.TypeArgs().Len(); i++ {
+		c.walk(t.TypeArgs().At(i))
+	}
+}
+func (c *dependencyCollector) recordNamed(t *types.Named) {
+	if c.excluded(t) {
+		return
+	}
+	c.identities["type:"+canonicalType(t, c.signature)] = true
+	if p := t.Obj().Pkg(); p != nil {
+		c.packages[p.Path()] = true
+	}
+}
+func (c *dependencyCollector) excluded(t *types.Named) bool {
+	return c.engine.privateType(t.Obj(), c.declaration.file.path) || c.declaration.receiverType(t)
+}
+func (d *declaration) receiverType(t *types.Named) bool {
+	if d.signature.Recv() == nil {
+		return false
+	}
+	recv, ok := stripPointer(d.signature.Recv().Type()).(*types.Named)
+	return ok && recv.Origin() == t.Origin()
+}
+
+type dependencyScan struct {
+	declaration *declaration
+	collector   *dependencyCollector
+	info        *types.Info
+	packagePath string
+	sites       map[string]Source
+}
+
+func (d *declaration) dependencyScan(a *engine) *dependencyScan {
 	d.deps = map[string]bool{}
 	d.depTypePackages = map[string]bool{}
-	info := d.file.pkg.TypesInfo
-	sites := map[string]Source{}
-	add := func(node ast.Node, t types.Type) {
-		if node == nil {
-			return
-		}
-		set := map[string]bool{}
-		a.collectDependencies(d, t, set)
-		for id := range set {
-			d.deps[id] = true
-			r := d.file.receipt("dependency", node.Pos(), node.End(), Detail{Subject: id, Value: nil, Nesting: nil})
-			sites[canonical(r)] = r
-		}
+	c := &dependencyCollector{engine: a, declaration: d, packages: d.depTypePackages, signature: d.signature}
+	return &dependencyScan{declaration: d, collector: c, info: d.file.typeInfo(), packagePath: d.file.packagePath(), sites: map[string]Source{}}
+}
+func (s *dependencyScan) add(n ast.Node, t types.Type) {
+	if n == nil {
+		return
 	}
-	ast.Inspect(d.fn, func(n ast.Node) bool {
-		if n == nil {
-			return true
+	s.collector.identities = map[string]bool{}
+	s.collector.walk(t)
+	for id := range s.collector.identities {
+		s.record(n, id)
+	}
+}
+func (s *dependencyScan) record(n ast.Node, id string) {
+	s.declaration.deps[id] = true
+	r := s.declaration.dependencyReceipt(n, id)
+	s.sites[canonical(r)] = r
+}
+func (d *declaration) dependencyReceipt(n ast.Node, id string) Source {
+	return d.file.receipt("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
+}
+func (s *dependencyScan) visit(n ast.Node) bool {
+	s.explicitType(n)
+	switch n := n.(type) {
+	case *ast.Ident:
+		s.identifier(n)
+	case *ast.CallExpr:
+		s.call(n)
+	case ast.Expr:
+		s.expression(n)
+	}
+	return true
+}
+func (s *dependencyScan) explicitType(n ast.Node) {
+	e, ok := n.(ast.Expr)
+	if !ok {
+		return
+	}
+	if tv, yes := s.info.Types[e]; yes && tv.IsType() {
+		s.add(e, tv.Type)
+	}
+}
+func (s *dependencyScan) identifier(n *ast.Ident) {
+	obj := s.info.Uses[n]
+	if obj != nil && obj.Pkg() != nil && obj.Pkg().Path() != s.packagePath {
+		s.record(n, "package:"+obj.Pkg().Path())
+	}
+}
+func (s *dependencyScan) call(n *ast.CallExpr) {
+	s.add(n, s.info.TypeOf(n.Fun))
+	s.add(n, s.info.TypeOf(n))
+	for _, arg := range n.Args {
+		s.add(arg, s.info.TypeOf(arg))
+	}
+}
+func (s *dependencyScan) expression(e ast.Expr) {
+	switch n := e.(type) {
+	case *ast.CompositeLit:
+		s.expressionType(n)
+	case *ast.TypeAssertExpr:
+		s.expressionType(n)
+	case *ast.SelectorExpr:
+		s.selection(n)
+	}
+}
+func (s *dependencyScan) expressionType(e ast.Expr) { s.add(e, s.info.TypeOf(e)) }
+func (s *dependencyScan) selection(n *ast.SelectorExpr) {
+	if sel := s.info.Selections[n]; sel != nil {
+		s.add(n, sel.Recv())
+		s.add(n, sel.Type())
+	}
+}
+func (s *dependencyScan) finish() {
+	s.declaration.scoreDependencies()
+	s.declaration.depReceipts = []Source{}
+	for _, r := range s.sites {
+		if !s.declaration.deps[r.Detail.Subject] {
+			r.Kind = "dependency-inventory"
 		}
-		if e, ok := n.(ast.Expr); ok {
-			if tv, yes := info.Types[e]; yes && tv.IsType() {
-				add(e, tv.Type)
-			}
-		}
-		switch n := n.(type) {
-		case *ast.Ident:
-			obj := info.Uses[n]
-			if obj != nil && obj.Pkg() != nil && obj.Pkg().Path() != d.file.pkg.PkgPath {
-				id := "package:" + obj.Pkg().Path()
-				d.deps[id] = true
-				r := d.file.receipt("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
-				sites[canonical(r)] = r
-			}
-		case *ast.CallExpr:
-			add(n, info.TypeOf(n.Fun))
-			add(n, info.TypeOf(n))
-			for _, arg := range n.Args {
-				add(arg, info.TypeOf(arg))
-			}
-		case *ast.CompositeLit:
-			add(n, info.TypeOf(n))
-		case *ast.TypeAssertExpr:
-			add(n, info.TypeOf(n))
-		case *ast.SelectorExpr:
-			if sel := info.Selections[n]; sel != nil {
-				add(n, sel.Recv())
-				add(n, sel.Type())
-			}
-		}
-		return true
-	})
-	// Keep all source evidence while scoring each type's package only once.
+		s.declaration.depReceipts = append(s.declaration.depReceipts, r)
+	}
+}
+func (d *declaration) scoreDependencies() {
 	delete(d.deps, "type:error")
 	delete(d.deps, "interface:interface{}")
 	for path := range d.depTypePackages {
 		delete(d.deps, "package:"+path)
 	}
-	for _, r := range sites {
-		if !d.deps[r.Detail.Subject] {
-			r.Kind = "dependency-inventory"
-		}
-		d.depReceipts = append(d.depReceipts, r)
-	}
+}
+func (d *declaration) measure(a *engine) {
+	scan := d.dependencyScan(a)
+	ast.Inspect(d.fn, scan.visit)
+	scan.finish()
 	if d.fn.Body != nil {
-		d.lineReceipts = d.linesEvidence("function-lines", nil, nil)
-		d.lines = len(d.lineReceipts)
-		v := &complexityVisitor{name: d.fn.Name, diagnosticsEnabled: true}
-		ast.Walk(v, d.fn)
-		d.complexity = v.complexity
-		for _, ev := range v.diagnostics {
-			d.complexityReceipts = append(d.complexityReceipts, d.event(ev, "cognitive-complexity"))
-		}
+		d.measureBody()
+	}
+}
+func (d *declaration) measureBody() {
+	d.lineReceipts = d.linesEvidence("function-lines", nil, nil)
+	d.lines = len(d.lineReceipts)
+	d.measureComplexity()
+}
+func (d *declaration) measureComplexity() {
+	v := scanComplexity(d.fn)
+	d.complexity = v.complexity
+	d.complexityReceipts = []Source{}
+	for _, ev := range v.diagnostics {
+		d.complexityReceipts = append(d.complexityReceipts, d.event(ev, "cognitive-complexity"))
 	}
 }
 func (d *declaration) event(ev diagnostic, kind string) Source {
-	end := ev.Pos + 1
-	for _, t := range d.file.tokens {
-		if t.pos == ev.Pos {
-			end = t.end
-			break
-		}
-	}
-	return d.file.receipt("metric-contribution", ev.Pos, end, Detail{Subject: kind, Value: ev.Inc, Nesting: ev.Nesting})
+	pos := ev.position()
+	return d.file.receipt("metric-contribution", pos, d.file.tokenEnd(pos), ev.detail(kind))
 }
+
+type lineEvidence struct {
+	file       *file
+	start, end token.Pos
+	removed    map[token.Pos]bool
+	lines      map[int]bool
+	kind       string
+	trace      *expansion
+}
+
 func (d *declaration) linesEvidence(kind string, removed map[token.Pos]bool, trace *expansion) []Source {
-	if d.fn.Body == nil {
+	start, end := d.bodyRange()
+	if start == 0 {
 		return []Source{}
 	}
-	lines := map[int]bool{}
-	for _, t := range d.file.tokens {
-		if t.pos <= d.fn.Body.Lbrace || t.pos >= d.fn.Body.Rbrace || t.tok == token.COMMENT || t.tok == token.LBRACE || t.tok == token.RBRACE || t.tok == token.SEMICOLON || removed[t.pos] {
+	evidence := &lineEvidence{file: d.file, start: start, end: end, removed: removed, lines: map[int]bool{}, kind: kind, trace: trace}
+	evidence.scan()
+	return evidence.receipts()
+}
+func (e *lineEvidence) includes(t lexToken) bool {
+	return t.within(e.start, e.end) && t.countsAsCode() && !e.removed[t.pos]
+}
+func (e *lineEvidence) scan() {
+	for _, t := range e.file.tokens {
+		if !e.includes(t) {
 			continue
 		}
-		for line := d.file.tf.Line(t.pos); line <= d.file.tf.Line(t.end-1); line++ {
-			lines[line] = true
+		for line := e.file.tf.Line(t.pos); line <= e.file.tf.Line(t.end-1); line++ {
+			e.lines[line] = true
 		}
 	}
+}
+func (e *lineEvidence) receipts() []Source {
 	keys := []int{}
-	for l := range lines {
-		keys = append(keys, l)
+	for line := range e.lines {
+		keys = append(keys, line)
 	}
 	sort.Ints(keys)
-	ss := []Source{}
-	for _, l := range keys {
-		start := d.file.tf.LineStart(l)
-		end := d.file.tf.Pos(d.file.tf.Size())
-		if l < d.file.tf.LineCount() {
-			end = d.file.tf.LineStart(l + 1)
-		}
-		r := d.file.receipt("metric-contribution", start, end, Detail{Subject: kind, Value: 1, Nesting: nil})
-		r.EndLine = l
-		if trace != nil {
-			r.Detail.Expansion = append([]string{}, trace.names...)
-			r.Detail.ExpansionSites = append([]Site{}, trace.sites...)
-		}
-		ss = append(ss, r)
+	out := []Source{}
+	for _, line := range keys {
+		out = append(out, e.file.lineReceipt(line, e.kind).withExpansion(e.trace))
 	}
-	return ss
+	return out
 }
-func (a *engine) ordinary(d *declaration) error {
-	checks := []struct {
-		smell, kind string
-		value       int
-		receipts    []Source
-	}{{"long-parameter-list", "parameters", len(d.params), nil}}
-	if d.fn.Body != nil {
-		checks = append(checks, struct {
-			smell, kind string
-			value       int
-			receipts    []Source
-		}{"long-function", "function-lines", d.lines, d.lineReceipts}, struct {
-			smell, kind string
-			value       int
-			receipts    []Source
-		}{"high-cognitive-complexity", "cognitive-complexity", d.complexity, d.complexityReceipts}, struct {
-			smell, kind string
-			value       int
-			receipts    []Source
-		}{"excessive-dependencies", "dependencies", len(d.deps), d.depReceipts})
+
+type metricCheck struct {
+	smell, kind string
+	value       int
+	receipts    []Source
+}
+
+func (d *declaration) ordinaryChecks() []metricCheck {
+	checks := []metricCheck{{"long-parameter-list", "parameters", len(d.params), nil}}
+	if d.fn.Body == nil {
+		return checks
 	}
-	for _, x := range checks {
-		if int64(x.value) <= a.config.Counts[x.kind] {
-			continue
-		}
-		c, e := a.newCase(d, x.smell, "")
-		if e != nil {
-			return e
-		}
-		if c == nil {
-			continue
-		}
-		c.Clues = append(c.Clues, metric(x.kind, d.symbol, x.value).compare(a.config.Counts[x.kind], ">"))
-		appendSources(c, x.receipts)
-		if x.smell == "excessive-dependencies" {
-			c.value("dependency-set", sortedSet(d.deps))
-		}
-		if x.smell == "long-parameter-list" {
-			for _, p := range d.params {
-				c.Receipts = append(c.Receipts, d.parameterReceipt(p))
-			}
-		}
-		a.report.Cases = append(a.report.Cases, *c)
+	return append(checks,
+		metricCheck{"long-function", "function-lines", d.lines, d.lineReceipts},
+		metricCheck{"high-cognitive-complexity", "cognitive-complexity", d.complexity, d.complexityReceipts},
+		metricCheck{"excessive-dependencies", "dependencies", len(d.deps), d.depReceipts})
+}
+
+type ordinaryInvestigation struct {
+	engine      *engine
+	declaration *declaration
+}
+
+func (a *engine) ordinary(d *declaration) error {
+	investigation := &ordinaryInvestigation{a, d}
+	if e := investigation.run(); e != nil {
+		return e
 	}
 	return a.envy(d)
 }
-func (d *declaration) parameterReceipt(p parameter) Source {
-	return d.file.receipt("parameter", p.field.Pos(), p.field.End(), Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, d.signature), Value: max(1, len(p.field.Names)), Nesting: nil})
+func (i *ordinaryInvestigation) run() error {
+	for _, check := range i.declaration.ordinaryChecks() {
+		if e := i.check(check); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+func (i *ordinaryInvestigation) check(check metricCheck) error {
+	limit := i.engine.config.Counts[check.kind]
+	if int64(check.value) <= limit {
+		return nil
+	}
+	c, e := i.engine.newCase(i.declaration, check.smell, "")
+	if e != nil || c == nil {
+		return e
+	}
+	check.explain(c, limit)
+	i.declaration.ordinaryEvidence(c, check.smell)
+	i.engine.report.Cases = append(i.engine.report.Cases, *c)
+	return nil
+}
+func (check metricCheck) explain(c *Case, limit int64) {
+	c.threshold(check.kind, check.value, limit, ">")
+	appendSources(c, check.receipts)
+}
+func (d *declaration) ordinaryEvidence(c *Case, smell string) {
+	switch smell {
+	case "excessive-dependencies":
+		c.value("dependency-set", sortedSet(d.deps))
+	case "long-parameter-list":
+		for _, p := range d.params {
+			c.Receipts = append(c.Receipts, d.parameterReceipt(p))
+		}
+	}
 }
 func sortedSet(m map[string]bool) []string {
 	out := []string{}
@@ -399,17 +478,19 @@ func fraction(n, d int) *big.Rat {
 }
 func meets(r *big.Rat, f float64) bool { return r.Cmp(new(big.Rat).SetFloat64(f)) >= 0 }
 func rounded(r *big.Rat) float64 {
-	scaled := new(big.Rat).Mul(r, big.NewRat(1000000, 1))
-	q, rem := new(big.Int), new(big.Int)
-	q.QuoRem(scaled.Num(), scaled.Denom(), rem)
-	twice := new(big.Int).Lsh(rem, 1)
-	cmp := twice.Cmp(scaled.Denom())
-	if cmp > 0 || cmp == 0 && q.Bit(0) == 1 {
-		q.Add(q, big.NewInt(1))
-	}
+	q := roundedQuotient(new(big.Rat).Mul(r, big.NewRat(1000000, 1)))
 	f, _ := new(big.Rat).SetFrac(q, big.NewInt(1000000)).Float64()
 	if math.IsInf(f, 0) {
 		return 0
 	}
 	return f
+}
+func roundedQuotient(r *big.Rat) *big.Int {
+	q, rem := new(big.Int), new(big.Int)
+	q.QuoRem(r.Num(), r.Denom(), rem)
+	cmp := new(big.Int).Lsh(rem, 1).Cmp(r.Denom())
+	if cmp > 0 || cmp == 0 && q.Bit(0) == 1 {
+		q.Add(q, big.NewInt(1))
+	}
+	return q
 }

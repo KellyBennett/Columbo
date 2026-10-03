@@ -374,3 +374,11 @@ func (c *Case) value(kind string, value any) {
 func (c *Case) threshold(kind string, value any, limit any, op string) {
 	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).compare(limit, op))
 }
+
+func (s Source) withExpansion(trace *expansion) Source {
+	if trace != nil {
+		s.Detail.Expansion = append([]string{}, trace.names...)
+		s.Detail.ExpansionSites = append([]Site{}, trace.sites...)
+	}
+	return s
+}

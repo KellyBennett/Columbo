@@ -317,3 +317,14 @@ func mergeBinaryOps(x []token.Token, op token.Token, y []token.Token) []token.To
 func isBinaryLogicalOp(op token.Token) bool {
 	return op == token.LAND || op == token.LOR
 }
+
+func (d diagnostic) position() token.Pos { return d.Pos }
+func (d diagnostic) detail(kind string) Detail {
+	return Detail{Subject: kind, Value: d.Inc, Nesting: d.Nesting}
+}
+
+func scanComplexity(fn *ast.FuncDecl) *complexityVisitor {
+	v := &complexityVisitor{name: fn.Name, diagnosticsEnabled: true}
+	ast.Walk(v, fn)
+	return v
+}

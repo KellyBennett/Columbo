@@ -45,8 +45,10 @@ func F(s Service){_=s.Run()}`, []string{"type:fixture.Service"}, false},
 			d.measure(a)
 			h.require(reflect.DeepEqual(sortedSet(d.deps), scenario.want), d.deps)
 			before := sortedSet(d.deps)
+			complexityEvidence := d.complexityReceipts
 			d.measure(a)
 			h.require(reflect.DeepEqual(sortedSet(d.deps), before), "measurement is not repeatable")
+			h.require(reflect.DeepEqual(d.complexityReceipts, complexityEvidence), "repeat measurement duplicated complexity receipts")
 			for _, r := range d.depReceipts {
 				h.require((r.Kind == "dependency") == d.deps[r.Detail.Subject], r)
 			}
