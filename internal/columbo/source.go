@@ -40,6 +40,7 @@ type declaration struct {
 	params                           []parameter
 	inputs                           map[*types.Var]string
 	deps                             map[string]bool
+	depTypePackages                  map[string]bool
 	depReceipts                      []Source
 	lines, complexity                int
 	lineReceipts, complexityReceipts []Source
@@ -110,7 +111,6 @@ func (a *engine) packageConfig() *packages.Config {
 
 const packageLoadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps | packages.NeedExportFile | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedModule
 
-// columbo:ignore excessive-dependencies -- required Go parser API types in a single-call adapter; revisit during dogfooding audit
 func parsePhysicalFile(fs *token.FileSet, p string, b []byte) (*ast.File, error) {
 	return parser.ParseFile(fs, p, b, parser.ParseComments)
 }

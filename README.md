@@ -52,3 +52,6 @@ CE-001 is a provisional dogfooding policy. Ordinary builds and tests support it;
 
 Cgo inputs are rejected with exit 2 when the loader cannot establish original physical-source/type correspondence; generated compiler wrappers never substitute for source receipts.
 
+
+
+Dependency scoring counts named types and packages not already represented by a counted type. Universal `error` and empty-interface (`any`) plumbing remains in source receipts without consuming the collaborator budget. Cosmetic Extraction uses the same scored sets.

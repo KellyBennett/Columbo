@@ -35,7 +35,7 @@ func (t *testHarness) TestNamedInterfaceDependencies() {
 	t.require(e == nil, e)
 	d := a.declarations[0]
 	d.measure(a)
-	for _, s := range []string{"type:fixture.Named[int]", "type:fixture.Named[string]", "interface:interface{}", "interface:interface{M(int)}"} {
+	for _, s := range []string{"type:fixture.Named[int]", "type:fixture.Named[string]", "interface:interface{M(int)}"} {
 		t.check(d.deps[s], "missing", s, d.deps)
 	}
 	for s := range d.deps {

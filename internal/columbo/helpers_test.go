@@ -224,7 +224,7 @@ func (t *testHarness) TestDependencyIdentitiesAndExemptions() {
 	t.require(e == nil, e)
 	d := a.declarations[0]
 	d.measure(a)
-	for _, want := range []string{"type:fixture.Interface", "package:bytes", "type:bytes.Buffer", "type:fixture.Private", "type:fixture.Shared"} {
+	for _, want := range []string{"type:fixture.Interface", "type:bytes.Buffer", "type:fixture.Private", "type:fixture.Shared"} {
 		t.checkf(d.deps[want], "missing %s in %v", want, d.deps)
 	}
 	t.write(dir, "source.go", strings.ReplaceAll(string(t.read(filepath.Join(dir, "source.go"))), "Private", "private"))

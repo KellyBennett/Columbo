@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -34,7 +35,8 @@ func Complex(a, b bool) {
 		}
 	}
 }
-func Dependencies(b bytes.Buffer, r strings.Reader, t time.Time, u url.URL, d json.Decoder) {}
+func Dependencies(b bytes.Buffer, r strings.Reader, t time.Time, u url.URL, d json.Decoder, re regexp.Regexp) {
+}
 
 type Own struct{ N int }
 type Foreign struct{ N int }

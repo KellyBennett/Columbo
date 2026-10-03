@@ -179,6 +179,9 @@ func (a *engine) collectDependencies(d *declaration, t types.Type, set map[strin
 		}
 		if !excluded {
 			set["type:"+canonicalType(t, d.signature)] = true
+			if obj.Pkg() != nil && d.depTypePackages != nil {
+				d.depTypePackages[obj.Pkg().Path()] = true
+			}
 		}
 		for i := 0; i < t.TypeArgs().Len(); i++ {
 			a.collectDependencies(d, t.TypeArgs().At(i), set)
@@ -211,6 +214,8 @@ func (a *engine) collectDependencies(d *declaration, t types.Type, set map[strin
 }
 func (d *declaration) measure(a *engine) {
 	d.depReceipts = []Source{}
+	d.deps = map[string]bool{}
+	d.depTypePackages = map[string]bool{}
 	info := d.file.pkg.TypesInfo
 	sites := map[string]Source{}
 	add := func(node ast.Node, t types.Type) {
@@ -261,7 +266,16 @@ func (d *declaration) measure(a *engine) {
 		}
 		return true
 	})
+	// Keep all source evidence while scoring each type's package only once.
+	delete(d.deps, "type:error")
+	delete(d.deps, "interface:interface{}")
+	for path := range d.depTypePackages {
+		delete(d.deps, "package:"+path)
+	}
 	for _, r := range sites {
+		if !d.deps[r.Detail.Subject] {
+			r.Kind = "dependency-inventory"
+		}
 		d.depReceipts = append(d.depReceipts, r)
 	}
 	if d.fn.Body != nil {
@@ -354,6 +368,9 @@ func (a *engine) ordinary(d *declaration) error {
 		}
 		c.Clues = append(c.Clues, metric(x.kind, d.symbol, x.value).compare(a.config.Counts[x.kind], ">"))
 		appendSources(c, x.receipts)
+		if x.smell == "excessive-dependencies" {
+			c.value("dependency-set", sortedSet(d.deps))
+		}
 		if x.smell == "long-parameter-list" {
 			for _, p := range d.params {
 				c.Receipts = append(c.Receipts, d.parameterReceipt(p))
