@@ -58,16 +58,19 @@ func (o *commandOptions) parse(args []string) error {
 	if e := fs.Parse(args); e != nil {
 		return e
 	}
+	o.arguments(fs)
+	if o.format != "text" && o.format != "json" {
+		return fmt.Errorf("invalid format %q", o.format)
+	}
+	return nil
+}
+func (o *commandOptions) arguments(fs *flag.FlagSet) {
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "config" {
 			o.explicit = true
 		}
 	})
 	o.patterns = fs.Args()
-	if o.format != "text" && o.format != "json" {
-		return fmt.Errorf("invalid format %q", o.format)
-	}
-	return nil
 }
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
