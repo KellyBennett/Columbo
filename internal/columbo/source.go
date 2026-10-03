@@ -162,11 +162,9 @@ func (a *engine) loadSources(pkgs []*packages.Package) error {
 	return nil
 }
 func (l *sourceLoader) packageSources(p *packages.Package) error {
-	if p.Name == "main" && strings.HasSuffix(p.PkgPath, ".test") {
-		return nil
-	}
-	if p.Module == nil || filepath.Clean(p.Module.Dir) != l.engine.root {
-		return fmt.Errorf("selected package %s is outside invocation module", p.PkgPath)
+	selected, err := selectedPackage(p, l.engine.root)
+	if err != nil || !selected {
+		return err
 	}
 	original := originalSources(p)
 	for _, f := range p.Syntax {
@@ -175,6 +173,15 @@ func (l *sourceLoader) packageSources(p *packages.Package) error {
 		}
 	}
 	return l.verifyOriginals(original)
+}
+func selectedPackage(p *packages.Package, root string) (bool, error) {
+	if p.Name == "main" && strings.HasSuffix(p.PkgPath, ".test") {
+		return false, nil
+	}
+	if p.Module == nil || filepath.Clean(p.Module.Dir) != root {
+		return false, fmt.Errorf("selected package %s is outside invocation module", p.PkgPath)
+	}
+	return true, nil
 }
 func originalSources(p *packages.Package) map[string]bool {
 	original := map[string]bool{}
@@ -254,31 +261,60 @@ func declarationName(name string, ordinals map[string]int) string {
 	ordinals[name]++
 	return name + "#" + strconv.Itoa(ordinals[name])
 }
-func (a *engine) addDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) error {
+func newDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) (*declaration, error) {
 	d := &declaration{fn: fn, file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
-	if e := d.resolveSignature(); e != nil {
-		return e
+	if err := d.resolveSignature(); err != nil {
+		return nil, err
 	}
-	d.symbol = d.symbolName(declarationName(fn.Name.Name, ordinals))
+	d.assignSymbol(ordinals)
 	d.initializeInputs()
+	return d, nil
+}
+func (d *declaration) assignSymbol(ordinals map[string]int) {
+	d.symbol = d.symbolName(declarationName(d.functionName().Name, ordinals))
+}
+func (a *engine) addDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) error {
+	d, err := newDeclaration(f, fn, ordinals)
+	if err != nil {
+		return err
+	}
 	a.declarations = append(a.declarations, d)
 	if d.obj != nil {
 		a.objects[d.obj.Origin()] = d
 	}
 	return nil
 }
+func (f *file) functionObject(name *ast.Ident) *types.Func {
+	obj, _ := f.typeInfo().Defs[name].(*types.Func)
+	return obj
+}
+func signatureOf(obj *types.Func) *types.Signature {
+	if obj == nil {
+		return nil
+	}
+	signature, _ := obj.Type().(*types.Signature)
+	return signature
+}
+func (f *file) expressionSignature(expr ast.Expr) *types.Signature {
+	signature, _ := f.typeInfo().TypeOf(expr).(*types.Signature)
+	return signature
+}
+func (d *declaration) syntaxSignature() *types.Signature {
+	return d.file.expressionSignature(d.fn.Type)
+}
 func (d *declaration) resolveSignature() error {
-	d.obj, _ = d.file.pkg.TypesInfo.Defs[d.fn.Name].(*types.Func)
-	if d.obj != nil {
-		d.signature, _ = d.obj.Type().(*types.Signature)
+	d.obj = d.file.functionObject(d.functionName())
+	d.signature = signatureOf(d.obj)
+	if d.signature == nil {
+		d.signature = d.syntaxSignature()
 	}
 	if d.signature == nil {
-		d.signature, _ = d.file.pkg.TypesInfo.TypeOf(d.fn.Type).(*types.Signature)
-	}
-	if d.signature == nil {
-		return fmt.Errorf("missing physical signature for %s:%d", d.file.rel, d.file.tf.Offset(d.fn.Pos()))
+		return d.signatureError()
 	}
 	return nil
+}
+func (d *declaration) signatureError() error {
+	return fmt.Errorf("missing physical signature for %s:%d", d.file.rel, d.declReceipt().StartOffset)
 }
 func (d *declaration) symbolName(name string) string {
 	prefix := d.file.pkg.PkgPath
@@ -303,8 +339,10 @@ func receiverName(t types.Type) string {
 	}
 	return ""
 }
+func (d *declaration) parameterFields() []*ast.Field          { return d.fn.Type.Params.List }
+func (d *declaration) parameterVariable(index int) *types.Var { return d.signature.Params().At(index) }
 func (d *declaration) initializeInputs() {
-	for _, f := range d.fn.Type.Params.List {
+	for _, f := range d.parameterFields() {
 		d.fieldParameters(f)
 	}
 	d.addInput(d.signature.Recv())
@@ -312,7 +350,7 @@ func (d *declaration) initializeInputs() {
 func (d *declaration) fieldParameters(f *ast.Field) {
 	for k := 0; k < max(1, len(f.Names)); k++ {
 		idx := len(d.params)
-		v := d.signature.Params().At(idx)
+		v := d.parameterVariable(idx)
 		d.params = append(d.params, parameter{v.Type(), f, idx, v})
 		d.addInput(v)
 	}
@@ -325,38 +363,50 @@ func (d *declaration) addInput(v *types.Var) {
 
 var generatedRE = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
 
+type sourceTokens struct{ scanner scanner.Scanner }
+
+func newSourceTokens(f *token.File, data []byte) *sourceTokens {
+	stream := &sourceTokens{}
+	stream.scanner.Init(f, data, nil, scanner.ScanComments)
+	return stream
+}
 func generated(b []byte) bool {
-	fs := token.NewFileSet()
-	f := fs.AddFile("", -1, len(b))
-	var s scanner.Scanner
-	s.Init(f, b, nil, scanner.ScanComments)
+	f := token.NewFileSet().AddFile("", -1, len(b))
+	return newSourceTokens(f, b).generated()
+}
+func (s *sourceTokens) generated() bool {
 	for {
-		_, t, l := s.Scan()
-		if t == token.COMMENT {
-			if generatedRE.MatchString(l) {
-				return true
-			}
-			continue
+		_, tok, literal := s.scanner.Scan()
+		if tok != token.COMMENT {
+			return false
 		}
-		return false
+		if generatedRE.MatchString(literal) {
+			return true
+		}
 	}
 }
+func (s *sourceTokens) next() (lexToken, bool) {
+	pos, tok, literal := s.scanner.Scan()
+	return lexeme(pos, tok, literal), tok != token.EOF
+}
+func lexeme(pos token.Pos, tok token.Token, literal string) lexToken {
+	width := len(literal)
+	if width == 0 {
+		width = len(tok.String())
+	}
+	if tok == token.SEMICOLON && literal == "\n" {
+		width = 0
+	}
+	return lexToken{pos, pos + token.Pos(width), tok}
+}
 func (f *file) scan() {
-	var s scanner.Scanner
-	s.Init(f.tf, f.data, nil, scanner.ScanComments)
+	stream := newSourceTokens(f.tf, f.data)
 	for {
-		p, t, l := s.Scan()
-		if t == token.EOF {
-			break
+		tok, ok := stream.next()
+		if !ok {
+			return
 		}
-		n := len(l)
-		if n == 0 {
-			n = len(t.String())
-		}
-		if t == token.SEMICOLON && l == "\n" {
-			n = 0
-		}
-		f.tokens = append(f.tokens, lexToken{p, p + token.Pos(n), t})
+		f.tokens = append(f.tokens, tok)
 	}
 }
 func (f *file) receipt(kind string, start, end token.Pos, detail Detail) Source {
