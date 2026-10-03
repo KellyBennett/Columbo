@@ -206,13 +206,8 @@ func (t *testHarness) TestFeatureEnvyValuesAndSelectors() {
 	c.Ratios["feature-envy-ratio"] = .5
 	r := t.investigate(dir, c)
 	cc := t.one(r, "feature-envy")
-	counts := []int{}
-	for _, q := range cc.Clues {
-		if q.Kind == "foreign-accesses" {
-			counts = append(counts, q.Value.(int))
-		}
-	}
-	t.require(reflect.DeepEqual(counts, []int{5, 6, 5}), counts)
+	t.require(reflect.DeepEqual(t.foreignAccessCounts(cc), []int{5, 6, 5}), cc)
+
 }
 func TestFeatureEnvyValuesAndSelectors(t *testing.T) {
 	(&testHarness{T: t}).TestFeatureEnvyValuesAndSelectors()
@@ -427,3 +422,48 @@ func Parent(b Box[`
 
 const helpersSource3 = `){b.process(x)}
 `
+
+func (t *testHarness) foreignAccessCounts(c Case) []int {
+	counts := []int{}
+	for _, clue := range c.Clues {
+		if clue.Kind == "foreign-accesses" {
+			counts = append(counts, clue.Value.(int))
+		}
+	}
+	return counts
+}
+
+const stableAccessSource = `package fixture
+type Own struct { N int; Child Foreign }
+type Foreign struct { N int }
+type Numeric int
+func (Foreign) M() {}
+func (Numeric) M() {}
+func get() Foreign { return Foreign{} }
+func (o Own) F(p *Foreign, x Foreign, xs []Foreign, n Numeric) {
+ _ = (*p).N
+ _ = (&x).N
+ _ = (x).N
+ _ = o.Child.N
+ _ = get().N
+ _ = xs[0].N
+ _ = Foreign.M
+ _ = func() { _ = x.N }
+ (-n).M()
+ n.M()
+}
+`
+
+func (t *testHarness) TestFeatureEnvyStableAccessPaths() {
+	dir := t.fixture(stableAccessSource)
+	config := quiet()
+	config.Severity["feature-envy"] = "fail"
+	config.Counts["feature-envy-foreign-accesses"] = 1
+	config.Ratios["feature-envy-ratio"] = .1
+	c := t.one(t.investigate(dir, config), "feature-envy")
+	t.require(reflect.DeepEqual(t.foreignAccessCounts(c), []int{1, 1, 1, 2}), c)
+	t.require(t.clueValue(c, "own-accesses") == 1, c)
+}
+func TestFeatureEnvyStableAccessPaths(t *testing.T) {
+	(&testHarness{T: t}).TestFeatureEnvyStableAccessPaths()
+}
