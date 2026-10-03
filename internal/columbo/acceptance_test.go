@@ -47,6 +47,11 @@ func quiet() Config {
 	}
 	return c
 }
+func longParameterConfig() Config {
+	config := quiet()
+	config.Severity["long-parameter-list"] = "fail"
+	return config
+}
 func (t *testHarness) investigate(dir string, c Config) Report {
 	t.Helper()
 	r, e := Analyze(dir, []string{"./..."}, c)
@@ -231,18 +236,27 @@ func TestPinnedComplexity(t *testing.T) { (&testHarness{T: t}).TestPinnedComplex
 func (t *testHarness) TestSeverityAndExits() {
 	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
 	for _, severity := range []string{"fail", "warn", "off"} {
-		t.write(dir, ".columbo.yml", "history: {enabled: false}\nseverity: {long-parameter-list: "+severity+"}\n")
-		var out, err bytes.Buffer
-		code := Run([]string{"--format=json"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
-		want := 0
-		if severity == "fail" {
-			want = 1
-		}
-		t.requiref(code == want, "%s: exit %d (%s)", severity, code, err.String())
-		var doc Report
-		e := json.Unmarshal(out.Bytes(), &doc)
-		t.require(e == nil, e)
+		t.severityExit(dir, severity)
 	}
+	t.malformedPackageExit(dir)
+}
+func (t *testHarness) severityExit(dir, severity string) {
+	t.write(dir, ".columbo.yml", "history: {enabled: false}\nseverity: {long-parameter-list: "+severity+"}\n")
+	var out, err bytes.Buffer
+	code := Run([]string{"--format=json"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	want := 0
+	if severity == "fail" {
+		want = 1
+	}
+	t.requiref(code == want, "%s: exit %d (%s)", severity, code, err.String())
+	t.validReportJSON(out.Bytes())
+}
+func (t *testHarness) validReportJSON(data []byte) {
+	var report Report
+	err := json.Unmarshal(data, &report)
+	t.require(err == nil, err)
+}
+func (t *testHarness) malformedPackageExit(dir string) {
 	t.write(dir, "bad.go", "package fixture\nvar x = missing\n")
 	var out, err bytes.Buffer
 	t.require(Run(nil, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err}) == 2 && out.Len() == 0, "fatal did not leave stdout empty")
@@ -290,8 +304,7 @@ func TestSuppressionValidation(t *testing.T) { (&testHarness{T: t}).TestSuppress
 
 func (t *testHarness) TestSuppressionAccounting() {
 	dir := t.fixture("package fixture\n// columbo:ignore long-parameter-list -- legacy public API compatibility\n// unrelated comment\nfunc F(a,b,c,d,e int){}\n")
-	c := quiet()
-	c.Severity["long-parameter-list"] = "fail"
+	c := longParameterConfig()
 	r := t.investigate(dir, c)
 	t.require(r.Summary.Suppressed == 1 && r.Summary.Failed == 0 && t.one(r, "long-parameter-list").Suppressed, r)
 	c.Severity["long-parameter-list"] = "off"
@@ -316,8 +329,7 @@ func TestGeneratedMarker(t *testing.T) { (&testHarness{T: t}).TestGeneratedMarke
 
 func (t *testHarness) TestBlankFunctionIdentities() {
 	dir := t.fixture("package fixture\nfunc _(a,b,c,d,e int){}\nfunc _(a,b,c,d,e int){}\n")
-	c := quiet()
-	c.Severity["long-parameter-list"] = "fail"
+	c := longParameterConfig()
 	r := t.investigate(dir, c)
 	t.require(len(r.Cases) == 2 && r.Cases[0].Symbol == "fixture._#1" && r.Cases[1].Symbol == "fixture._#2" && r.Cases[0].ID != r.Cases[1].ID, r)
 }
@@ -348,8 +360,7 @@ func (t *testHarness) TestModuleAndTests() {
 	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
 	t.write(dir, "source_test.go", "package fixture\nimport \"testing\"\nfunc TestF(t *testing.T){}\n")
 	t.write(dir, "external_test.go", "package fixture_test\nfunc External(a,b,c,d,e int){}\n")
-	c := quiet()
-	c.Severity["long-parameter-list"] = "fail"
+	c := longParameterConfig()
 	r := t.investigate(dir, c)
 	t.require(len(r.Cases) == 2, r)
 	_, e := Analyze(dir, []string{"./missing/..."}, c)
@@ -361,8 +372,7 @@ func TestModuleAndTests(t *testing.T) { (&testHarness{T: t}).TestModuleAndTests(
 
 func (t *testHarness) TestHistoryFailure() {
 	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
-	c := quiet()
-	c.Severity["long-parameter-list"] = "fail"
+	c := longParameterConfig()
 	c.History = true
 	r := t.investigate(dir, c)
 	t.require(len(r.Warnings) == 1 && r.Warnings[0].Message == historyWarning, r)

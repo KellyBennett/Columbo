@@ -138,22 +138,29 @@ func (m *clumpMiner) reportPattern(s typeMultiset) error {
 	if int64(len(support)) < m.engine.config.Counts["data-clump-occurrences"] {
 		return nil
 	}
-	ts := s.types()
-	c, e := m.engine.newCase(support[0], "data-clump", canonical(ts))
-	if e != nil || c == nil {
-		return e
-	}
-	m.clues(c, ts, len(support))
-	for _, d := range support {
-		d.clumpReceipts(c, s)
+	c, err := m.patternCase(s, support)
+	if err != nil || c == nil {
+		return err
 	}
 	m.engine.report.Cases = append(m.engine.report.Cases, *c)
 	return nil
 }
-func (m *clumpMiner) clues(c *Case, ts []string, count int) {
-	c.Clues = append(c.Clues, metric("clump-types", c.Symbol, ts))
-	c.Clues = append(c.Clues, metric("clump-size", c.Symbol, len(ts)).compare(m.engine.config.Counts["data-clump-size"], ">="))
-	c.Clues = append(c.Clues, metric("clump-occurrences", c.Symbol, count).compare(m.engine.config.Counts["data-clump-occurrences"], ">="))
+func (m *clumpMiner) patternCase(pattern typeMultiset, support []*declaration) (*Case, error) {
+	types := pattern.types()
+	c, err := m.engine.newCase(support[0], "data-clump", canonical(types))
+	if err != nil || c == nil {
+		return c, err
+	}
+	c.clumpClues(types, len(support), m.engine.config)
+	for _, d := range support {
+		d.clumpReceipts(c, pattern)
+	}
+	return c, nil
+}
+func (c *Case) clumpClues(types []string, count int, config Config) {
+	c.Clues = append(c.Clues, metric("clump-types", c.Symbol, types))
+	c.Clues = append(c.Clues, metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">="))
+	c.Clues = append(c.Clues, metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">="))
 }
 func (d *declaration) clumpReceipts(c *Case, s typeMultiset) {
 	c.Receipts = append(c.Receipts, d.declReceipt())

@@ -96,11 +96,7 @@ func (h *gitHistory) sortAndLimit() {
 	}
 }
 func (h *gitHistory) commitPaths(c *historyCommit) error {
-	parents, e := h.run("rev-list", "--parents", "-n", "1", c.hash)
-	if e != nil {
-		return e
-	}
-	args, e := historyDiffArgs(c.hash, parents)
+	args, e := h.diffArgs(c.hash)
 	if e != nil {
 		return e
 	}
@@ -110,6 +106,13 @@ func (h *gitHistory) commitPaths(c *historyCommit) error {
 	}
 	c.paths = historyPaths(raw)
 	return nil
+}
+func (h *gitHistory) diffArgs(hash string) ([]string, error) {
+	parents, err := h.run("rev-list", "--parents", "-n", "1", hash)
+	if err != nil {
+		return nil, err
+	}
+	return historyDiffArgs(hash, parents)
 }
 func historyDiffArgs(hash, parents string) ([]string, error) {
 	fields := strings.Fields(parents)
