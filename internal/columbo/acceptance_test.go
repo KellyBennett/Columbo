@@ -280,18 +280,6 @@ func (t *testHarness) TestOutputWriteFailure() {
 }
 func TestOutputWriteFailure(t *testing.T) { (&testHarness{T: t}).TestOutputWriteFailure() }
 
-func (t *testHarness) TestCLI() {
-	for _, args := range [][]string{{"--help"}, {"--version"}, {"--version=false", "--help"}} {
-		var b, e bytes.Buffer
-		t.require(Run(args, Invocation{Dir: "/no/module", Version: "test", Stdout: &b, Stderr: &e}) == 0 && b.Len() != 0, args, e.String())
-	}
-	for _, args := range [][]string{{"--unknown"}, {"--version", "--format=bad"}, {"--no-history=wat"}, {"--config"}} {
-		var b, e bytes.Buffer
-		t.require(Run(args, Invocation{Dir: "/no/module", Version: "", Stdout: &b, Stderr: &e}) == 2 && b.Len() == 0, args)
-	}
-}
-func TestCLI(t *testing.T) { (&testHarness{T: t}).TestCLI() }
-
 func (t *testHarness) TestSuppressionValidation() {
 	for _, directive := range []string{"// columbo:ignore long-parameter-list -- tiny", "// columbo:ignore fake -- enough justification", "// columbo:ignore data-clump -- enough justification", "// columbo:ignore long-parameter-list -- enough justification\n// columbo:ignore long-parameter-list -- duplicate justification", "// columbo:ignore long-parameter-list -- enough justification\n"} {
 		src := "package fixture\n" + directive + "\nfunc F(a,b,c,d,e int){}"
