@@ -3,9 +3,9 @@ package columbo
 import (
 	"fmt"
 	"go/ast"
-	"go/token"
 	"go/types"
 	"math/big"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -16,7 +16,7 @@ type expansion struct {
 }
 
 func extendTrace(t expansion, d *declaration, owner *declaration, c *ast.CallExpr) expansion {
-	return expansion{append(append([]string{}, t.names...), d.symbol), append(append([]Site{}, t.sites...), Site{owner.file.rel, owner.file.tf.Offset(c.Pos())})}
+	return expansion{append(append([]string{}, t.names...), d.symbol), append(append([]Site{}, t.sites...), owner.callSite(c))}
 }
 func onStack(ds []*declaration, d *declaration) bool {
 	for _, s := range ds {
@@ -25,99 +25,6 @@ func onStack(ds []*declaration, d *declaration) bool {
 		}
 	}
 	return false
-}
-func (a *engine) expandedLines(d *declaration, stack []*declaration, t expansion) []Source {
-	removed := map[token.Pos]bool{}
-	copies := []Source{}
-	var visit func(ast.Node)
-	visit = func(n ast.Node) {
-		if n == nil {
-			return
-		}
-		if call, ok := n.(*ast.CallExpr); ok {
-			visit(call.Fun)
-			for _, arg := range call.Args {
-				visit(arg)
-			}
-			target := a.calls[call]
-			if target == nil || !target.candidate || onStack(stack, target) {
-				return
-			}
-			nested := []ast.Node{}
-			ast.Inspect(call, func(n ast.Node) bool {
-				if n == call {
-					return true
-				}
-				if c, ok := n.(*ast.CallExpr); ok {
-					nested = append(nested, c)
-					return false
-				}
-				return true
-			})
-			for _, tok := range d.file.tokens {
-				if tok.pos < call.Pos() || tok.pos >= call.End() {
-					continue
-				}
-				retain := false
-				for _, ch := range nested {
-					if tok.pos >= ch.Pos() && tok.pos < ch.End() {
-						retain = true
-						break
-					}
-				}
-				if !retain {
-					removed[tok.pos] = true
-				}
-			}
-			nt := extendTrace(t, target, d, call)
-			copies = append(copies, a.expandedLines(target, append(stack, target), nt)...)
-			return
-		}
-		ast.Inspect(n, func(ch ast.Node) bool {
-			if ch == n {
-				return true
-			}
-			if ch != nil {
-				visit(ch)
-			}
-			return false
-		})
-	}
-	visit(d.fn.Body)
-	var trace *expansion
-	if len(t.sites) > 0 {
-		trace = &t
-	}
-	ss := d.linesEvidence("expanded-lines", removed, trace)
-	return append(ss, copies...)
-}
-func (a *engine) expandedComplexity(d *declaration, stack []*declaration, t expansion, depth int) (int, []Source) {
-	ss := []Source{}
-	v := &complexityVisitor{name: d.fn.Name, nesting: depth, diagnosticsEnabled: true}
-	v.hook = func(v *complexityVisitor, c *ast.CallExpr) bool {
-		target := a.calls[c]
-		if target == nil || !target.candidate || onStack(stack, target) {
-			return false
-		}
-		ast.Walk(v, c.Fun)
-		for _, arg := range c.Args {
-			ast.Walk(v, arg)
-		}
-		n, rs := a.expandedComplexity(target, append(stack, target), extendTrace(t, target, d, c), v.nesting)
-		v.complexity += n
-		ss = append(ss, rs...)
-		return true
-	}
-	ast.Walk(v, d.fn.Body)
-	for _, ev := range v.diagnostics {
-		r := d.event(ev, "expanded-complexity")
-		if len(t.sites) > 0 {
-			r.Detail.Expansion = append([]string{}, t.names...)
-			r.Detail.ExpansionSites = append([]Site{}, t.sites...)
-		}
-		ss = append(ss, r)
-	}
-	return v.complexity, ss
 }
 
 type helperCluster struct {
@@ -130,169 +37,217 @@ type helperCluster struct {
 	pairs        map[string]*big.Rat
 }
 
-func (a *engine) forwarding(d *declaration, c *ast.CallExpr) map[string]bool {
-	h := map[string]bool{}
-	add := func(e ast.Expr) {
-		id, ok := unparen(e).(*ast.Ident)
-		if !ok {
-			return
-		}
-		v, ok := d.file.pkg.TypesInfo.Uses[id].(*types.Var)
-		if ok {
-			if key, yes := d.inputs[v]; yes {
-				h[key] = true
-			}
+func (a *engine) forwarding(d *declaration, call *ast.CallExpr) map[string]bool {
+	out := map[string]bool{}
+	for _, expr := range forwardedExpressions(d, call) {
+		if key, ok := d.inputIdentity(expr); ok {
+			out[key] = true
 		}
 	}
-	for _, arg := range c.Args {
-		add(arg)
-	}
-	fun := unparen(c.Fun)
-	if s, ok := fun.(*ast.SelectorExpr); ok {
-		if sel := d.file.pkg.TypesInfo.Selections[s]; sel != nil && sel.Kind() == types.MethodVal {
-			add(s.X)
-		}
-	}
-	return h
+	return out
 }
-func (a *engine) exception(d *declaration, c *ast.CallExpr) bool {
-	info := d.file.pkg.TypesInfo
-	if tv := info.Types[c.Fun]; tv.IsType() {
-		return true
-	}
-	if id, ok := unparen(c.Fun).(*ast.Ident); ok {
-		if _, ok := info.Uses[id].(*types.Builtin); ok {
-			return true
-		}
-	}
-	f := callObject(info, c)
-	if f == nil || f.Pkg() == nil {
+func (a *engine) exception(d *declaration, call *ast.CallExpr) bool {
+	info := d.file.typeInfo()
+	return primitiveCall(info, call) || loggingException(callObject(info, call))
+}
+func loggingException(fn *types.Func) bool {
+	if fn == nil || fn.Pkg() == nil {
 		return false
 	}
-	if sig, ok := f.Type().(*types.Signature); ok && sig.Recv() != nil {
+	if sig, ok := fn.Type().(*types.Signature); ok && sig.Recv() != nil {
 		return false
 	}
-	names := ""
-	switch f.Pkg().Path() {
-	case "fmt":
-		names = "Errorf"
-	case "log":
-		names = "Print Printf Println Fatal Fatalf Fatalln Panic Panicf Panicln"
-	case "log/slog":
-		names = "Debug DebugContext Info InfoContext Warn WarnContext Error ErrorContext Log LogAttrs"
-	}
-	for _, name := range strings.Fields(names) {
-		if name == f.Name() {
+	return loggingName(fn.Pkg().Path(), fn.Name())
+}
+
+var clusterLogging = map[string]string{
+	"fmt":      "Errorf",
+	"log":      "Print Printf Println Fatal Fatalf Fatalln Panic Panicf Panicln",
+	"log/slog": "Debug DebugContext Info InfoContext Warn WarnContext Error ErrorContext Log LogAttrs",
+}
+
+func loggingName(path, name string) bool {
+	for _, allowed := range strings.Fields(clusterLogging[path]) {
+		if name == allowed {
 			return true
 		}
 	}
 	return false
 }
-func (a *engine) qualify(d *declaration, calls []*ast.CallExpr) *helperCluster {
-	distinct := map[*declaration]bool{}
-	for _, call := range calls {
-		distinct[a.calls[call]] = true
+func newHelperCluster(owner *declaration, calls []*ast.CallExpr) *helperCluster {
+	return &helperCluster{
+		owner:      owner,
+		calls:      append([]*ast.CallExpr{}, calls...),
+		forwarding: map[*ast.CallExpr]map[string]bool{},
+		p:          map[string]bool{},
+		meanP:      new(big.Rat),
+		meanD:      new(big.Rat),
+		pairs:      map[string]*big.Rat{},
 	}
-	if int64(len(distinct)) < a.config.Counts["cosmetic-min-helpers"] {
+}
+func (a *engine) qualify(owner *declaration, calls []*ast.CallExpr) *helperCluster {
+	cl := newHelperCluster(owner, calls)
+	cl.helpers = a.clusterHelpers(calls)
+	if int64(len(cl.helpers)) < a.config.Counts["cosmetic-min-helpers"] {
 		return nil
 	}
-	cl := &helperCluster{owner: d, calls: append([]*ast.CallExpr{}, calls...), forwarding: map[*ast.CallExpr]map[string]bool{}, p: map[string]bool{}, meanP: new(big.Rat), meanD: new(big.Rat), pairs: map[string]*big.Rat{}}
-	for _, key := range d.inputs {
-		cl.p[key] = true
-	}
-	for h := range distinct {
-		cl.helpers = append(cl.helpers, h)
-	}
-	sort.Slice(cl.helpers, func(i, j int) bool { return cl.helpers[i].symbol < cl.helpers[j].symbol })
-	for _, call := range calls {
-		h := a.forwarding(d, call)
-		cl.forwarding[call] = h
-		cl.meanP.Add(cl.meanP, fraction(len(h), len(cl.p)))
-	}
-	cl.meanP.Quo(cl.meanP, big.NewRat(int64(len(calls)), 1))
-	pairs := 0
-	for i, h := range cl.helpers {
-		for _, other := range cl.helpers[i+1:] {
-			union := map[string]bool{}
-			inter := 0
-			for s := range h.deps {
-				union[s] = true
-				if other.deps[s] {
-					inter++
-				}
-			}
-			for s := range other.deps {
-				union[s] = true
-			}
-			r := fraction(inter, len(union))
-			cl.pairs[canonical([]string{h.symbol, other.symbol})] = r
-			cl.meanD.Add(cl.meanD, r)
-			pairs++
-		}
-	}
-	cl.meanD.Quo(cl.meanD, big.NewRat(int64(pairs), 1))
-	if !meets(cl.meanP, a.config.Ratios["cosmetic-parameter-overlap"]) || !meets(cl.meanD, a.config.Ratios["cosmetic-dependency-overlap"]) {
+	cl.measureForwarding(a)
+	cl.measureDependencies()
+	if !cl.matches(a.config) {
 		return nil
 	}
 	return cl
 }
-func (a *engine) clusters(d *declaration) []*helperCluster {
-	out := []*helperCluster{}
-	scan := func(stmts []ast.Stmt) {
-		sequence := []*ast.CallExpr{}
-		flush := func() {
-			if c := a.qualify(d, sequence); c != nil {
-				out = append(out, c)
-			}
-			sequence = nil
-		}
-		for _, s := range stmts {
-			boundary := false
-			switch s.(type) {
-			case *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt, *ast.BlockStmt, *ast.LabeledStmt, *ast.GoStmt, *ast.DeferStmt, *ast.ReturnStmt, *ast.BranchStmt, *ast.EmptyStmt:
-				boundary = true
-			}
-			if boundary {
-				flush()
-				continue
-			}
-			calls := []*ast.CallExpr{}
-			ast.Inspect(s, func(n ast.Node) bool {
-				switch n.(type) {
-				case *ast.FuncLit, *ast.BlockStmt, *ast.CaseClause, *ast.CommClause:
-					return false
-				}
-				if c, ok := n.(*ast.CallExpr); ok {
-					calls = append(calls, c)
-				}
-				return true
-			})
-			sort.Slice(calls, func(i, j int) bool { return calls[i].Pos() < calls[j].Pos() })
-			for _, call := range calls {
-				h := a.calls[call]
-				if h != nil && h.candidate {
-					sequence = append(sequence, call)
-				} else if !a.exception(d, call) {
-					flush()
-				}
-			}
-		}
-		flush()
+func (a *engine) clusterHelpers(calls []*ast.CallExpr) []*declaration {
+	distinct := map[*declaration]bool{}
+	for _, call := range calls {
+		distinct[a.calls[call]] = true
 	}
-	ast.Inspect(d.fn.Body, func(n ast.Node) bool {
-		switch n := n.(type) {
-		case *ast.FuncLit:
-			return false
-		case *ast.BlockStmt:
-			scan(n.List)
-		case *ast.CaseClause:
-			scan(n.Body)
-		case *ast.CommClause:
-			scan(n.Body)
-		}
-		return true
-	})
+	out := []*declaration{}
+	for helper := range distinct {
+		out = append(out, helper)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].symbol < out[j].symbol })
 	return out
+}
+func (cl *helperCluster) measureForwarding(a *engine) {
+	for _, key := range cl.owner.inputs {
+		cl.p[key] = true
+	}
+	for _, call := range cl.calls {
+		inputs := a.forwarding(cl.owner, call)
+		cl.forwarding[call] = inputs
+		cl.meanP.Add(cl.meanP, fraction(len(inputs), len(cl.p)))
+	}
+	cl.meanP.Quo(cl.meanP, big.NewRat(int64(len(cl.calls)), 1))
+}
+func (cl *helperCluster) measureDependencies() {
+	pairs := 0
+	for i, helper := range cl.helpers {
+		for _, other := range cl.helpers[i+1:] {
+			cl.recordPair(helper, other)
+			pairs++
+		}
+	}
+	cl.meanD.Quo(cl.meanD, big.NewRat(int64(pairs), 1))
+}
+func (cl *helperCluster) recordPair(helper, other *declaration) {
+	overlap := setOverlap(helper.deps, other.deps)
+	cl.pairs[canonical([]string{helper.symbol, other.symbol})] = overlap
+	cl.meanD.Add(cl.meanD, overlap)
+}
+func setOverlap(left, right map[string]bool) *big.Rat {
+	union := map[string]bool{}
+	intersection := 0
+	for key := range left {
+		union[key] = true
+		if right[key] {
+			intersection++
+		}
+	}
+	for key := range right {
+		union[key] = true
+	}
+	return fraction(intersection, len(union))
+}
+func (cl *helperCluster) matches(config Config) bool {
+	return meets(cl.meanP, config.Ratios["cosmetic-parameter-overlap"]) && meets(cl.meanD, config.Ratios["cosmetic-dependency-overlap"])
+}
+
+// These grammar tables classify lexical scopes and sequence boundaries. They do
+// not select helpers or relax policy: every boundary from the original rule is kept.
+var clusterBoundaries = map[reflect.Type]bool{
+	reflect.TypeOf((*ast.IfStmt)(nil)):         true,
+	reflect.TypeOf((*ast.ForStmt)(nil)):        true,
+	reflect.TypeOf((*ast.RangeStmt)(nil)):      true,
+	reflect.TypeOf((*ast.SwitchStmt)(nil)):     true,
+	reflect.TypeOf((*ast.TypeSwitchStmt)(nil)): true,
+	reflect.TypeOf((*ast.SelectStmt)(nil)):     true,
+	reflect.TypeOf((*ast.BlockStmt)(nil)):      true,
+	reflect.TypeOf((*ast.LabeledStmt)(nil)):    true,
+	reflect.TypeOf((*ast.GoStmt)(nil)):         true,
+	reflect.TypeOf((*ast.DeferStmt)(nil)):      true,
+	reflect.TypeOf((*ast.ReturnStmt)(nil)):     true,
+	reflect.TypeOf((*ast.BranchStmt)(nil)):     true,
+	reflect.TypeOf((*ast.EmptyStmt)(nil)):      true,
+}
+var nestedStatementScopes = map[reflect.Type]bool{
+	reflect.TypeOf((*ast.FuncLit)(nil)):    true,
+	reflect.TypeOf((*ast.BlockStmt)(nil)):  true,
+	reflect.TypeOf((*ast.CaseClause)(nil)): true,
+	reflect.TypeOf((*ast.CommClause)(nil)): true,
+}
+
+type clusterScan struct {
+	engine   *engine
+	owner    *declaration
+	out      []*helperCluster
+	sequence []*ast.CallExpr
+}
+
+func (a *engine) clusters(d *declaration) []*helperCluster {
+	scan := &clusterScan{engine: a, owner: d, out: []*helperCluster{}}
+	d.inspectBody(scan.visit)
+	return scan.out
+}
+func nestedFunction(n ast.Node) bool { _, ok := n.(*ast.FuncLit); return ok }
+func (s *clusterScan) visit(n ast.Node) bool {
+	if nestedFunction(n) {
+		return false
+	}
+	switch n := n.(type) {
+	case *ast.BlockStmt:
+		s.statements(n.List)
+	case *ast.CaseClause:
+		s.statements(n.Body)
+	case *ast.CommClause:
+		s.statements(n.Body)
+	}
+	return true
+}
+func (s *clusterScan) statements(statements []ast.Stmt) {
+	for _, statement := range statements {
+		s.statement(statement)
+	}
+	s.flush()
+}
+func (s *clusterScan) statement(statement ast.Stmt) {
+	if clusterBoundaries[reflect.TypeOf(statement)] {
+		s.flush()
+		return
+	}
+	for _, call := range lexicalCalls(statement) {
+		helper := s.engine.calls[call]
+		if helper != nil && helper.candidate {
+			s.sequence = append(s.sequence, call)
+		} else if !s.engine.exception(s.owner, call) {
+			s.flush()
+		}
+	}
+}
+func (s *clusterScan) flush() {
+	if cluster := s.engine.qualify(s.owner, s.sequence); cluster != nil {
+		s.out = append(s.out, cluster)
+	}
+	s.sequence = nil
+}
+
+type lexicalCallScan struct{ calls []*ast.CallExpr }
+
+func lexicalCalls(statement ast.Stmt) []*ast.CallExpr {
+	scan := &lexicalCallScan{calls: []*ast.CallExpr{}}
+	ast.Inspect(statement, scan.visit)
+	sort.Slice(scan.calls, func(i, j int) bool { return scan.calls[i].Pos() < scan.calls[j].Pos() })
+	return scan.calls
+}
+func (s *lexicalCallScan) visit(n ast.Node) bool {
+	if nestedStatementScopes[reflect.TypeOf(n)] {
+		return false
+	}
+	if call, ok := n.(*ast.CallExpr); ok {
+		s.calls = append(s.calls, call)
+	}
+	return true
 }
 
 type cosmeticInvestigation struct {
@@ -317,8 +272,11 @@ func (a *engine) cosmetic() error {
 	return nil
 }
 func (a *engine) cosmeticParent(d *declaration) error {
-	i := &cosmeticInvestigation{engine: a, parent: d, seen: map[*declaration]bool{}, helpers: map[*declaration]bool{}}
-	i.discover(d)
+	investigation := &cosmeticInvestigation{engine: a, parent: d, seen: map[*declaration]bool{}, helpers: map[*declaration]bool{}}
+	return investigation.run()
+}
+func (i *cosmeticInvestigation) run() error {
+	i.discover(i.parent)
 	if len(i.clusters) == 0 {
 		return nil
 	}
@@ -359,23 +317,27 @@ func (i *cosmeticInvestigation) report() error {
 		return e
 	}
 	i.finding = c
-	i.metrics()
-	i.originalAndExpandedReceipts()
-	i.sortClusters()
-	for _, cl := range i.clusters {
-		i.cluster(cl)
-	}
+	i.presentation()
 	i.engine.report.Cases = append(i.engine.report.Cases, *c)
 	return nil
 }
+func (i *cosmeticInvestigation) presentation() {
+	i.metrics()
+	i.originalAndExpandedReceipts()
+	i.sortClusters()
+	for _, cluster := range i.clusters {
+		i.cluster(cluster)
+	}
+}
 func (i *cosmeticInvestigation) sortClusters() {
-	sort.Slice(i.clusters, func(a, b int) bool {
-		x, y := i.clusters[a], i.clusters[b]
-		if x.owner.file.rel != y.owner.file.rel {
-			return x.owner.file.rel < y.owner.file.rel
-		}
-		return x.calls[0].Pos() < y.calls[0].Pos()
-	})
+	sort.Slice(i.clusters, func(a, b int) bool { return i.clusters[a].before(i.clusters[b]) })
+}
+func (cl *helperCluster) before(other *helperCluster) bool {
+	left, right := cl.owner.callSite(cl.calls[0]), other.owner.callSite(other.calls[0])
+	if left.File != right.File {
+		return left.File < right.File
+	}
+	return left.CallOffset < right.CallOffset
 }
 func (i *cosmeticInvestigation) metrics() {
 	i.metric("function-lines", i.parent.lines, "function-lines")
@@ -398,20 +360,52 @@ func (i *cosmeticInvestigation) originalAndExpandedReceipts() {
 	appendSources(i.finding, i.complexityReceipts)
 }
 func (cl *helperCluster) key() string {
-	return fmt.Sprintf("%s:%d", cl.owner.file.rel, cl.owner.file.tf.Offset(cl.calls[0].Pos()))
+	site := cl.owner.callSite(cl.calls[0])
+	return fmt.Sprintf("%s:%d", site.File, site.CallOffset)
 }
+func (cl *helperCluster) record() Cluster {
+	return Cluster{cl.key(), cl.owner.symbol, cl.owner.file.rel, []Member{}}
+}
+
+type clusterPresentation struct {
+	engine  *engine
+	cluster *helperCluster
+	finding *Case
+	helpers map[*declaration]bool
+}
+
 func (i *cosmeticInvestigation) cluster(cl *helperCluster) {
-	record := Cluster{cl.key(), cl.owner.symbol, cl.owner.file.rel, []Member{}}
-	cl.summaryClues(i.finding, i.engine.config)
-	i.finding.Receipts = append(i.finding.Receipts, cl.owner.declReceipt())
-	for _, call := range cl.calls {
-		record.Members = append(record.Members, i.clusterMember(cl, call))
+	presentation := &clusterPresentation{i.engine, cl, i.finding, i.helpers}
+	presentation.emit()
+}
+func (p *clusterPresentation) emit() {
+	record := p.cluster.record()
+	p.summary()
+	p.finding.Receipts = append(p.finding.Receipts, p.cluster.owner.declReceipt())
+	p.members(&record)
+	p.finding.Clusters = append(p.finding.Clusters, record)
+	p.cluster.pairClues(p.finding)
+	for _, helper := range p.cluster.helpers {
+		p.helper(helper)
 	}
-	i.finding.Clusters = append(i.finding.Clusters, record)
-	cl.pairClues(i.finding)
-	for _, h := range cl.helpers {
-		i.helper(h)
+}
+func (p *clusterPresentation) summary() { p.cluster.summaryClues(p.finding, p.engine.config) }
+func (p *clusterPresentation) members(record *Cluster) {
+	for _, call := range p.cluster.calls {
+		record.Members = append(record.Members, p.member(call))
 	}
+}
+func (p *clusterPresentation) member(call *ast.CallExpr) Member {
+	p.memberEvidence(call)
+	helper := p.engine.calls[call]
+	site := p.cluster.owner.callSite(call)
+	return Member{helper.symbol, site.CallOffset}
+}
+func (p *clusterPresentation) memberEvidence(call *ast.CallExpr) {
+	helper := p.engine.calls[call]
+	p.cluster.memberClues(p.finding, call, helper.symbol)
+	p.finding.Receipts = append(p.finding.Receipts, p.cluster.owner.helperCallReceipt(call, helper.symbol))
+	p.cluster.owner.forwardingReceipts(p.finding, call)
 }
 func (cl *helperCluster) summaryClues(c *Case, config Config) {
 	key := cl.key()
@@ -419,13 +413,6 @@ func (cl *helperCluster) summaryClues(c *Case, config Config) {
 	c.Clues = append(c.Clues, metric("parent-input-set", key, sortedSet(cl.p)))
 	c.Clues = append(c.Clues, metric("parameter-overlap", key+":mean", rounded(cl.meanP)).compare(config.Ratios["cosmetic-parameter-overlap"], ">="))
 	c.Clues = append(c.Clues, metric("dependency-overlap", key+":mean", rounded(cl.meanD)).compare(config.Ratios["cosmetic-dependency-overlap"], ">="))
-}
-func (i *cosmeticInvestigation) clusterMember(cl *helperCluster, call *ast.CallExpr) Member {
-	helper := i.engine.calls[call]
-	cl.memberClues(i.finding, call, helper.symbol)
-	i.finding.Receipts = append(i.finding.Receipts, cl.owner.file.receipt("helper-call", call.Pos(), call.End(), Detail{Subject: helper.symbol}))
-	cl.owner.forwardingReceipts(i.finding, call)
-	return Member{helper.symbol, cl.owner.file.tf.Offset(call.Pos())}
 }
 func (cl *helperCluster) memberClues(c *Case, call *ast.CallExpr, helper string) {
 	subject := cl.key() + ":member:" + helper
@@ -437,7 +424,7 @@ func (cl *helperCluster) pairClues(c *Case) {
 		c.Clues = append(c.Clues, metric("dependency-overlap", cl.key()+":"+pair, rounded(r)))
 	}
 }
-func (i *cosmeticInvestigation) helper(h *declaration) {
+func (i *clusterPresentation) helper(h *declaration) {
 	if i.helpers[h] {
 		return
 	}
@@ -454,20 +441,14 @@ func (d *declaration) forwardingReceipts(c *Case, call *ast.CallExpr) {
 	}
 }
 func (d *declaration) forwardedIdentifier(c *Case, id *ast.Ident) {
-	v, ok := d.file.pkg.TypesInfo.Uses[id].(*types.Var)
-	if !ok {
-		return
-	}
-	if key, yes := d.inputs[v]; yes {
-		c.Receipts = append(c.Receipts, d.file.receipt("parameter", id.Pos(), id.End(), Detail{Subject: key}))
+	if key, ok := d.inputIdentity(id); ok {
+		c.Receipts = append(c.Receipts, d.identifierReceipt(id, key))
 	}
 }
 func forwardedExpressions(d *declaration, call *ast.CallExpr) []ast.Expr {
 	out := append([]ast.Expr{}, call.Args...)
-	if sel, ok := unparen(call.Fun).(*ast.SelectorExpr); ok {
-		if s := d.file.pkg.TypesInfo.Selections[sel]; s != nil && s.Kind() == types.MethodVal {
-			out = append(out, sel.X)
-		}
+	if receiver := forwardedReceiver(d.file.typeInfo(), call); receiver != nil {
+		out = append(out, receiver)
 	}
 	return out
 }

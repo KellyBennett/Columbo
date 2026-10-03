@@ -328,3 +328,14 @@ func scanComplexity(fn *ast.FuncDecl) *complexityVisitor {
 	ast.Walk(v, fn)
 	return v
 }
+
+func expansionVisitor(name *ast.Ident, depth int, hook func(*complexityVisitor, *ast.CallExpr) bool) *complexityVisitor {
+	return &complexityVisitor{name: name, nesting: depth, diagnosticsEnabled: true, hook: hook}
+}
+func (v *complexityVisitor) walk(n ast.Node) { ast.Walk(v, n) }
+func (v *complexityVisitor) walkOperands(call *ast.CallExpr) {
+	v.walk(call.Fun)
+	for _, arg := range call.Args {
+		v.walk(arg)
+	}
+}

@@ -46,13 +46,35 @@ universe, including excluded files and tests.
 No smell definitions, thresholds, severities, exclusions, or CI settings changed
 in this refactoring batch. No suppression was added and no golden was refreshed.
 
+## Cosmetic Extraction refactoring
+
+Virtual expansion now shares a recursive call-path context. The line worker owns
+its token mask and copied line evidence; the complexity worker owns its visitor
+hook and diagnostic evidence. Call masks retain nested-call token ranges while
+removing only replaced call syntax. Child traces remain independent, and recursive
+expansion still stops at the active declaration stack.
+
+Helper clusters own exact forwarding and dependency-overlap calculations. A lexical
+scanner owns maximal statement sequences, with explicit grammar tables preserving
+all original scope exclusions and sequence boundaries. Builtin/type-call and logging
+exceptions retain their original identities. Cluster presentation owns its record,
+member evidence, and shared helper-deduplication set. Physical source objects own
+call sites and identifier/call receipt ranges.
+
+No smell definitions, thresholds, severities, exclusions, or CI settings changed.
+No suppression was added and no golden was refreshed. Existing coverage continues
+to verify nested-call token retention, recursive cutoffs, child-copy paths,
+nesting-sensitive complexity, maximal clusters, exact overlaps, interface helper
+eligibility, and arbitrary/meaningful-but-strict extraction cases.
+
 ## Validation at this revision
 
-Tests, vet, and CLI build pass. The strict self-check reports 122 FAIL cases,
-zero warnings, and zero suppressions: 59 Excessive Dependencies, 43 Long Function,
-13 High Cognitive Complexity, and 7 Feature Envy. The prior calibrated revision
-had 153 FAIL cases. Tests remain included in self-analysis.
+Tests, vet, and CLI build pass. The strict self-check reports 95 FAIL cases,
+zero warnings, and zero suppressions: 47 Excessive Dependencies, 36 Long Function,
+7 High Cognitive Complexity, and 5 Feature Envy. The previous refactoring revision
+had 122 FAIL cases. Tests remain included in self-analysis.
 
-The remaining findings include Cosmetic Extraction's expansion and cluster
-investigations, source loading/model construction, the cognitive-complexity
-visitor, and larger test scenarios. CE-001 remains provisional.
+The Cosmetic Extraction implementation and virtual expansion workers now clear
+all configured smells. Remaining findings are in source loading/model construction,
+the cognitive-complexity visitor, other smell implementations, and larger test
+scenarios. CE-001 remains provisional; its release gate is unchanged.

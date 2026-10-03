@@ -530,3 +530,35 @@ func (a *engine) typeKey(obj *types.TypeName) string {
 func (d *declaration) matchesObject(obj *types.Func, pos token.Position) bool {
 	return d.obj != nil && d.obj.Name() == obj.Name() && d.file.path == pos.Filename && d.file.tf.Offset(d.obj.Pos()) == pos.Offset
 }
+
+func (d *declaration) bodyNode() ast.Node       { return d.fn.Body }
+func (d *declaration) functionName() *ast.Ident { return d.fn.Name }
+func (d *declaration) callSite(call *ast.CallExpr) Site {
+	return d.file.callSite(call)
+}
+func (f *file) tokenPositions(start, end token.Pos) []token.Pos {
+	out := []token.Pos{}
+	for _, t := range f.tokens {
+		if t.pos >= start && t.pos < end {
+			out = append(out, t.pos)
+		}
+	}
+	return out
+}
+
+func (d *declaration) inputIdentity(expr ast.Expr) (string, bool) {
+	variable := inputVariable(d.file.typeInfo(), expr)
+	if variable == nil {
+		return "", false
+	}
+	key, ok := d.inputs[variable]
+	return key, ok
+}
+
+func (f *file) callSite(call *ast.CallExpr) Site { return Site{f.rel, f.tf.Offset(call.Pos())} }
+func (d *declaration) helperCallReceipt(call *ast.CallExpr, helper string) Source {
+	return d.file.receipt("helper-call", call.Pos(), call.End(), Detail{Subject: helper})
+}
+func (d *declaration) identifierReceipt(id *ast.Ident, key string) Source {
+	return d.file.receipt("parameter", id.Pos(), id.End(), Detail{Subject: key})
+}

@@ -209,3 +209,40 @@ func interfaceSelection(sel *types.Selection) bool {
 	_, yes := types.Unalias(stripPointer(sel.Recv())).Underlying().(*types.Interface)
 	return yes
 }
+
+func primitiveCall(info *types.Info, call *ast.CallExpr) bool {
+	r := &callResolver{info}
+	return r.isType(call.Fun) || r.builtin(call.Fun)
+}
+func (r *callResolver) isType(e ast.Expr) bool { return r.info.Types[e].IsType() }
+func (r *callResolver) builtin(e ast.Expr) bool {
+	id, ok := unparen(e).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	_, ok = r.info.Uses[id].(*types.Builtin)
+	return ok
+}
+func inputVariable(info *types.Info, e ast.Expr) *types.Var {
+	id, ok := unparen(e).(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	v, _ := info.Uses[id].(*types.Var)
+	return v
+}
+
+func forwardedReceiver(info *types.Info, call *ast.CallExpr) ast.Expr {
+	return (&callResolver{info}).methodValueReceiver(unparen(call.Fun))
+}
+func (r *callResolver) methodValueReceiver(e ast.Expr) ast.Expr {
+	expr, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return nil
+	}
+	sel := r.info.Selections[expr]
+	if sel == nil || sel.Kind() != types.MethodVal {
+		return nil
+	}
+	return expr.X
+}
