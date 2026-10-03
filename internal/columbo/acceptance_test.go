@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/sebdah/goldie/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/uudashr/gocognit"
 	"go/ast"
 	"go/parser"
@@ -127,14 +131,15 @@ func (t *testHarness) reconcileDefaultCase(c Case) {
 func (t *testHarness) golden(r Report, path, format string) {
 	b, e := Serialize(r, format)
 	t.require(e == nil, e)
+	g, name := goldenFile(t.T, path)
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		t.writeBytes(path, b)
+		e = g.Update(t.T, name, b)
+		t.require(e == nil, e)
 	}
-	t.check(bytes.Equal(t.read(path), b), format+" golden differs")
+	g.Assert(t.T, name, b)
 }
-func (t *testHarness) writeBytes(path string, b []byte) {
-	e := os.WriteFile(path, b, 0600)
-	t.require(e == nil, e)
+func goldenFile(t testing.TB, path string) (*goldie.Goldie, string) {
+	return goldie.New(t, goldie.WithFixtureDir(filepath.Dir(path))), strings.TrimSuffix(filepath.Base(path), ".golden")
 }
 func TestAllSevenDefaultFail(t *testing.T) { (&testHarness{T: t}).TestAllSevenDefaultFail() }
 
@@ -280,18 +285,6 @@ func (t *testHarness) TestOutputWriteFailure() {
 }
 func TestOutputWriteFailure(t *testing.T) { (&testHarness{T: t}).TestOutputWriteFailure() }
 
-func (t *testHarness) TestCLI() {
-	for _, args := range [][]string{{"--help"}, {"--version"}, {"--version=false", "--help"}} {
-		var b, e bytes.Buffer
-		t.require(Run(args, Invocation{Dir: "/no/module", Version: "test", Stdout: &b, Stderr: &e}) == 0 && b.Len() != 0, args, e.String())
-	}
-	for _, args := range [][]string{{"--unknown"}, {"--version", "--format=bad"}, {"--no-history=wat"}, {"--config"}} {
-		var b, e bytes.Buffer
-		t.require(Run(args, Invocation{Dir: "/no/module", Version: "", Stdout: &b, Stderr: &e}) == 2 && b.Len() == 0, args)
-	}
-}
-func TestCLI(t *testing.T) { (&testHarness{T: t}).TestCLI() }
-
 func (t *testHarness) TestSuppressionValidation() {
 	for _, directive := range []string{"// columbo:ignore long-parameter-list -- tiny", "// columbo:ignore fake -- enough justification", "// columbo:ignore data-clump -- enough justification", "// columbo:ignore long-parameter-list -- enough justification\n// columbo:ignore long-parameter-list -- duplicate justification", "// columbo:ignore long-parameter-list -- enough justification\n"} {
 		src := "package fixture\n" + directive + "\nfunc F(a,b,c,d,e int){}"
@@ -394,29 +387,23 @@ const acceptanceSource0 = `package fixture
 func F(a,b,c bool) { if a && b || c { for a { if b {continue} } } else if b { switch {case c:} } else { select {default:} }; goto label; label: _=func(){ if a {F(a,b,c)} } }
 `
 
+// These aliases preserve existing call sites and their fatal/nonfatal behavior.
+// Sprint preserves messages whose first argument is a report or an error.
 func (t *testHarness) require(ok bool, args ...any) {
 	t.Helper()
-	if !ok {
-		t.Fatal(args...)
-	}
+	require.True(t.T, ok, fmt.Sprint(args...))
 }
 func (t *testHarness) requiref(ok bool, format string, args ...any) {
 	t.Helper()
-	if !ok {
-		t.Fatalf(format, args...)
-	}
+	require.Truef(t.T, ok, format, args...)
 }
 func (t *testHarness) check(ok bool, args ...any) {
 	t.Helper()
-	if !ok {
-		t.Error(args...)
-	}
+	assert.True(t.T, ok, fmt.Sprint(args...))
 }
 func (t *testHarness) checkf(ok bool, format string, args ...any) {
 	t.Helper()
-	if !ok {
-		t.Errorf(format, args...)
-	}
+	assert.Truef(t.T, ok, format, args...)
 }
 
 // Positions are byte offsets plus the token.File base (1), including the

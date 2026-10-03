@@ -1,0 +1,32 @@
+# Help and version bypass module loading.
+columbo 0 --help
+stdout '^Usage: columbo'
+! stderr .
+
+columbo 0 --version
+cmp stdout version.txt
+! stderr .
+
+columbo 0 --version=false --help
+stdout '^Usage: columbo'
+! stderr .
+
+# Invalid flags fail with exit 2 and leave stdout empty.
+columbo 2 --unknown
+! stdout .
+stderr '^columbo: flag provided but not defined: -unknown'
+
+columbo 2 --version --format=bad
+! stdout .
+stderr '^columbo: invalid format "bad"'
+
+columbo 2 --no-history=wat
+! stdout .
+stderr '^columbo: invalid boolean value "wat" for -no-history:'
+
+columbo 2 --config
+! stdout .
+stderr '^columbo: flag needs an argument: -config'
+
+-- version.txt --
+columbo test

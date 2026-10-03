@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -46,29 +48,46 @@ func TestNamedInterfaceDependencies(t *testing.T) {
 	(&testHarness{T: t}).TestNamedInterfaceDependencies()
 }
 
-func (t *testHarness) TestDependencySiteRanges() {
-	src := edgeSource1
-	dir := t.fixture(src)
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	d.measure(a)
-	sites := map[string]bool{}
-	for _, r := range d.depReceipts {
-		if r.Detail.Subject == "type:bytes.Buffer" {
-			text := string(d.file.data[r.StartOffset:r.EndOffset])
-			sites[text] = true
+// Receipt evidence keeps the bytes and their physical ranges together.
+type dependencyReceiptEvidence struct {
+	data     []byte
+	receipts []Source
+}
+
+func receiptEvidence(d *declaration) dependencyReceiptEvidence {
+	return dependencyReceiptEvidence{d.file.data, d.depReceipts}
+}
+func (t *testHarness) measuredDependencyEvidence(source string) dependencyReceiptEvidence {
+	t.Helper()
+	engine, err := load(t.fixture(source), []string{"./..."}, quiet())
+	require.NoError(t.T, err)
+	declaration := engine.declarations[0]
+	declaration.measure(engine)
+	return receiptEvidence(declaration)
+}
+func (e dependencyReceiptEvidence) designatedTexts(subject string) []string {
+	texts := []string{}
+	for _, receipt := range e.receipts {
+		if receipt.Detail.Subject == subject {
+			texts = append(texts, string(e.data[receipt.StartOffset:receipt.EndOffset]))
 		}
 	}
+	return texts
+}
+func (e dependencyReceiptEvidence) uniqueCount() int {
+	unique := map[string]bool{}
+	for _, receipt := range e.receipts {
+		unique[canonical(receipt)] = true
+	}
+	return len(unique)
+}
+func (t *testHarness) TestDependencySiteRanges() {
+	evidence := t.measuredDependencyEvidence(edgeSource1)
+	texts := evidence.designatedTexts("type:bytes.Buffer")
 	for _, want := range []string{"*bytes.Buffer", "bytes.Buffer", "b.Bytes"} {
-		t.check(sites[want], "missing designated range", want, sites)
+		assert.Contains(t.T, texts, want)
 	}
-	seen := map[string]bool{}
-	for _, r := range d.depReceipts {
-		k := canonical(r)
-		t.require(!(seen[k]), "duplicate dependency receipt")
-		seen[k] = true
-	}
+	require.Len(t.T, evidence.receipts, evidence.uniqueCount(), "duplicate dependency receipt")
 }
 func TestDependencySiteRanges(t *testing.T) { (&testHarness{T: t}).TestDependencySiteRanges() }
 
