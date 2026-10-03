@@ -245,3 +245,29 @@ func Parent(a int){outer(func()int{return inner(a)}())}
 func outer(f int){println(f)}
 func inner(a int)int{return a}
 `
+
+func (t *testHarness) TestRepeatedCaseIdentity() {
+	a := newEngine("", "", quiet())
+	id, raw := identity("long-function", "f.go", "fixture.F", "lines")
+	t.require(a.claimIdentity(id, raw) == nil, "initial identity")
+	t.require(a.claimIdentity(id, raw) == nil && len(a.identities) == 1, "repeated identity")
+}
+func TestRepeatedCaseIdentity(t *testing.T) { (&testHarness{T: t}).TestRepeatedCaseIdentity() }
+
+func (t *testHarness) TestConflictingCaseIdentity() {
+	a := newEngine("", "", quiet())
+	id, raw := identity("long-function", "f.go", "fixture.F", "lines")
+	a.identities[id] = "different raw identity"
+	err := a.claimIdentity(id, raw)
+	t.require(err != nil && a.identities[id] == "different raw identity", "identity collision must fail without replacing the previous entry", err)
+}
+func TestConflictingCaseIdentity(t *testing.T) { (&testHarness{T: t}).TestConflictingCaseIdentity() }
+
+func (t *testHarness) TestDisabledCaseSkipsIdentity() {
+	a := newEngine("", "", quiet())
+	got, err := a.newCase(nil, "long-function", "unused")
+	t.require(got == nil && err == nil && len(a.identities) == 0, "disabled case must skip declaration and identity work", got, err)
+}
+func TestDisabledCaseSkipsIdentity(t *testing.T) {
+	(&testHarness{T: t}).TestDisabledCaseSkipsIdentity()
+}

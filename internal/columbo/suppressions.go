@@ -60,14 +60,18 @@ func suppressionText(c *ast.Comment) string {
 	if !strings.HasPrefix(c.Text, "//") {
 		return ""
 	}
-	return strings.TrimLeft(strings.TrimPrefix(c.Text, "//"), " \t")
+	text := strings.TrimLeft(strings.TrimPrefix(c.Text, "//"), " \t")
+	if !strings.HasPrefix(text, "columbo:ignore") {
+		return ""
+	}
+	return text
 }
 func (s *suppressionScanner) comment(f *file, c *ast.Comment) error {
 	text := suppressionText(c)
-	if !strings.HasPrefix(text, "columbo:ignore") {
+	if text == "" {
 		return nil
 	}
-	d := &suppressionDirective{file: f, comment: c, owner: s.attached[c]}
+	d := s.directive(f, c)
 	if e := d.parse(text, s.engine.config); e != nil {
 		return e
 	}
@@ -77,8 +81,11 @@ func (s *suppressionScanner) comment(f *file, c *ast.Comment) error {
 	s.engine.applySuppression(d.record())
 	return nil
 }
+func (s *suppressionScanner) directive(f *file, c *ast.Comment) *suppressionDirective {
+	return &suppressionDirective{file: f, comment: c, owner: s.attached[c]}
+}
 func (d *suppressionDirective) invalid() error {
-	return fmt.Errorf("%s:%d: invalid columbo suppression", d.file.rel, d.file.tf.Line(d.comment.Pos()))
+	return fmt.Errorf("%s:%d: invalid columbo suppression", d.file.rel, d.file.line(d.comment.Pos()))
 }
 func (d *suppressionDirective) parse(text string, config Config) error {
 	m := directiveRE.FindStringSubmatch(text)
@@ -113,10 +120,10 @@ func (s *suppressionScanner) unique(d *suppressionDirective) error {
 	return nil
 }
 func (d *suppressionDirective) key() string {
-	return fmt.Sprintf("%s:%d:%s", d.file.rel, d.file.tf.Offset(d.owner.fn.Pos()), d.smell)
+	return fmt.Sprintf("%s:%d:%s", d.file.rel, d.owner.declReceipt().StartOffset, d.smell)
 }
 func (d *suppressionDirective) record() Suppression {
-	return Suppression{Smell: d.smell, Symbol: d.owner.symbol, File: d.file.rel, Line: d.file.tf.Line(d.comment.Pos()), Justification: d.justification}
+	return Suppression{Smell: d.smell, Symbol: d.owner.symbol, File: d.file.rel, Line: d.file.line(d.comment.Pos()), Justification: d.justification}
 }
 func (a *engine) applySuppression(s Suppression) {
 	for i := range a.report.Cases {
