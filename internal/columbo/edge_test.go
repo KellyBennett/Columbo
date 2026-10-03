@@ -9,7 +9,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -91,6 +90,24 @@ func (t *testHarness) TestDependencySiteRanges() {
 }
 func TestDependencySiteRanges(t *testing.T) { (&testHarness{T: t}).TestDependencySiteRanges() }
 
+// Complexity sites retain the physical operator and its measured contribution.
+type complexitySite struct {
+	file, text     string
+	value, nesting any
+}
+
+func complexitySites(c Case, data []byte) []complexitySite {
+	sites := []complexitySite{}
+	for _, receipt := range c.Receipts {
+		source, ok := receipt.(Source)
+		if !ok || source.Detail.Subject != "cognitive-complexity" {
+			continue
+		}
+		sites = append(sites, complexitySite{source.File, string(data[source.StartOffset:source.EndOffset]), source.Detail.Value, source.Detail.Nesting})
+	}
+	return sites
+}
+
 func (t *testHarness) TestComplexityReceipts() {
 	dir := t.fixture(edgeSource2)
 	c := quiet()
@@ -98,15 +115,7 @@ func (t *testHarness) TestComplexityReceipts() {
 	c.Counts["cognitive-complexity"] = 1
 	cc := t.one(t.investigate(dir, c), "high-cognitive-complexity")
 	t.reconcile(cc, "cognitive-complexity")
-	aggregated := false
-	for _, rr := range cc.Receipts {
-		if r, ok := rr.(Source); ok && r.Detail.Subject == "cognitive-complexity" {
-			if r.Detail.Value == 3 && r.Detail.Nesting == 0 && string(t.read(filepath.Join(dir, r.File))[r.StartOffset:r.EndOffset]) == "||" {
-				aggregated = true
-			}
-		}
-	}
-	t.require(aggregated, cc.Receipts)
+	assert.Contains(t.T, complexitySites(cc, []byte(edgeSource2)), complexitySite{"source.go", "||", 3, 0})
 }
 func TestComplexityReceipts(t *testing.T) { (&testHarness{T: t}).TestComplexityReceipts() }
 
@@ -140,13 +149,7 @@ func (t *testHarness) TestHistoryWarningGoldens() {
 	c.History = true
 	r := t.investigate(dir, c)
 	for _, format := range []string{"text", "json"} {
-		b, e := Serialize(r, format)
-		t.require(e == nil, e)
-		path := filepath.Join("testdata", "history-"+format+".golden")
-		if os.Getenv("UPDATE_GOLDEN") == "1" {
-			os.WriteFile(path, b, 0600)
-		}
-		t.requiref(bytes.Equal(t.read(path), b), "%s history golden", format)
+		t.golden(r, filepath.Join("testdata", "history-"+format+".golden"), format)
 	}
 }
 func TestHistoryWarningGoldens(t *testing.T) { (&testHarness{T: t}).TestHistoryWarningGoldens() }
