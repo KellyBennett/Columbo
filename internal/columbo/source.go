@@ -110,6 +110,7 @@ func (a *engine) packageConfig() *packages.Config {
 
 const packageLoadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps | packages.NeedExportFile | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedModule
 
+// columbo:ignore excessive-dependencies -- required Go parser API types in a single-call adapter; revisit during dogfooding audit
 func parsePhysicalFile(fs *token.FileSet, p string, b []byte) (*ast.File, error) {
 	return parser.ParseFile(fs, p, b, parser.ParseComments)
 }
@@ -656,29 +657,28 @@ func (a *engine) findCalls() {
 	}
 }
 func (a *engine) Analyze() (Report, error) {
-	for _, d := range a.declarations {
-		if !d.file.included {
-			continue
-		}
-		d.measure(a)
-		if e := a.ordinary(d); e != nil {
+	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.suppressions} {
+		if e := stage(); e != nil {
 			return Report{}, e
 		}
-	}
-	if e := a.clumps(); e != nil {
-		return Report{}, e
-	}
-	if e := a.cosmetic(); e != nil {
-		return Report{}, e
-	}
-	if e := a.suppressions(); e != nil {
-		return Report{}, e
 	}
 	if a.config.History {
 		a.history()
 	}
 	a.report.finish()
 	return a.report, nil
+}
+func (a *engine) inspectDeclarations() error {
+	for _, d := range a.declarations {
+		if !d.file.included {
+			continue
+		}
+		d.measure(a)
+		if e := a.ordinary(d); e != nil {
+			return e
+		}
+	}
+	return nil
 }
 func Analyze(dir string, patterns []string, c Config) (Report, error) {
 	a, e := load(dir, patterns, c)
