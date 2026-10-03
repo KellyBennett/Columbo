@@ -17,6 +17,8 @@ type callGraph struct {
 }
 
 func (a *engine) findCalls() {
+	a.calls = map[*ast.CallExpr]*declaration{}
+	a.callOwner = map[*ast.CallExpr]*declaration{}
 	graph := &callGraph{a, map[*declaration]int{}, map[*declaration]bool{}, map[*ast.Ident]bool{}, map[*declaration]*ast.CallExpr{}}
 	graph.collect()
 	graph.classify()

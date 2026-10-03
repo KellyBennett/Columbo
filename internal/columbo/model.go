@@ -382,3 +382,28 @@ func (s Source) withExpansion(trace *expansion) Source {
 	}
 	return s
 }
+
+// Case construction belongs to the report model; physical coordinates arrive
+// as an existing declaration receipt, preserving the same exclusive byte range.
+func emptyCase() *Case {
+	return &Case{Clues: []Clue{}, Clusters: []Cluster{}, Leads: []string{}, Avoid: []string{}, Receipts: []any{}, PolicyReviews: []PolicyReview{}}
+}
+func caseFromSource(smell, severity string, source Source) *Case {
+	c := emptyCase()
+	c.Smell, c.Verdict, c.Symbol = smell, strings.ToUpper(severity), source.Detail.Subject
+	c.File, c.StartLine, c.EndLine = source.File, source.StartLine, source.EndLine
+	c.Receipts = append(c.Receipts, source)
+	guidance(c)
+	c.addPolicyReview()
+	return c
+}
+func (c *Case) addPolicyReview() {
+	if c.Smell == "cosmetic-extraction" && policyStatus == "provisional" {
+		c.PolicyReviews = append(c.PolicyReviews, policy)
+	}
+}
+func (d Detail) withoutExpansion() Detail {
+	d.Expansion = []string{}
+	d.ExpansionSites = []Site{}
+	return d
+}

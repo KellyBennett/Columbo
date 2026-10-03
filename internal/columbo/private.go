@@ -18,6 +18,7 @@ type privateReferences struct {
 }
 
 func (a *engine) findPrivate() {
+	a.private = map[*types.TypeName]bool{}
 	index := &typeReferenceIndex{a, map[string]bool{}}
 	for _, f := range a.files {
 		index.references(f)

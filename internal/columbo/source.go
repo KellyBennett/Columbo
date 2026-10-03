@@ -87,20 +87,29 @@ func load(dir string, patterns []string, c Config) (*engine, error) {
 		return nil, e
 	}
 	a := newEngine(root, dir, c)
-	pkgs, e := a.loadPackages(patterns)
-	if e != nil {
+	if e := a.loadUniverse(patterns); e != nil {
 		return nil, e
 	}
-	if e = a.loadSources(pkgs); e != nil {
-		return nil, e
+	return a, nil
+}
+
+// Loading a universe establishes physical declarations before classifying their
+// type references and calls; no analysis runs on a partially loaded engine.
+func (a *engine) loadUniverse(patterns []string) error {
+	pkgs, err := a.loadPackages(patterns)
+	if err != nil {
+		return err
+	}
+	if err := a.loadSources(pkgs); err != nil {
+		return err
 	}
 	a.findPrivate()
 	a.findInterfaces(pkgs)
 	a.findCalls()
-	return a, nil
+	return nil
 }
 func newEngine(root, dir string, c Config) *engine {
-	return &engine{root: root, dir: dir, config: c, fset: token.NewFileSet(), objects: map[*types.Func]*declaration{}, calls: map[*ast.CallExpr]*declaration{}, callOwner: map[*ast.CallExpr]*declaration{}, private: map[*types.TypeName]bool{}, identities: map[string]string{}, report: emptyReport()}
+	return &engine{root: root, dir: dir, config: c, fset: token.NewFileSet(), identities: map[string]string{}, report: emptyReport()}
 }
 func emptyReport() Report {
 	return Report{Version: 1, Cases: []Case{}, Suppressions: []Suppression{}, Warnings: []Warning{}}
@@ -199,7 +208,7 @@ func (l *sourceLoader) verifyOriginals(original map[string]bool) error {
 	return nil
 }
 func (l *sourceLoader) physicalFile(p *packages.Package, f *ast.File, original map[string]bool) error {
-	path := filepath.Clean(l.engine.fset.PositionFor(f.Pos(), false).Filename)
+	path := l.engine.physicalPath(f)
 	if !original[path] || l.seen[path] {
 		return nil
 	}
@@ -218,18 +227,32 @@ func (a *engine) relativeSource(path string) (string, error) {
 	}
 	return filepath.ToSlash(rel), nil
 }
-func (a *engine) readSource(p *packages.Package, f *ast.File, path string) (*file, error) {
-	rel, e := a.relativeSource(path)
-	if e != nil {
-		return nil, e
+func (a *engine) physicalPath(node ast.Node) string {
+	return filepath.Clean(a.fset.PositionFor(node.Pos(), false).Filename)
+}
+func (a *engine) readSource(p *packages.Package, astFile *ast.File, path string) (*file, error) {
+	rel, err := a.relativeSource(path)
+	if err != nil {
+		return nil, err
 	}
-	b, e := os.ReadFile(path)
-	if e != nil {
-		return nil, e
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
-	sf := &file{fset: a.fset, path: path, rel: rel, data: b, ast: f, tf: a.fset.File(f.Pos()), pkg: p, included: !generated(b)}
-	sf.scan()
-	return sf, sf.exclude(a.config.Exclude)
+	source := a.sourceFile(p, astFile, path, rel)
+	return source, source.initialize(data, a.config.Exclude)
+}
+func (a *engine) sourceFile(p *packages.Package, astFile *ast.File, path, rel string) *file {
+	source := &file{fset: a.fset, ast: astFile, path: path, rel: rel, pkg: p}
+	source.tf = source.tokenFile()
+	return source
+}
+func (f *file) tokenFile() *token.File { return f.fset.File(f.ast.Pos()) }
+func (f *file) initialize(data []byte, excludes []string) error {
+	f.data = data
+	f.included = !generated(data)
+	f.scan()
+	return f.exclude(excludes)
 }
 func (f *file) exclude(patterns []string) error {
 	for _, p := range patterns {
@@ -279,10 +302,17 @@ func (a *engine) addDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]i
 		return err
 	}
 	a.declarations = append(a.declarations, d)
-	if d.obj != nil {
-		a.objects[d.obj.Origin()] = d
-	}
+	a.indexDeclaration(d)
 	return nil
+}
+func (a *engine) indexDeclaration(d *declaration) {
+	if d.obj == nil {
+		return
+	}
+	if a.objects == nil {
+		a.objects = map[*types.Func]*declaration{}
+	}
+	a.objects[d.obj.Origin()] = d
 }
 func (f *file) functionObject(name *ast.Ident) *types.Func {
 	obj, _ := f.typeInfo().Defs[name].(*types.Func)
@@ -410,8 +440,7 @@ func (f *file) scan() {
 	}
 }
 func (f *file) receipt(kind string, start, end token.Pos, detail Detail) Source {
-	detail.Expansion = []string{}
-	detail.ExpansionSites = []Site{}
+	detail = detail.withoutExpansion()
 	p := f.tf.PositionFor(start, false)
 	q := f.tf.PositionFor(end, false)
 	if end > start {
@@ -420,8 +449,12 @@ func (f *file) receipt(kind string, start, end token.Pos, detail Detail) Source 
 	return Source{kind, f.rel, p.Line, q.Line, f.tf.Offset(start), f.tf.Offset(end), detail}
 }
 func (d *declaration) variable(v *types.Var) string {
-	return fmt.Sprintf("%s:%s@%d", d.symbol, v.Name(), d.file.fset.PositionFor(v.Pos(), false).Offset)
+	return d.file.variableIdentity(d.symbol, v)
 }
+func (f *file) variableIdentity(symbol string, v *types.Var) string {
+	return fmt.Sprintf("%s:%s@%d", symbol, v.Name(), f.fset.PositionFor(v.Pos(), false).Offset)
+}
+func (f *file) line(pos token.Pos) int { return f.tf.Line(pos) }
 func (d *declaration) declReceipt() Source {
 	return d.file.receipt("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
@@ -431,16 +464,19 @@ func (a *engine) newCase(d *declaration, smell, key string) (*Case, error) {
 		return nil, nil
 	}
 	id, raw := identity(smell, d.file.rel, d.symbol, key)
+	if err := a.claimIdentity(id, raw); err != nil {
+		return nil, err
+	}
+	c := caseFromSource(smell, severity, d.declReceipt())
+	c.ID = id
+	return c, nil
+}
+func (a *engine) claimIdentity(id, raw string) error {
 	if prev, ok := a.identities[id]; ok && prev != raw {
-		return nil, fmt.Errorf("case identity collision: %s", id)
+		return fmt.Errorf("case identity collision: %s", id)
 	}
 	a.identities[id] = raw
-	c := &Case{ID: id, Smell: smell, Verdict: strings.ToUpper(severity), Symbol: d.symbol, File: d.file.rel, StartLine: d.file.tf.Line(d.fn.Pos()), EndLine: d.file.tf.Line(d.fn.End() - 1), Clues: []Clue{}, Clusters: []Cluster{}, Leads: []string{}, Avoid: []string{}, Receipts: []any{d.declReceipt()}, PolicyReviews: []PolicyReview{}}
-	guidance(c)
-	if smell == "cosmetic-extraction" && policyStatus == "provisional" {
-		c.PolicyReviews = append(c.PolicyReviews, policy)
-	}
-	return c, nil
+	return nil
 }
 func appendSources(c *Case, ss []Source) {
 	for _, s := range ss {
@@ -543,10 +579,17 @@ func (f *file) lineReceipt(line int, kind string) Source {
 	return r
 }
 func (p parameter) detail(sig *types.Signature) Detail {
-	return Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, sig), Value: max(1, len(p.field.Names)), Nesting: nil}
+	return Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, sig), Value: p.arity(), Nesting: nil}
 }
 func (d *declaration) parameterReceipt(p parameter) Source {
-	return d.file.receipt("parameter", p.field.Pos(), p.field.End(), p.detail(d.signature))
+	return p.receipt(d.file, d.signature)
+}
+
+func (p parameter) arity() int                          { return max(1, len(p.field.Names)) }
+func (p parameter) sourceRange() (token.Pos, token.Pos) { return p.field.Pos(), p.field.End() }
+func (p parameter) receipt(f *file, signature *types.Signature) Source {
+	start, end := p.sourceRange()
+	return f.receipt("parameter", start, end, p.detail(signature))
 }
 
 func (a *engine) privateType(obj *types.TypeName, path string) bool {
