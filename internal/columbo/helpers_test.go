@@ -160,13 +160,7 @@ func (t *testHarness) TestCosmeticSeverityAndPolicy() {
 	got, _ := identity(cc.Smell, cc.File, cc.Symbol, "")
 	t.require(got == id, "review changed identity")
 	for _, format := range []string{"text", "json"} {
-		b, _ := Serialize(r, format)
-		path := filepath.Join("testdata", "suppressed-"+format+".golden")
-		if os.Getenv("UPDATE_GOLDEN") == "1" {
-			os.WriteFile(path, b, 0600)
-		}
-		want, e := os.ReadFile(path)
-		t.requiref(e == nil && string(want) == string(b), "suppressed %s golden: %v", format, e)
+		t.golden(r, filepath.Join("testdata", "suppressed-"+format+".golden"), format)
 	}
 	c.Severity["cosmetic-extraction"] = "off"
 	r = t.investigate(dir, c)
