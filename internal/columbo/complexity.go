@@ -5,6 +5,7 @@ package columbo
 import (
 	"go/ast"
 	"go/token"
+	"reflect"
 )
 
 type diagnostic struct {
@@ -95,154 +96,119 @@ func (v *complexityVisitor) isCalculated(e ast.Expr) bool {
 	return v.calculatedExprs[e]
 }
 
+// Each specialized handler owns its node's traversal; other nodes use ast.Walk.
+type complexityHandler func(*complexityVisitor, ast.Node) ast.Visitor
+
+func handlerFor[T ast.Node](visit func(*complexityVisitor, T) ast.Visitor) complexityHandler {
+	return func(v *complexityVisitor, n ast.Node) ast.Visitor { return visit(v, n.(T)) }
+}
+
+var complexityHandlers = map[reflect.Type]complexityHandler{
+	reflect.TypeOf((*ast.IfStmt)(nil)):         handlerFor((*complexityVisitor).visitIfStmt),
+	reflect.TypeOf((*ast.SwitchStmt)(nil)):     handlerFor((*complexityVisitor).visitSwitchStmt),
+	reflect.TypeOf((*ast.TypeSwitchStmt)(nil)): handlerFor((*complexityVisitor).visitTypeSwitchStmt),
+	reflect.TypeOf((*ast.SelectStmt)(nil)):     handlerFor((*complexityVisitor).visitSelectStmt),
+	reflect.TypeOf((*ast.ForStmt)(nil)):        handlerFor((*complexityVisitor).visitForStmt),
+	reflect.TypeOf((*ast.RangeStmt)(nil)):      handlerFor((*complexityVisitor).visitRangeStmt),
+	reflect.TypeOf((*ast.FuncLit)(nil)):        handlerFor((*complexityVisitor).visitFuncLit),
+	reflect.TypeOf((*ast.BranchStmt)(nil)):     handlerFor((*complexityVisitor).visitBranchStmt),
+	reflect.TypeOf((*ast.BinaryExpr)(nil)):     handlerFor((*complexityVisitor).visitBinaryExpr),
+	reflect.TypeOf((*ast.CallExpr)(nil)):       handlerFor((*complexityVisitor).visitCallExpr),
+}
+
 // Visit implements the ast.Visitor interface.
 func (v *complexityVisitor) Visit(n ast.Node) ast.Visitor {
-	switch n := n.(type) {
-	case *ast.IfStmt:
-		return v.visitIfStmt(n)
-	case *ast.SwitchStmt:
-		return v.visitSwitchStmt(n)
-	case *ast.TypeSwitchStmt:
-		return v.visitTypeSwitchStmt(n)
-	case *ast.SelectStmt:
-		return v.visitSelectStmt(n)
-	case *ast.ForStmt:
-		return v.visitForStmt(n)
-	case *ast.RangeStmt:
-		return v.visitRangeStmt(n)
-	case *ast.FuncLit:
-		return v.visitFuncLit(n)
-	case *ast.BranchStmt:
-		return v.visitBranchStmt(n)
-	case *ast.BinaryExpr:
-		return v.visitBinaryExpr(n)
-	case *ast.CallExpr:
-		return v.visitCallExpr(n)
+	if visit := complexityHandlers[reflect.TypeOf(n)]; visit != nil {
+		return visit(v, n)
 	}
-
 	return v
+}
+
+func (v *complexityVisitor) walkOptional(n ast.Node) {
+	if n != nil {
+		v.walk(n)
+	}
+}
+func (v *complexityVisitor) walkNested(n ast.Node) {
+	v.incNesting()
+	v.walk(n)
+	v.decNesting()
 }
 
 func (v *complexityVisitor) visitIfStmt(n *ast.IfStmt) ast.Visitor {
 	v.incIfComplexity(n, "if", n.Pos())
-
-	if n := n.Init; n != nil {
-		ast.Walk(v, n)
-	}
-
-	ast.Walk(v, n.Cond)
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
-	if _, ok := n.Else.(*ast.BlockStmt); ok {
-		v.incComplexity("else", n.Else.Pos())
-
-		ast.Walk(v, n.Else)
-	} else if _, ok := n.Else.(*ast.IfStmt); ok {
-		v.markAsElseNode(n.Else)
-		ast.Walk(v, n.Else)
-	}
-
+	v.ifCondition(n)
+	v.ifBranches(n)
 	return nil
 }
-
+func (v *complexityVisitor) ifBranches(n *ast.IfStmt) {
+	v.walkNested(n.Body)
+	v.walkElse(n.Else)
+}
+func (v *complexityVisitor) ifCondition(n *ast.IfStmt) {
+	v.walkOptional(n.Init)
+	v.walk(n.Cond)
+}
+func (v *complexityVisitor) walkElse(n ast.Stmt) {
+	switch n.(type) {
+	case *ast.BlockStmt:
+		v.incComplexity("else", n.Pos())
+		v.walk(n)
+	case *ast.IfStmt:
+		v.markAsElseNode(n)
+		v.walk(n)
+	}
+}
 func (v *complexityVisitor) visitSwitchStmt(n *ast.SwitchStmt) ast.Visitor {
 	v.nestIncComplexity("switch", n.Pos())
-
-	if n := n.Init; n != nil {
-		ast.Walk(v, n)
-	}
-
-	if n := n.Tag; n != nil {
-		ast.Walk(v, n)
-	}
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.switchHeader(n)
+	v.walkNested(n.Body)
 	return nil
 }
-
+func (v *complexityVisitor) switchHeader(n *ast.SwitchStmt) {
+	v.walkOptional(n.Init)
+	v.walkOptional(n.Tag)
+}
 func (v *complexityVisitor) visitTypeSwitchStmt(n *ast.TypeSwitchStmt) ast.Visitor {
 	v.nestIncComplexity("switch", n.Pos())
-
-	if n := n.Init; n != nil {
-		ast.Walk(v, n)
-	}
-
-	if n := n.Assign; n != nil {
-		ast.Walk(v, n)
-	}
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.typeSwitchHeader(n)
+	v.walkNested(n.Body)
 	return nil
 }
-
+func (v *complexityVisitor) typeSwitchHeader(n *ast.TypeSwitchStmt) {
+	v.walkOptional(n.Init)
+	v.walkOptional(n.Assign)
+}
 func (v *complexityVisitor) visitSelectStmt(n *ast.SelectStmt) ast.Visitor {
 	v.nestIncComplexity("select", n.Pos())
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.walkNested(n.Body)
 	return nil
 }
-
 func (v *complexityVisitor) visitForStmt(n *ast.ForStmt) ast.Visitor {
 	v.nestIncComplexity("for", n.Pos())
-
-	if n := n.Init; n != nil {
-		ast.Walk(v, n)
-	}
-
-	if n := n.Cond; n != nil {
-		ast.Walk(v, n)
-	}
-
-	if n := n.Post; n != nil {
-		ast.Walk(v, n)
-	}
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.forHeader(n)
+	v.walkNested(n.Body)
 	return nil
 }
-
+func (v *complexityVisitor) forHeader(n *ast.ForStmt) {
+	v.walkOptional(n.Init)
+	v.walkOptional(n.Cond)
+	v.walkOptional(n.Post)
+}
 func (v *complexityVisitor) visitRangeStmt(n *ast.RangeStmt) ast.Visitor {
 	v.nestIncComplexity("for", n.Pos())
-
-	if n := n.Key; n != nil {
-		ast.Walk(v, n)
-	}
-
-	if n := n.Value; n != nil {
-		ast.Walk(v, n)
-	}
-
-	ast.Walk(v, n.X)
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.rangeHeader(n)
+	v.walkNested(n.Body)
 	return nil
 }
-
+func (v *complexityVisitor) rangeHeader(n *ast.RangeStmt) {
+	v.walkOptional(n.Key)
+	v.walkOptional(n.Value)
+	v.walk(n.X)
+}
 func (v *complexityVisitor) visitFuncLit(n *ast.FuncLit) ast.Visitor {
-	ast.Walk(v, n.Type)
-
-	v.incNesting()
-	ast.Walk(v, n.Body)
-	v.decNesting()
-
+	v.walk(n.Type)
+	v.walkNested(n.Body)
 	return nil
 }
 
@@ -274,15 +240,17 @@ func (v *complexityVisitor) visitCallExpr(n *ast.CallExpr) ast.Visitor {
 	if v.hook != nil && v.hook(v, n) {
 		return nil
 	}
-	if callIdent, ok := n.Fun.(*ast.Ident); ok {
-		obj, name := callIdent.Obj, callIdent.Name
-		if obj == v.name.Obj && name == v.name.Name {
-			// called by same function directly (direct recursion)
-			v.incComplexity(name, n.Pos())
-		}
+	if name, recursive := v.recursiveName(n.Fun); recursive {
+		v.incComplexity(name, n.Pos())
 	}
-
 	return v
+}
+func (v *complexityVisitor) recursiveName(expr ast.Expr) (string, bool) {
+	ident, ok := expr.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	return ident.Name, ident.Obj == v.name.Obj && ident.Name == v.name.Name
 }
 
 func (v *complexityVisitor) collectBinaryOps(exp ast.Expr) []token.Token {

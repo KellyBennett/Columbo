@@ -181,22 +181,47 @@ func (t *testHarness) TestPhysicalLines() {
 }
 func TestPhysicalLines(t *testing.T) { (&testHarness{T: t}).TestPhysicalLines() }
 
-func (t *testHarness) TestPinnedComplexity() {
-	src := acceptanceSource0
-	fs := token.NewFileSet()
-	f, e := parser.ParseFile(fs, "source.go", src, parser.ParseComments)
-	t.require(e == nil, e)
-	d := f.Decls[0].(*ast.FuncDecl)
-	v := &complexityVisitor{name: d.Name, diagnosticsEnabled: true}
-	ast.Walk(v, d)
-	expected := gocognit.ScanComplexity(d, true)
-	t.require(v.complexity == expected.Complexity && len(v.diagnostics) == len(expected.Diagnostics), "pinned visitor mismatch")
-	for i, d := range expected.Diagnostics {
-		got := v.diagnostics[i]
-		t.require(got.Inc == d.Inc && got.Nesting == d.Nesting && got.Pos == d.Pos && got.Text == d.Text, "pinned diagnostic mismatch", i)
-	}
+// Exercise every specialized visitor and optional header, including expressions
+// whose nested function literals expose traversal order and nesting mistakes.
+var complexitySources = []string{
+	acceptanceSource0,
+	`package p; func F() { if x := F(); x { F() } else if a && (b || c) { F() } else { if d { F() } } }`,
+	`package p; func F() { switch x := func() int { if a { return 1 }; return 0 }(); x { case 1: if b { F() } }; switch { case a: F() } }`,
+	`package p; func F() { switch x := func() any { if a { return nil }; return b }(); y := x.(type) { case int: if b { F() } }; switch x.(type) { default: F() } }`,
+	`package p; func F() { select { case x := <-func() chan int { if a { F() }; return c }(): if x > 0 { F() }; default: F() } }`,
+	`package p; func F() { Loop: for i := func() int { if a { F() }; return 0 }(); a && b; func() { if c { F() } }() { if d { continue Loop }; break Loop }; for { break }; goto End; End: }`,
+	`package p; func F() { for k, v = range func() []int { if a { F() }; return xs }() { if b { F() } }; for range xs { F() } }`,
+	`package p; func F() { _ = func() { if a && b || c && d { F() } }; obj.F(); { F := func() {}; F() }; F() }`,
+}
 
-	t.requiref(v.complexity == 17, "pinned fixture score: %d", v.complexity)
+func (t *testHarness) TestPinnedComplexity() {
+	for i, source := range complexitySources {
+		score := t.pinnedComplexity(source)
+		if i == 0 {
+			t.requiref(score == 17, "pinned fixture score: %d", score)
+		}
+	}
+}
+func (t *testHarness) complexityDeclaration(source string) *ast.FuncDecl {
+	f, err := parser.ParseFile(token.NewFileSet(), "source.go", source, parser.ParseComments)
+	t.require(err == nil, err)
+	return f.Decls[0].(*ast.FuncDecl)
+}
+func (t *testHarness) pinnedComplexity(source string) int {
+	fn := t.complexityDeclaration(source)
+	got := scanComplexity(fn)
+	expected := gocognit.ScanComplexity(fn, true)
+	t.require(got.complexity == expected.Complexity && len(got.diagnostics) == len(expected.Diagnostics), "pinned visitor mismatch", source)
+	t.pinnedDiagnostics(got.diagnostics, expected)
+	return got.complexity
+}
+func (t *testHarness) pinnedDiagnostics(got []diagnostic, expected gocognit.ScanResult) {
+	for i, d := range expected.Diagnostics {
+		t.complexityDiagnostic(got[i], diagnostic{d.Inc, d.Nesting, d.Text, d.Pos}, i)
+	}
+}
+func (t *testHarness) complexityDiagnostic(got diagnostic, expected diagnostic, index int) {
+	t.require(got.Inc == expected.Inc && got.Nesting == expected.Nesting && got.Pos == expected.Pos && got.Text == expected.Text, "pinned diagnostic mismatch", index)
 }
 func TestPinnedComplexity(t *testing.T) { (&testHarness{T: t}).TestPinnedComplexity() }
 
@@ -380,3 +405,43 @@ func (t *testHarness) checkf(ok bool, format string, args ...any) {
 		t.Errorf(format, args...)
 	}
 }
+
+// Positions are byte offsets plus the token.File base (1), including the
+// zero-width semicolons Go inserts at newlines and UTF-8 literal bytes.
+var sourceTokenBoundaries = []lexToken{
+	{1, 8, token.PACKAGE}, {9, 10, token.IDENT}, {10, 10, token.SEMICOLON},
+	{11, 18, token.COMMENT}, {19, 22, token.VAR}, {23, 24, token.IDENT},
+	{25, 26, token.ASSIGN}, {27, 31, token.STRING}, {31, 31, token.SEMICOLON},
+}
+
+func (t *testHarness) TestSourceTokenBoundaries() {
+	got := t.sourceTokens("package p\n// note\nvar X = \"é\"\n")
+	t.require(reflect.DeepEqual(got, sourceTokenBoundaries), "physical token boundaries", got)
+}
+func (t *testHarness) sourceTokens(source string) []lexToken {
+	tf := token.NewFileSet().AddFile("source.go", -1, len(source))
+	f := &file{tf: tf, data: []byte(source)}
+	f.scan()
+	return f.tokens
+}
+func TestSourceTokenBoundaries(t *testing.T) { (&testHarness{T: t}).TestSourceTokenBoundaries() }
+
+var leadingGeneratedSources = []struct {
+	source string
+	want   bool
+}{
+	{"// license\r\n// Code generated tool DO NOT EDIT.\r\npackage p", true},
+	{"\ufeff\n// Code generated tool DO NOT EDIT.\npackage p", true},
+	{"/* Code generated tool DO NOT EDIT. */\npackage p", false},
+	{"// Code generated tool DO NOT EDIT.x\npackage p", false},
+	{"package p\n// Code generated tool DO NOT EDIT.\n", false},
+	{"// ordinary comment\n", false},
+	{"", false},
+}
+
+func (t *testHarness) TestLeadingGeneratedSources() {
+	for _, x := range leadingGeneratedSources {
+		t.require(generated([]byte(x.source)) == x.want, "leading generated marker", x)
+	}
+}
+func TestLeadingGeneratedSources(t *testing.T) { (&testHarness{T: t}).TestLeadingGeneratedSources() }
