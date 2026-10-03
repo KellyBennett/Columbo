@@ -1,0 +1,19 @@
+name: Public release validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-gate:
+    runs-on: ubuntu-24.04
+    env:
+      GOTOOLCHAIN: local
+      GOTELEMETRY: 'off'
+      GOFLAGS: '-buildvcs=false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+      - run: go test ./...
+      - run: go run ./cmd/releasecheck

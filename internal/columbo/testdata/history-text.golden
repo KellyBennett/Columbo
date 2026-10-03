@@ -1,0 +1,25 @@
+CASE C-89406fe185 — fixture.F
+VERDICT
+  FAIL
+SMELL
+  long-parameter-list
+CLUES
+  parameters fixture.F: 5 (limit > 4)
+WHY THIS MATTERS
+  Many parameters can obscure which inputs belong together.
+DIAGNOSIS
+  fixture.F exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities.
+LEADS
+  → Examine whether inputs form a cohesive domain object.
+  → Separate responsibilities that require different inputs.
+AVOID
+  ✗ Bundling unrelated inputs into an opaque bag solely to reduce the count.
+RECEIPTS
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"fixture.F","value":null},"end_line":2,"end_offset":39,"file":"source.go","kind":"declaration","start_line":2,"start_offset":16}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"0:int","value":5},"end_line":2,"end_offset":36,"file":"source.go","kind":"parameter","start_line":2,"start_offset":23}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"1:int","value":5},"end_line":2,"end_offset":36,"file":"source.go","kind":"parameter","start_line":2,"start_offset":23}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"2:int","value":5},"end_line":2,"end_offset":36,"file":"source.go","kind":"parameter","start_line":2,"start_offset":23}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"3:int","value":5},"end_line":2,"end_offset":36,"file":"source.go","kind":"parameter","start_line":2,"start_offset":23}
+  {"detail":{"expansion":[],"expansion_sites":[],"nesting":null,"subject":"4:int","value":5},"end_line":2,"end_offset":36,"file":"source.go","kind":"parameter","start_line":2,"start_offset":23}
+
+Columbo: 1 failed, 0 warned, 0 suppressed
