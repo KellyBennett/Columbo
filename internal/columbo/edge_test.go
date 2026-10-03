@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go/ast"
 	"go/token"
 	"go/types"
-	"gotest.tools/v3/assert"
-	is "gotest.tools/v3/assert/cmp"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -60,7 +60,7 @@ func receiptEvidence(d *declaration) dependencyReceiptEvidence {
 func (t *testHarness) measuredDependencyEvidence(source string) dependencyReceiptEvidence {
 	t.Helper()
 	engine, err := load(t.fixture(source), []string{"./..."}, quiet())
-	assert.NilError(t.T, err)
+	require.NoError(t.T, err)
 	declaration := engine.declarations[0]
 	declaration.measure(engine)
 	return receiptEvidence(declaration)
@@ -85,9 +85,9 @@ func (t *testHarness) TestDependencySiteRanges() {
 	evidence := t.measuredDependencyEvidence(edgeSource1)
 	texts := evidence.designatedTexts("type:bytes.Buffer")
 	for _, want := range []string{"*bytes.Buffer", "bytes.Buffer", "b.Bytes"} {
-		assert.Check(t.T, is.Contains(texts, want))
+		assert.Contains(t.T, texts, want)
 	}
-	assert.Assert(t.T, is.Len(evidence.receipts, evidence.uniqueCount()), "duplicate dependency receipt")
+	require.Len(t.T, evidence.receipts, evidence.uniqueCount(), "duplicate dependency receipt")
 }
 func TestDependencySiteRanges(t *testing.T) { (&testHarness{T: t}).TestDependencySiteRanges() }
 
