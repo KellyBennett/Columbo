@@ -11,10 +11,9 @@ func TestSQLiteComparisonNullAlternatives(t *testing.T) {
 	for _, comparison := range comparisons {
 		t.Run(comparison.Kind, func(t *testing.T) {
 			h := newSQLiteHarness(t)
-			h.writeEmpty()
 			report := sqliteTestReport()
 			report.Cases[0].Clues = []Clue{comparison}
-			h.preserved(report)
+			h.rejectedFresh(report)
 		})
 	}
 }
