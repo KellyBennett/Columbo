@@ -25,7 +25,7 @@ func stableValue(d *declaration, expr ast.Expr) (*types.Var, string, bool) {
 	return resolver.resolve(expr)
 }
 func valueBase(expr ast.Expr) ast.Expr {
-	expr = unparen(expr)
+	expr = ast.Unparen(expr)
 	switch node := expr.(type) {
 	case *ast.StarExpr:
 		return valueBase(node.X)

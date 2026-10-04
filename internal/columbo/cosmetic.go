@@ -541,7 +541,7 @@ func (d *declaration) forwardingEvidence(call *ast.CallExpr) []Source {
 	return out
 }
 func (d *declaration) forwardedEvidence(arg ast.Expr) (Source, bool) {
-	id, ok := unparen(arg).(*ast.Ident)
+	id, ok := ast.Unparen(arg).(*ast.Ident)
 	if !ok {
 		return Source{}, false
 	}
