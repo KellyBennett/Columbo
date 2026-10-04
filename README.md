@@ -35,6 +35,9 @@ Use `.columbo.yml` to adjust thresholds and choose which smells warn, fail, or s
 
 In CI, `0` means no failing cases, `1` means there's a case to solve, and `2` means something prevented the investigation.
 
+For deeper JSON investigations, use the [reusable jq recipes](docs/jq-recipes.md)
+to select cases, inspect receipts, and review provisional policy evidence.
+
 Curious about the full case file? See [SPEC.md](SPEC.md).
 
 ## Development

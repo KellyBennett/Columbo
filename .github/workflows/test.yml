@@ -24,6 +24,8 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/columbo
+      - name: Test jq investigation recipes
+        run: bash scripts/test-jq-recipes.sh
 
   columbo:
     name: Columbo self-check
