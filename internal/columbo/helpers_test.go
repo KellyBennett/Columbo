@@ -34,20 +34,9 @@ func cosmeticConfig() Config {
 	return c
 }
 func (t *testHarness) TestClusterBoundaries() {
-	for _, x := range []struct {
-		name, body string
-		want       bool
-	}{{"ordinary", "one(a,b);two(a,b)", true}, {"assignments", "one(a,b);x:=1;_ = x;two(a,b)", true}, {"opposite-if", "if a>0 {one(a,b)} else {two(a,b)}", false}, {"loop-boundary", "one(a,b);for a>0 {two(a,b)}", false}, {"return-boundary", "one(a,b);return;two(a,b)", false}, {"go-boundary", "go one(a,b);two(a,b)", false}, {"defer-boundary", "defer one(a,b);two(a,b)", false}, {"literal-cluster-exclusion", "_ = func(){one(a,b);two(a,b)}", false}, {"builtin-exception", "one(a,b);println(a);two(a,b)", true}} {
-		t.Run(x.name, func(raw *testing.T) {
-			t := &testHarness{T: raw}
-			dir := t.fixture("package fixture\nfunc Parent(a,b int){" + x.body + "}\n" + helpers)
-			r := t.investigate(dir, cosmeticConfig())
-			t.require((len(r.Cases) > 0) == x.want, r)
-			if len(r.Cases) > 0 {
-				c := t.one(r, "cosmetic-extraction")
-				t.reconcile(c, "expanded-lines")
-				t.reconcile(c, "expanded-complexity")
-			}
+	for _, scenario := range clusterBoundaryCases {
+		t.Run(scenario.name, func(raw *testing.T) {
+			(&testHarness{T: raw}).checkClusterBoundary(scenario)
 		})
 	}
 }
@@ -86,14 +75,7 @@ func (t *testHarness) TestReachableClusterOwnership() {
 	r := t.investigate(dir, cosmeticConfig())
 	t.require(len(r.Cases) == 2, r)
 	for _, c := range r.Cases {
-		t.require(len(c.Clusters) == 1 && c.Clusters[0].Owner == "fixture.middle", c)
-		for _, q := range c.Clues {
-			if q.Kind == "parent-input-set" {
-				for _, s := range q.Value.([]string) {
-					t.require(strings.HasPrefix(s, "fixture.middle:"), q)
-				}
-			}
-		}
+		t.requireOwnedCluster(c, "fixture.middle")
 	}
 }
 func TestReachableClusterOwnership(t *testing.T) {
@@ -101,7 +83,7 @@ func TestReachableClusterOwnership(t *testing.T) {
 }
 
 func (t *testHarness) TestClusterJSONOrder() {
-	src := "package fixture\nfunc Parent(a,b int){one(a,b);two(a,b);if a>0{};three(a,b);four(a,b)}\n" + helpers + strings.ReplaceAll(strings.ReplaceAll(helpers, "one", "three"), "two", "four")
+	src := orderedClusterSource()
 	dir := t.fixture(src)
 	c := t.one(t.investigate(dir, cosmeticConfig()), "cosmetic-extraction")
 	t.require(len(c.Clusters) == 2, c)
