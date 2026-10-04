@@ -5,8 +5,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go/ast"
-	"go/token"
-	"go/types"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -185,9 +183,10 @@ func (t *testHarness) TestExpansionChildCopies() {
 func TestExpansionChildCopies(t *testing.T) { (&testHarness{T: t}).TestExpansionChildCopies() }
 
 func (t *testHarness) TestCanonicalTypeMatchesGoFormatting() {
-	sig := types.NewSignatureType(nil, nil, nil, types.NewTuple(types.NewVar(token.NoPos, nil, "ignored", types.NewSlice(types.Typ[types.Byte]))), types.NewTuple(types.NewVar(token.NoPos, nil, "ignored", types.Typ[types.Rune])), false)
+	value, err := evaluatedType("func([]byte) rune")
+	t.require(err == nil, err)
 	want := "func([]uint8) int32"
-	got := canonicalType(sig, nil)
+	got := canonicalType(value, nil)
 	t.requiref(got == want, "%s != %s", got, want)
 }
 func TestCanonicalTypeMatchesGoFormatting(t *testing.T) {

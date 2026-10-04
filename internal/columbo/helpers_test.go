@@ -1,7 +1,6 @@
 package columbo
 
 import (
-	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go/ast"
@@ -127,17 +126,11 @@ func (t *testHarness) TestCosmeticSeverityAndPolicy() {
 	c.Severity["cosmetic-extraction"] = "warn"
 	r := t.investigate(dir, c)
 	cc := t.one(r, "cosmetic-extraction")
-	t.require(cc.Verdict == "WARN" && cc.Suppressed && len(cc.PolicyReviews) == 1 && cc.PolicyReviews[0] == policy, cc)
-	id := cc.ID
-	cc.PolicyReviews = []PolicyReview{}
-	got, _ := identity(cc.Smell, cc.File, cc.Symbol, "")
-	t.require(got == id, "review changed identity")
+	t.requireCosmeticPolicy(cc)
 	for _, format := range []string{"text", "json"} {
 		t.golden(r, filepath.Join("testdata", "suppressed-"+format+".golden"), format)
 	}
-	c.Severity["cosmetic-extraction"] = "off"
-	r = t.investigate(dir, c)
-	t.require(len(r.Cases) == 0 && len(r.Warnings) == 1, r)
+	t.requireDisabledCosmeticSuppression(dir, c)
 }
 func TestCosmeticSeverityAndPolicy(t *testing.T) {
 	(&testHarness{T: t}).TestCosmeticSeverityAndPolicy()
@@ -145,24 +138,15 @@ func TestCosmeticSeverityAndPolicy(t *testing.T) {
 
 func (t *testHarness) TestIdentitiesAndSchema() {
 	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
-	c := quiet()
-	c.Severity["long-parameter-list"] = "fail"
+	c := longParameterConfig()
 	r := t.investigate(dir, c)
 	id := r.Cases[0].ID
 	t.write(dir, "source.go", "package fixture\n\n// shift\nfunc F(a,b,c,d,e int){}\n")
 	c.Severity["long-parameter-list"] = "warn"
 	r = t.investigate(dir, c)
 	t.require(r.Cases[0].ID == id, "identity moved")
-	b, e := Serialize(r, "json")
-	t.require(e == nil, e)
-	var obj map[string]json.RawMessage
-	e = json.Unmarshal(b, &obj)
-	t.require(e == nil, e)
-	t.require(len(obj) == 5, obj)
-	t.require(!(strings.Contains(string(b), `"clusters":null`)) && !(strings.Contains(string(b), `"policy_reviews":null`)), string(b))
-	id1, _ := identity("x", "a|b", "c", "")
-	id2, _ := identity("x", "a", "b|c", "")
-	t.require(id1 != id2, "identity delimiter collision")
+	t.requireReportSchema(r)
+	t.requireIdentityDelimiterBoundaries()
 }
 func TestIdentitiesAndSchema(t *testing.T) { (&testHarness{T: t}).TestIdentitiesAndSchema() }
 
@@ -181,27 +165,8 @@ func TestFeatureEnvyValuesAndSelectors(t *testing.T) {
 }
 
 func (t *testHarness) TestDependencyIdentitiesAndExemptions() {
-	dir := t.fixture(helpersSource1)
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	d.measure(a)
-	for _, want := range []string{"type:fixture.Interface", "type:bytes.Buffer", "type:fixture.Private", "type:fixture.Shared"} {
-		t.checkf(d.deps[want], "missing %s in %v", want, d.deps)
-	}
-	t.write(dir, "source.go", strings.ReplaceAll(string(t.read(filepath.Join(dir, "source.go"))), "Private", "private"))
-	a, e = load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d = a.declarations[0]
-	d.measure(a)
-	t.require(!(d.deps["type:fixture.private"]), d.deps)
-	t.write(dir, "other.go", "package fixture\nvar P private\n")
-	a, e = load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	for _, d := range a.declarations {
-		d.measure(a)
-		t.require(d.deps["type:fixture.private"], d.deps)
-	}
+	t.Run("public identities", func(raw *testing.T) { (&testHarness{T: raw}).requirePublicDependencies() })
+	t.Run("private exemptions", func(raw *testing.T) { (&testHarness{T: raw}).requirePrivateDependencyExemptions() })
 }
 func TestDependencyIdentitiesAndExemptions(t *testing.T) {
 	(&testHarness{T: t}).TestDependencyIdentitiesAndExemptions()
@@ -243,11 +208,7 @@ func (t *testHarness) TestOverlapComparisonEvidence() {
 	cc := t.one(t.investigate(dir, c), "cosmetic-extraction")
 	for _, q := range cc.Clues {
 		if q.Kind == "parameter-overlap" {
-			if strings.HasSuffix(q.Subject, ":mean") {
-				t.require(q.Limit == .75 && q.Operator == ">=", q)
-			} else {
-				t.require(q.Limit == nil && q.Operator == nil, q)
-			}
+			t.requireOverlapComparison(q)
 		}
 	}
 }
@@ -274,22 +235,9 @@ func (t *testHarness) TestClumpNormalization() {
 func TestClumpNormalization(t *testing.T) { (&testHarness{T: t}).TestClumpNormalization() }
 
 func (t *testHarness) TestThresholdBoundaries() {
-	for _, x := range []struct {
-		kind, smell string
-		src         string
-		v           int64
-	}{{"function-lines", "long-function", "func F(){println(1)\nprintln(2)}", 2}, {"parameters", "long-parameter-list", "func F(a,b int){}", 2}, {"cognitive-complexity", "high-cognitive-complexity", "func F(a bool){if a {if a {}}}", 3}, {"dependencies", "excessive-dependencies", "type A struct{};type B struct{};func F(a A,b B){}", 2}} {
-		t.Run(x.kind, func(raw *testing.T) {
-			t := &testHarness{T: raw}
-			dir := t.fixture("package fixture\n" + x.src + "\n")
-			c := quiet()
-			c.Severity[x.smell] = "fail"
-			c.Counts[x.kind] = x.v
-			r := t.investigate(dir, c)
-			t.require(len(r.Cases) == 0, r)
-			c.Counts[x.kind] = x.v - 1
-			r = t.investigate(dir, c)
-			t.one(r, x.smell)
+	for _, scenario := range thresholdCases {
+		t.Run(scenario.kind, func(raw *testing.T) {
+			(&testHarness{T: raw}).checkThresholdBoundary(scenario)
 		})
 	}
 }

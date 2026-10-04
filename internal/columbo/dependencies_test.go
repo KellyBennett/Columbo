@@ -1,7 +1,10 @@
 package columbo
 
 import (
+	"go/token"
+	"go/types"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -142,4 +145,41 @@ func (h *testHarness) cosmeticPlumbingInventory(c Case) {
 }
 func TestCosmeticDependencyPlumbing(t *testing.T) {
 	(&testHarness{T: t}).TestCosmeticDependencyPlumbing()
+}
+
+func (t *testHarness) measuredDependencySets(dir string) []map[string]bool {
+	t.Helper()
+	engine := t.loadDependencyFixture(dir, quiet())
+	sets := []map[string]bool{}
+	for _, declaration := range engine.declarations {
+		declaration.measure(engine)
+		sets = append(sets, declaration.deps)
+	}
+	return sets
+}
+func (t *testHarness) requirePublicDependencies() {
+	t.Helper()
+	dir := t.fixture(helpersSource1)
+	deps := t.measuredDependencySets(dir)[0]
+	for _, want := range []string{"type:fixture.Interface", "type:bytes.Buffer", "type:fixture.Private", "type:fixture.Shared"} {
+		t.checkf(deps[want], "missing %s in %v", want, deps)
+	}
+}
+func (t *testHarness) requirePrivateDependencyExemptions() {
+	t.Helper()
+	dir := t.fixture(strings.ReplaceAll(helpersSource1, "Private", "private"))
+	deps := t.measuredDependencySets(dir)[0]
+	t.require(!deps["type:fixture.private"], deps)
+	t.write(dir, "other.go", "package fixture\nvar P private\n")
+	sets := t.measuredDependencySets(dir)
+	t.require(len(sets) > 0, "missing measured declarations")
+	for _, deps := range sets {
+		t.require(deps["type:fixture.private"], deps)
+	}
+}
+
+// evaluatedType constructs Go type fixtures using the standard type checker.
+func evaluatedType(expression string) (types.Type, error) {
+	value, err := types.Eval(token.NewFileSet(), nil, token.NoPos, expression)
+	return value.Type, err
 }
