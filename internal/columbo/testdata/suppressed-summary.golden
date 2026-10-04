@@ -1,0 +1,17 @@
+CASE C-3b5bc37ab7 fixture.Parent source.go:3-3
+  cosmetic-extraction: SUPPRESSED (original: WARN)
+  suppression source.go:2: accepted during policy review
+  cognitive-complexity fixture.Parent: 0
+  dependency-overlap source.go:108:["fixture.one","fixture.two"]: 0.000000
+  dependency-overlap source.go:108:mean: 0.000000 (limit >= 0.000000)
+  expanded-complexity fixture.Parent: 0
+  expanded-lines fixture.Parent: 6 (limit > 2)
+  function-lines fixture.Parent: 1
+  helper-count source.go:108: 2 (limit >= 2)
+  parameter-overlap source.go:108:mean: 1.000000 (limit >= 0.750000)
+  parameter-overlap source.go:108:member:fixture.one: 1.000000
+  parameter-overlap source.go:108:member:fixture.two: 1.000000
+  Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+Columbo: 0 failed, 0 warned, 1 suppressed
+Database: report.sqlite

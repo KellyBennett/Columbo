@@ -151,29 +151,51 @@ func (m *clumpMiner) patternCase(pattern typeMultiset, support []*declaration) (
 	if err != nil || c == nil {
 		return c, err
 	}
-	c.clumpClues(types, len(support), m.engine.config)
-	for _, d := range support {
-		d.clumpReceipts(c, pattern)
-	}
+	evidence := c.clumpClues(types, len(support), m.engine.config)
+	evidence.include(support, pattern)
 	return c, nil
 }
-func (c *Case) clumpClues(types []string, count int, config Config) {
-	c.Clues = append(c.Clues, metric("clump-types", c.Symbol, types))
-	c.Clues = append(c.Clues, metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">="))
-	c.Clues = append(c.Clues, metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">="))
+
+// clumpEvidence keeps the three support roles named until their clues are complete.
+type clumpEvidence struct {
+	finding                  *Case
+	types, size, occurrences *clueSupport
 }
-func (d *declaration) clumpReceipts(c *Case, s typeMultiset) {
-	c.Receipts = append(c.Receipts, d.declReceipt())
+
+func (c *Case) clumpClues(types []string, count int, config Config) *clumpEvidence {
+	typeClue := metric("clump-types", c.Symbol, types).forDeclaration(c.PrimaryDeclaration)
+	sizeClue := metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration)
+	occurrenceClue := metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">=").forDeclaration(c.PrimaryDeclaration)
+	return &clumpEvidence{finding: c, types: newClueSupport(&typeClue), size: newClueSupport(&sizeClue), occurrences: newClueSupport(&occurrenceClue)}
+}
+func (e *clumpEvidence) include(support []*declaration, pattern typeMultiset) {
+	for _, d := range support {
+		e.declarationReceipts(d, pattern)
+	}
+	e.finding.Clues = append(e.finding.Clues, *e.types.clue, *e.size.clue, *e.occurrences.clue)
+}
+func (e *clumpEvidence) declarationReceipts(d *declaration, s typeMultiset) {
+	e.finding.includeDeclaration(d, "clump-support")
+	e.occurrences.add(d.declReceipt())
 	need := s.copy()
 	for _, p := range d.params {
-		d.clumpParameter(c, need, p)
+		e.parameter(d, need, p)
 	}
 }
-func (d *declaration) clumpParameter(c *Case, need typeMultiset, p parameter) {
-	t := canonicalType(p.typ, d.signature)
+func (e *clumpEvidence) parameter(d *declaration, need typeMultiset, p parameter) {
+	t := d.parameterType(p)
 	if need[t] == 0 {
 		return
 	}
 	need[t]--
-	c.Receipts = append(c.Receipts, d.parameterReceipt(p))
+	e.parameterReceipt(d.parameterReceipt(p))
+}
+
+func (d *declaration) parameterType(p parameter) string {
+	return canonicalType(p.typ, d.signature)
+}
+func (e *clumpEvidence) parameterReceipt(receipt Source) {
+	e.finding.Receipts = append(e.finding.Receipts, receipt)
+	e.types.add(receipt)
+	e.size.add(receipt)
 }

@@ -1,0 +1,40 @@
+CASE C-b10bccb46b fixture.LongFunction all.go:13-25
+  long-function: FAIL
+  function-lines fixture.LongFunction: 11 (limit > 10)
+CASE C-ad03ea5957 fixture.Parameters all.go:26-26
+  long-parameter-list: FAIL
+  parameters fixture.Parameters: 5 (limit > 4)
+CASE C-3d6d2adfd3 fixture.Complex all.go:27-37
+  high-cognitive-complexity: FAIL
+  cognitive-complexity fixture.Complex: 10 (limit > 7)
+CASE C-4fb5041cb7 fixture.Dependencies all.go:38-39
+  excessive-dependencies: FAIL
+  dependencies fixture.Dependencies: 6 (limit > 5)
+CASE C-cf8ec1ee12 fixture.Dependencies all.go:38-39
+  long-parameter-list: FAIL
+  parameters fixture.Dependencies: 6 (limit > 4)
+CASE C-4063b2b57c fixture.(Own).Envy all.go:44-46
+  feature-envy: FAIL
+  foreign-accesses fixture.(Own).Envy:f@626: 5 (limit >= 5)
+  foreign-own-ratio fixture.(Own).Envy:f@626: 0.000000
+  own-accesses fixture.(Own).Envy: 0
+CASE C-47c5c497d6 fixture.ClumpA all.go:47-47
+  data-clump: FAIL
+  clump-occurrences fixture.ClumpA: 3 (limit >= 3)
+  clump-size fixture.ClumpA: 3 (limit >= 3)
+CASE C-5522b4859c fixture.Parent all.go:50-53
+  cosmetic-extraction: FAIL
+  cognitive-complexity fixture.Parent: 0
+  dependency-overlap all.go:826:["fixture.stepOne","fixture.stepTwo"]: 1.000000
+  dependency-overlap all.go:826:mean: 1.000000 (limit >= 0.750000)
+  expanded-complexity fixture.Parent: 0
+  expanded-lines fixture.Parent: 12 (limit > 10)
+  function-lines fixture.Parent: 2
+  helper-count all.go:826: 2 (limit >= 2)
+  parameter-overlap all.go:826:mean: 1.000000 (limit >= 0.750000)
+  parameter-overlap all.go:826:member:fixture.stepOne: 1.000000
+  parameter-overlap all.go:826:member:fixture.stepTwo: 1.000000
+  Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+Columbo: 8 failed, 0 warned, 0 suppressed
+Database: report.sqlite

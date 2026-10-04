@@ -257,7 +257,9 @@ func (s *dependencyScan) record(n ast.Node, id string) {
 	s.sites[canonical(r)] = r
 }
 func (d *declaration) dependencyReceipt(n ast.Node, id string) Source {
-	return d.file.receipt("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
+	source := d.source("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
+	source.DependencyIdentity = id
+	return source
 }
 func (s *dependencyScan) visit(n ast.Node) bool {
 	s.explicitType(n)
@@ -314,7 +316,8 @@ func (s *dependencyScan) finish() {
 	s.declaration.scoreDependencies()
 	s.declaration.depReceipts = []Source{}
 	for _, r := range s.sites {
-		if !s.declaration.deps[r.Detail.Subject] {
+		r.DependencyScored = s.declaration.deps[r.DependencyIdentity]
+		if !r.DependencyScored {
 			r.Kind = "dependency-inventory"
 		}
 		s.declaration.depReceipts = append(s.declaration.depReceipts, r)
@@ -350,16 +353,19 @@ func (d *declaration) measureComplexity() {
 }
 func (d *declaration) event(ev diagnostic, kind string) Source {
 	pos := ev.position()
-	return d.file.receipt("metric-contribution", pos, d.file.tokenEnd(pos), ev.detail(kind))
+	source := d.source("metric-contribution", pos, d.file.tokenEnd(pos), ev.detail(kind))
+	source.AggregateContributions = true
+	return source
 }
 
 type lineEvidence struct {
-	file       *file
-	start, end token.Pos
-	removed    map[token.Pos]bool
-	lines      map[int]bool
-	kind       string
-	trace      *expansion
+	declaration *declaration
+	file        *file
+	start, end  token.Pos
+	removed     map[token.Pos]bool
+	lines       map[int]bool
+	kind        string
+	trace       *expansion
 }
 
 func (d *declaration) linesEvidence(kind string, removed map[token.Pos]bool, trace *expansion) []Source {
@@ -367,7 +373,7 @@ func (d *declaration) linesEvidence(kind string, removed map[token.Pos]bool, tra
 	if start == 0 {
 		return []Source{}
 	}
-	evidence := &lineEvidence{file: d.file, start: start, end: end, removed: removed, lines: map[int]bool{}, kind: kind, trace: trace}
+	evidence := &lineEvidence{declaration: d, file: d.file, start: start, end: end, removed: removed, lines: map[int]bool{}, kind: kind, trace: trace}
 	evidence.scan()
 	return evidence.receipts()
 }
@@ -392,7 +398,7 @@ func (e *lineEvidence) receipts() []Source {
 	sort.Ints(keys)
 	out := []Source{}
 	for _, line := range keys {
-		out = append(out, e.file.lineReceipt(line, e.kind).withExpansion(e.trace))
+		out = append(out, e.declaration.lineContribution(line, e.kind, e.trace))
 	}
 	return out
 }
@@ -443,24 +449,34 @@ func (i *ordinaryInvestigation) check(check metricCheck) error {
 	if e != nil || c == nil {
 		return e
 	}
-	check.explain(c, limit)
-	i.declaration.ordinaryEvidence(c, check.smell)
+	i.declaration.ordinaryEvidence(c, check, limit)
 	i.engine.report.Cases = append(i.engine.report.Cases, *c)
 	return nil
 }
 func (check metricCheck) explain(c *Case, limit int64) {
-	c.threshold(check.kind, check.value, limit, ">")
+	support := check.receipts
+	if check.kind == "dependencies" {
+		support = scoredDependencyReceipts(check.receipts)
+	}
+	clue := c.metric(check.kind, check.value).compare(limit, ">").supportedBy(support)
+	c.Clues = append(c.Clues, clue)
 	appendSources(c, check.receipts)
 }
-func (d *declaration) ordinaryEvidence(c *Case, smell string) {
-	switch smell {
-	case "excessive-dependencies":
-		c.value("dependency-set", sortedSet(d.deps))
-	case "long-parameter-list":
-		for _, p := range d.params {
-			c.Receipts = append(c.Receipts, d.parameterReceipt(p))
-		}
+func (d *declaration) ordinaryEvidence(c *Case, check metricCheck, limit int64) {
+	if check.kind == "parameters" {
+		check.receipts = d.parameterReceipts()
 	}
+	check.explain(c, limit)
+	if check.smell == "excessive-dependencies" {
+		c.Clues = append(c.Clues, d.dependencyClue())
+	}
+}
+func (d *declaration) parameterReceipts() []Source {
+	receipts := []Source{}
+	for _, p := range d.params {
+		receipts = append(receipts, d.parameterReceipt(p))
+	}
+	return receipts
 }
 func sortedSet(m map[string]bool) []string {
 	out := []string{}
@@ -493,4 +509,14 @@ func roundedQuotient(r *big.Rat) *big.Int {
 		q.Add(q, big.NewInt(1))
 	}
 	return q
+}
+
+func scoredDependencyReceipts(receipts []Source) []Source {
+	out := []Source{}
+	for _, receipt := range receipts {
+		if receipt.DependencyScored {
+			out = append(out, receipt)
+		}
+	}
+	return out
 }

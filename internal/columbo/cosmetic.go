@@ -11,12 +11,17 @@ import (
 )
 
 type expansion struct {
-	names []string
-	sites []Site
+	names        []string
+	sites        []Site
+	declarations []DeclarationRef
 }
 
 func extendTrace(t expansion, d *declaration, owner *declaration, c *ast.CallExpr) expansion {
-	return expansion{append(append([]string{}, t.names...), d.symbol), append(append([]Site{}, t.sites...), owner.callSite(c))}
+	declarations := append([]DeclarationRef{}, t.declarations...)
+	if len(declarations) == 0 {
+		declarations = append(declarations, owner.ref())
+	}
+	return expansion{names: append(append([]string{}, t.names...), d.symbol), sites: append(append([]Site{}, t.sites...), owner.callSite(c)), declarations: append(declarations, d.ref())}
 }
 func onStack(ds []*declaration, d *declaration) bool {
 	for _, s := range ds {
@@ -27,6 +32,11 @@ func onStack(ds []*declaration, d *declaration) bool {
 	return false
 }
 
+type helperPair struct {
+	left, right *declaration
+	overlap     *big.Rat
+}
+
 type helperCluster struct {
 	owner        *declaration
 	calls        []*ast.CallExpr
@@ -34,7 +44,7 @@ type helperCluster struct {
 	forwarding   map[*ast.CallExpr]map[string]bool
 	p            map[string]bool
 	meanP, meanD *big.Rat
-	pairs        map[string]*big.Rat
+	pairs        map[string]helperPair
 }
 
 func (a *engine) forwarding(d *declaration, call *ast.CallExpr) map[string]bool {
@@ -82,7 +92,7 @@ func newHelperCluster(owner *declaration, calls []*ast.CallExpr) *helperCluster 
 		p:          map[string]bool{},
 		meanP:      new(big.Rat),
 		meanD:      new(big.Rat),
-		pairs:      map[string]*big.Rat{},
+		pairs:      map[string]helperPair{},
 	}
 }
 func (a *engine) qualify(owner *declaration, calls []*ast.CallExpr) *helperCluster {
@@ -133,7 +143,7 @@ func (cl *helperCluster) measureDependencies() {
 }
 func (cl *helperCluster) recordPair(helper, other *declaration) {
 	overlap := setOverlap(helper.deps, other.deps)
-	cl.pairs[canonical([]string{helper.symbol, other.symbol})] = overlap
+	cl.pairs[canonical([]string{helper.symbol, other.symbol})] = helperPair{helper, other, overlap}
 	cl.meanD.Add(cl.meanD, overlap)
 }
 func setOverlap(left, right map[string]bool) *big.Rat {
@@ -304,7 +314,7 @@ func (i *cosmeticInvestigation) discoverCall(n ast.Node) bool {
 }
 func (i *cosmeticInvestigation) expand() {
 	d := i.parent
-	trace := expansion{[]string{d.symbol}, []Site{}}
+	trace := d.rootExpansion()
 	i.lines = i.engine.expandedLines(d, []*declaration{d}, trace)
 	i.complexity, i.complexityReceipts = i.engine.expandedComplexity(d, []*declaration{d}, trace, 0)
 }
@@ -346,12 +356,12 @@ func (i *cosmeticInvestigation) metrics() {
 	i.metric("expanded-complexity", i.complexity, "cognitive-complexity")
 }
 func (i *cosmeticInvestigation) metric(kind string, value int, threshold string) {
+	clue := i.finding.metric(kind, value).supportedBy(i.metricReceipts(kind))
 	limit := i.engine.config.Counts[threshold]
 	if int64(value) > limit {
-		i.finding.threshold(kind, value, limit, ">")
-		return
+		clue = clue.compare(limit, ">")
 	}
-	i.finding.value(kind, value)
+	i.finding.Clues = append(i.finding.Clues, clue)
 }
 func (i *cosmeticInvestigation) originalAndExpandedReceipts() {
 	appendSources(i.finding, i.parent.lineReceipts)
@@ -364,7 +374,8 @@ func (cl *helperCluster) key() string {
 	return fmt.Sprintf("%s:%d", site.File, site.CallOffset)
 }
 func (cl *helperCluster) record() Cluster {
-	return Cluster{cl.key(), cl.owner.symbol, cl.owner.file.rel, []Member{}}
+	ref := cl.owner.ref()
+	return Cluster{Key: cl.key(), Owner: cl.owner.symbol, File: cl.owner.file.rel, Members: []Member{}, OwnerDeclaration: &ref}
 }
 
 type clusterPresentation struct {
@@ -381,15 +392,15 @@ func (i *cosmeticInvestigation) cluster(cl *helperCluster) {
 func (p *clusterPresentation) emit() {
 	record := p.cluster.record()
 	p.summary()
-	p.finding.Receipts = append(p.finding.Receipts, p.cluster.owner.declReceipt())
+	p.finding.includeDeclaration(p.cluster.owner, "cluster-owner")
 	p.members(&record)
 	p.finding.Clusters = append(p.finding.Clusters, record)
-	p.cluster.pairClues(p.finding)
+	p.cluster.pairClues(p.finding, p.engine)
 	for _, helper := range p.cluster.helpers {
 		p.helper(helper)
 	}
 }
-func (p *clusterPresentation) summary() { p.cluster.summaryClues(p.finding, p.engine.config) }
+func (p *clusterPresentation) summary() { p.cluster.summaryClues(p.finding, p.engine) }
 func (p *clusterPresentation) members(record *Cluster) {
 	for _, call := range p.cluster.calls {
 		record.Members = append(record.Members, p.member(call))
@@ -399,51 +410,143 @@ func (p *clusterPresentation) member(call *ast.CallExpr) Member {
 	p.memberEvidence(call)
 	helper := p.engine.calls[call]
 	site := p.cluster.owner.callSite(call)
-	return Member{helper.symbol, site.CallOffset}
+	return helper.memberAt(site)
 }
 func (p *clusterPresentation) memberEvidence(call *ast.CallExpr) {
 	helper := p.engine.calls[call]
-	p.cluster.memberClues(p.finding, call, helper.symbol)
-	p.finding.Receipts = append(p.finding.Receipts, p.cluster.owner.helperCallReceipt(call, helper.symbol))
-	p.cluster.owner.forwardingReceipts(p.finding, call)
+	sources := p.cluster.memberReceipts(call, helper)
+	p.cluster.memberClues(p.finding, call, helper, sources)
+	appendSources(p.finding, sources)
 }
-func (cl *helperCluster) summaryClues(c *Case, config Config) {
-	key := cl.key()
-	c.Clues = append(c.Clues, metric("helper-count", key, len(cl.helpers)).compare(config.Counts["cosmetic-min-helpers"], ">="))
-	c.Clues = append(c.Clues, metric("parent-input-set", key, sortedSet(cl.p)))
-	c.Clues = append(c.Clues, metric("parameter-overlap", key+":mean", rounded(cl.meanP)).compare(config.Ratios["cosmetic-parameter-overlap"], ">="))
-	c.Clues = append(c.Clues, metric("dependency-overlap", key+":mean", rounded(cl.meanD)).compare(config.Ratios["cosmetic-dependency-overlap"], ">="))
+
+// clusterEvidence owns the distinct evidence roles behind aggregate overlaps.
+type clusterEvidence struct {
+	cluster *helperCluster
+	engine  *engine
 }
-func (cl *helperCluster) memberClues(c *Case, call *ast.CallExpr, helper string) {
-	subject := cl.key() + ":member:" + helper
-	h := cl.forwarding[call]
-	c.Clues = append(c.Clues, metric("forwarded-input-set", subject, sortedSet(h)), metric("parameter-overlap", subject, rounded(fraction(len(h), len(cl.p)))))
+
+func (cl *helperCluster) summaryClues(c *Case, engine *engine) {
+	evidence := clusterEvidence{cl, engine}
+	c.Clues = append(c.Clues, evidence.clues()...)
 }
-func (cl *helperCluster) pairClues(c *Case) {
-	for pair, r := range cl.pairs {
-		c.Clues = append(c.Clues, metric("dependency-overlap", cl.key()+":"+pair, rounded(r)))
+func (e clusterEvidence) clues() []Clue {
+	cl, config, key := e.cluster, e.engine.config, e.cluster.key()
+	parameters, dependencies := cl.displayedOverlaps()
+	return []Clue{
+		e.link(metric("helper-count", key, len(cl.helpers)).compare(config.Counts["cosmetic-min-helpers"], ">="), e.calls()),
+		e.link(metric("parent-input-set", key, sortedSet(cl.p)), e.ownerSources()),
+		e.link(metric("parameter-overlap", key+":mean", parameters).compare(config.Ratios["cosmetic-parameter-overlap"], ">="), e.forwarding()),
+		e.link(metric("dependency-overlap", key+":mean", dependencies).compare(config.Ratios["cosmetic-dependency-overlap"], ">="), e.dependencies()),
 	}
+}
+func (e clusterEvidence) link(q Clue, receipts []Source) Clue {
+	owner := e.cluster.owner.ref()
+	q.ClusterKey = e.cluster.key()
+	return q.forDeclaration(&owner).supportedBy(receipts)
+}
+func (e clusterEvidence) calls() []Source {
+	out := []Source{}
+	for _, call := range e.cluster.calls {
+		helper := e.engine.calls[call]
+		out = append(out, e.cluster.owner.helperCallReceipt(call, helper.symbol), helper.declReceipt())
+	}
+	return out
+}
+func (e clusterEvidence) forwarding() []Source {
+	out := []Source{e.cluster.owner.declReceipt()}
+	for _, call := range e.cluster.calls {
+		out = append(out, e.cluster.memberReceipts(call, e.engine.calls[call])...)
+	}
+	return out
+}
+func (e clusterEvidence) dependencies() []Source {
+	out := []Source{}
+	for _, helper := range e.cluster.helpers {
+		out = append(out, helper.scoredEvidence()...)
+	}
+	return out
+}
+func (cl *helperCluster) memberClues(c *Case, call *ast.CallExpr, helper *declaration, receipts []Source) {
+	subject := cl.key() + ":member:" + helper.symbol
+	h := cl.forwarding[call]
+	inputs := metric("forwarded-input-set", subject, sortedSet(h)).supportedBy(receipts)
+	overlap := metric("parameter-overlap", subject, cl.forwardingOverlap(call)).supportedBy(append(append([]Source{}, receipts...), cl.owner.declReceipt()))
+	c.Clues = append(c.Clues, cl.linkMember(inputs, call, helper), cl.linkMember(overlap, call, helper))
+}
+func (cl *helperCluster) linkMember(q Clue, call *ast.CallExpr, helper *declaration) Clue {
+	ref := helper.memberReference(cl.key(), cl.owner.callSite(call))
+	return cl.link(q).forMember(ref)
+}
+func (cl *helperCluster) link(q Clue) Clue {
+	owner := cl.owner.ref()
+	q.ClusterKey = cl.key()
+	return q.forDeclaration(&owner)
+}
+func (cl *helperCluster) forwardingOverlap(call *ast.CallExpr) float64 {
+	return rounded(fraction(len(cl.forwarding[call]), len(cl.p)))
+}
+func (e clusterEvidence) ownerSources() []Source {
+	return []Source{e.cluster.owner.declReceipt()}
+}
+func (pair helperPair) value() float64 {
+	return rounded(pair.overlap)
+}
+func (cl *helperCluster) pairClues(c *Case, engine *engine) {
+	for key, pair := range cl.pairs {
+		c.Clues = append(c.Clues, cl.pairClue(engine, key, pair))
+	}
+}
+func (cl *helperCluster) pairClue(engine *engine, key string, pair helperPair) Clue {
+	evidence := clusterEvidence{cl, engine}
+	sources := append(pair.left.scoredEvidence(), pair.right.scoredEvidence()...)
+	q := evidence.link(metric("dependency-overlap", cl.key()+":"+key, pair.value()), sources)
+	q.Pair = []MemberRef{cl.helperReference(engine, pair.left), cl.helperReference(engine, pair.right)}
+	return q
+}
+func (d *declaration) scoredEvidence() []Source {
+	return append([]Source{d.declReceipt()}, scoredDependencyReceipts(d.depReceipts)...)
+}
+func (cl *helperCluster) helperReference(engine *engine, helper *declaration) MemberRef {
+	for _, call := range cl.calls {
+		if engine.calls[call] == helper {
+			return helper.memberReference(cl.key(), cl.owner.callSite(call))
+		}
+	}
+	panic("cluster helper missing its call")
 }
 func (i *clusterPresentation) helper(h *declaration) {
 	if i.helpers[h] {
 		return
 	}
 	i.helpers[h] = true
-	i.finding.Clues = append(i.finding.Clues, metric("dependency-set", h.symbol, sortedSet(h.deps)))
-	i.finding.Receipts = append(i.finding.Receipts, h.declReceipt())
+	i.finding.Clues = append(i.finding.Clues, h.dependencyClue())
+	i.finding.includeDeclaration(h, "helper")
 	appendSources(i.finding, h.depReceipts)
 }
-func (d *declaration) forwardingReceipts(c *Case, call *ast.CallExpr) {
+func (cl *helperCluster) memberReceipts(call *ast.CallExpr, helper *declaration) []Source {
+	out := []Source{cl.owner.helperCallReceipt(call, helper.symbol)}
+	return append(out, cl.owner.forwardingEvidence(call)...)
+}
+func (d *declaration) dependencyClue() Clue {
+	ref := d.ref()
+	return metric("dependency-set", d.symbol, sortedSet(d.deps)).forDeclaration(&ref).supportedBy(scoredDependencyReceipts(d.depReceipts))
+}
+func (d *declaration) forwardingEvidence(call *ast.CallExpr) []Source {
+	out := []Source{}
 	for _, arg := range forwardedExpressions(d, call) {
-		if id, ok := unparen(arg).(*ast.Ident); ok {
-			d.forwardedIdentifier(c, id)
+		if source, ok := d.forwardedEvidence(arg); ok {
+			out = append(out, source)
 		}
 	}
+	return out
 }
-func (d *declaration) forwardedIdentifier(c *Case, id *ast.Ident) {
-	if key, ok := d.inputIdentity(id); ok {
-		c.Receipts = append(c.Receipts, d.identifierReceipt(id, key))
+func (d *declaration) forwardedEvidence(arg ast.Expr) (Source, bool) {
+	id, ok := unparen(arg).(*ast.Ident)
+	if !ok {
+		return Source{}, false
 	}
+	key, ok := d.inputIdentity(id)
+	return d.identifierReceipt(id, key), ok
 }
 func forwardedExpressions(d *declaration, call *ast.CallExpr) []ast.Expr {
 	out := append([]ast.Expr{}, call.Args...)
@@ -451,4 +554,21 @@ func forwardedExpressions(d *declaration, call *ast.CallExpr) []ast.Expr {
 		out = append(out, receiver)
 	}
 	return out
+}
+func (i *cosmeticInvestigation) metricReceipts(kind string) []Source {
+	switch kind {
+	case "function-lines":
+		return i.parent.lineReceipts
+	case "cognitive-complexity":
+		return i.parent.complexityReceipts
+	case "expanded-lines":
+		return i.lines
+	case "expanded-complexity":
+		return i.complexityReceipts
+	}
+	return nil
+}
+
+func (cl *helperCluster) displayedOverlaps() (float64, float64) {
+	return rounded(cl.meanP), rounded(cl.meanD)
 }

@@ -1,5 +1,7 @@
 # Test abstraction audit
 
+This historical audit predates the SQLite reporting cutover. Its JSON helpers, goldens, and capture command describe the reviewed revision; use the current [SQLite snapshot guide](docs/sqlite-schema.md) for reporting and evidence queries.
+
 Reviewed PRs #10–#15 against the code before #10 (`4e15c5a0c5dd7f1a1c6cc0a62fc1012cf0c56e4c`) and main after #15 (`73b47728e95da13c2e6d86650ee2a2a7f991fa97`). Scope: the helpers, fixtures, evidence queries, and test-only methods introduced during the final test refactors. Earlier production refactors are outside this audit.
 
 The review used the original diffs, callers, data ownership, assertions, and failure behavior. Columbo was run afterward to measure outcomes, not to decide whether the abstractions were justified. The pre-refactor source reproduces 31 FAIL findings; the reviewed main snapshot has zero. Neither snapshot has warnings or suppressions.

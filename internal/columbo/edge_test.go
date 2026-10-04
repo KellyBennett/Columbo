@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go/ast"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -140,9 +141,7 @@ func (t *testHarness) TestHistoryWarningGoldens() {
 	c.Severity["long-parameter-list"] = "fail"
 	c.History = true
 	r := t.investigate(dir, c)
-	for _, format := range []string{"text", "json"} {
-		t.golden(r, filepath.Join("testdata", "history-"+format+".golden"), format)
-	}
+	t.snapshotGoldens(r, filepath.Join("testdata", "history"))
 }
 func TestHistoryWarningGoldens(t *testing.T) { (&testHarness{T: t}).TestHistoryWarningGoldens() }
 
@@ -196,13 +195,10 @@ func TestCanonicalTypeMatchesGoFormatting(t *testing.T) {
 func (t *testHarness) TestClusterSchema() {
 	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
 	r := t.investigate(dir, cosmeticConfig())
-	m := t.reportDocument(r)
-	cc := m["cases"].([]any)[0].(map[string]any)
-	t.require(len(cc) == 16, "case field count", len(cc))
-	cluster := cc["clusters"].([]any)[0].(map[string]any)
-	t.require(len(cluster) == 4, cluster)
-	member := cluster["members"].([]any)[0].(map[string]any)
-	t.require(len(member) == 2, member)
+	db := t.snapshot(r)
+	want := []string{"fixture.Parent|fixture.one|0", "fixture.Parent|fixture.two|1"}
+	got := t.sqlStrings(db, `SELECT owner.symbol || '|' || helper.symbol || '|' || m.ordinal FROM clusters cl JOIN declarations owner ON owner.id=cl.owner_declaration_id JOIN cluster_members m ON m.cluster_id=cl.id JOIN declarations helper ON helper.id=m.helper_declaration_id ORDER BY cl.ordinal,m.ordinal`)
+	t.require(reflect.DeepEqual(got, want), "cluster foreign-key membership", got)
 }
 func TestClusterSchema(t *testing.T) { (&testHarness{T: t}).TestClusterSchema() }
 

@@ -35,12 +35,25 @@ func (t *testHarness) requireDisabledCosmeticSuppression(dir string, config Conf
 }
 func (t *testHarness) requireReportSchema(r Report) {
 	t.Helper()
-	document := t.reportDocument(r)
-	t.require(len(document) == 5, document)
-	data, err := Serialize(r, "json")
-	t.require(err == nil, err)
-	t.require(!strings.Contains(string(data), `"clusters":null`) && !strings.Contains(string(data), `"policy_reviews":null`), string(data))
+	db := t.snapshot(r)
+	for _, table := range snapshotEvidenceTables {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE name = ? AND type IN ('table','view')`, table).Scan(&count)
+		t.require(err == nil && count == 1, "missing relational group", table, err)
+	}
+	var pragma, report int
+	t.require(db.QueryRow(`PRAGMA user_version`).Scan(&pragma) == nil, "schema PRAGMA")
+	t.require(db.QueryRow(`SELECT schema_version FROM report`).Scan(&report) == nil, "schema report")
+	t.require(pragma == SchemaVersion && report == pragma, "schema version disagreement", pragma, report)
 }
+
+var snapshotEvidenceTables = []string{
+	"report", "summary", "files", "declarations", "cases", "case_declarations", "case_guidance",
+	"clues", "clue_values", "dependencies", "declaration_dependencies", "dependency_receipts",
+	"clusters", "cluster_members", "source_receipts", "receipt_expansion_declarations", "receipt_expansion_sites",
+	"clue_receipts", "commits", "case_history", "case_history_files", "suppressions", "warnings", "policy_reviews", "case_policy_reviews",
+}
+
 func (t *testHarness) requireIdentityDelimiterBoundaries() {
 	t.Helper()
 	first, _ := identity("x", "a|b", "c", "")

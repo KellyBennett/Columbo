@@ -1,5 +1,7 @@
 # Dogfooding audit
 
+This historical audit predates the SQLite reporting cutover. Its report helpers and captures describe that revision; use the current [SQLite snapshot guide](docs/sqlite-schema.md) for reporting and evidence queries.
+
 ## Dependency policy revision
 
 Cohesive adapters exposed a recurring pattern: package identities duplicated their

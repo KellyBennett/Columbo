@@ -24,6 +24,21 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/columbo
+      - name: Run published SQLite queries against all seven smells
+        shell: bash
+        run: |
+          root="$PWD"
+          status=0
+          (cd internal/columbo/testdata/all && "$root/columbo" --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
+          if [ "$status" -gt 1 ]; then exit "$status"; fi
+          ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
+      - name: Retain query fixture snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: columbo-query-fixture-snapshot
+          path: ${{ runner.temp }}/columbo-fixture.sqlite
+          if-no-files-found: warn
 
   columbo:
     name: Columbo self-check
@@ -47,3 +62,10 @@ jobs:
         run: go build -o columbo ./cmd/columbo
       - name: Investigate Columbo, including its tests
         run: ./columbo ./...
+      - name: Retain self-check evidence even when findings fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: columbo-self-check-snapshot
+          path: columbo-*.sqlite
+          if-no-files-found: warn

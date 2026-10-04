@@ -127,10 +127,11 @@ func (c *accessCollection) caseFor(a *engine) (*Case, error) {
 	return report, nil
 }
 func (c *accessCollection) evidence(report *Case, groups []*accessGroup, config Config) {
-	report.value("own-accesses", len(c.own))
+	own := report.metric("own-accesses", len(c.own)).supportedBy(c.own)
+	report.Clues = append(report.Clues, own)
 	appendSources(report, c.own)
 	for _, group := range groups {
-		group.clues(report, len(c.own), config)
+		group.clues(report, c.own, config)
 	}
 }
 func (d *declaration) accesses() *accessCollection {
@@ -165,7 +166,7 @@ func (d *declaration) isOwnValue(v *types.Var, key string) bool {
 	return v == d.signature.Recv() && key == d.variable(v)
 }
 func (d *declaration) accessReceipt(kind string, s *ast.SelectorExpr, key string) Source {
-	return d.file.receipt(kind, s.Pos(), s.End(), Detail{Subject: key})
+	return d.source(kind, s.Pos(), s.End(), Detail{Subject: key})
 }
 func (c *accessCollection) foreign(access valueAccess) {
 	receipt := access.receipt("foreign-access")
@@ -194,15 +195,16 @@ func (c *accessCollection) qualifying(config Config) []*accessGroup {
 func (g *accessGroup) qualifies(own int, c Config) bool {
 	return int64(len(g.receipts)) >= c.Counts["feature-envy-foreign-accesses"] && (own == 0 || meets(fraction(len(g.receipts), own), c.Ratios["feature-envy-ratio"]))
 }
-func (g *accessGroup) clues(c *Case, own int, config Config) {
-	c.Clues = append(c.Clues, metric("foreign-accesses", g.key, len(g.receipts)).compare(config.Counts["feature-envy-foreign-accesses"], ">="))
-	g.ratioClue(c, own, config.Ratios["feature-envy-ratio"])
+func (g *accessGroup) clues(c *Case, own []Source, config Config) {
+	foreign := metric("foreign-accesses", g.key, len(g.receipts)).compare(config.Counts["feature-envy-foreign-accesses"], ">=").forDeclaration(c.PrimaryDeclaration).supportedBy(g.receipts)
+	sources := append(append([]Source{}, g.receipts...), own...)
+	ratio := g.ratioClue(len(own), config.Ratios["feature-envy-ratio"]).forDeclaration(c.PrimaryDeclaration).supportedBy(sources)
+	c.Clues = append(c.Clues, foreign, ratio)
 	appendSources(c, g.receipts)
 }
-func (g *accessGroup) ratioClue(c *Case, own int, limit float64) {
+func (g *accessGroup) ratioClue(own int, limit float64) Clue {
 	if own == 0 {
-		c.Clues = append(c.Clues, metric("foreign-own-ratio", g.key, 0))
-		return
+		return metric("foreign-own-ratio", g.key, 0)
 	}
-	c.Clues = append(c.Clues, metric("foreign-own-ratio", g.key, rounded(fraction(len(g.receipts), own))).compare(limit, ">="))
+	return metric("foreign-own-ratio", g.key, rounded(fraction(len(g.receipts), own))).compare(limit, ">=")
 }

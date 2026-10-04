@@ -1,0 +1,166 @@
+[case_declarations] case_id | declaration_id | role
+"C-3b5bc37ab7" | 1 | "cluster-owner"
+"C-3b5bc37ab7" | 1 | "expansion"
+"C-3b5bc37ab7" | 1 | "primary"
+"C-3b5bc37ab7" | 2 | "expansion"
+"C-3b5bc37ab7" | 2 | "helper"
+"C-3b5bc37ab7" | 3 | "expansion"
+"C-3b5bc37ab7" | 3 | "helper"
+
+[case_guidance] case_id | kind | ordinal | item
+"C-3b5bc37ab7" | "avoid" | 0 | "Creating stepOne/stepTwo/stepThree helpers solely to satisfy metrics."
+"C-3b5bc37ab7" | "avoid" | 1 | "Treating a meaningful name as proof of a meaningful boundary."
+"C-3b5bc37ab7" | "avoid" | 2 | "Suppressing the case without documented justification."
+"C-3b5bc37ab7" | "lead" | 0 | "Review the qualifying helpers with their shared inputs and dependencies."
+"C-3b5bc37ab7" | "lead" | 1 | "Establish cohesive boundaries with distinct ownership and collaboration."
+
+[case_history] case_id | ordinal | commit_hash | kind
+
+[case_history_files] case_id | history_ordinal | ordinal | file_id
+
+[case_policy_reviews] case_id | ordinal | policy_id
+"C-3b5bc37ab7" | 0 | "CE-001"
+
+[cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
+"C-3b5bc37ab7" | 0 | 1 | "cosmetic-extraction" | "WARN" | 1 | 3 | 3 | "Single-use helper sequences can retain the original procedure's coupling while hiding its metrics." | "fixture.Parent has helper clusters meeting the configured overlap conditions, and candidate expansion exceeds a configured metric limit; this may be cosmetic decomposition even if the helper names sound meaningful."
+
+[clue_receipts] case_id | clue_id | receipt_id
+"C-3b5bc37ab7" | 2 | 9
+"C-3b5bc37ab7" | 2 | 13
+"C-3b5bc37ab7" | 3 | 9
+"C-3b5bc37ab7" | 3 | 13
+"C-3b5bc37ab7" | 7 | 10
+"C-3b5bc37ab7" | 7 | 11
+"C-3b5bc37ab7" | 7 | 12
+"C-3b5bc37ab7" | 7 | 14
+"C-3b5bc37ab7" | 7 | 15
+"C-3b5bc37ab7" | 7 | 16
+"C-3b5bc37ab7" | 8 | 3
+"C-3b5bc37ab7" | 8 | 4
+"C-3b5bc37ab7" | 8 | 5
+"C-3b5bc37ab7" | 9 | 6
+"C-3b5bc37ab7" | 9 | 7
+"C-3b5bc37ab7" | 9 | 8
+"C-3b5bc37ab7" | 10 | 2
+"C-3b5bc37ab7" | 11 | 3
+"C-3b5bc37ab7" | 11 | 6
+"C-3b5bc37ab7" | 11 | 9
+"C-3b5bc37ab7" | 11 | 13
+"C-3b5bc37ab7" | 12 | 1
+"C-3b5bc37ab7" | 12 | 3
+"C-3b5bc37ab7" | 12 | 4
+"C-3b5bc37ab7" | 12 | 5
+"C-3b5bc37ab7" | 12 | 6
+"C-3b5bc37ab7" | 12 | 7
+"C-3b5bc37ab7" | 12 | 8
+"C-3b5bc37ab7" | 13 | 1
+"C-3b5bc37ab7" | 13 | 3
+"C-3b5bc37ab7" | 13 | 4
+"C-3b5bc37ab7" | 13 | 5
+"C-3b5bc37ab7" | 14 | 1
+"C-3b5bc37ab7" | 14 | 6
+"C-3b5bc37ab7" | 14 | 7
+"C-3b5bc37ab7" | 14 | 8
+"C-3b5bc37ab7" | 15 | 1
+
+[clue_values] clue_id | ordinal | value
+8 | 0 | "fixture.Parent:a@99"
+8 | 1 | "fixture.Parent:b@101"
+9 | 0 | "fixture.Parent:a@99"
+9 | 1 | "fixture.Parent:b@101"
+15 | 0 | "fixture.Parent:a@99"
+15 | 1 | "fixture.Parent:b@101"
+
+[clues] id | case_id | ordinal | kind | subject | value_type | numeric_value | limit_type | limit_value | operator | declaration_id | cluster_id | member_id | pair_left_member_id | pair_right_member_id
+1 | "C-3b5bc37ab7" | 0 | "cognitive-complexity" | "fixture.Parent" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
+2 | "C-3b5bc37ab7" | 1 | "dependency-overlap" | "source.go:108:[\"fixture.one\",\"fixture.two\"]" | "real" | 0 | NULL | NULL | NULL | 1 | 1 | NULL | 1 | 2
+3 | "C-3b5bc37ab7" | 2 | "dependency-overlap" | "source.go:108:mean" | "real" | 0 | "real" | 0 | ">=" | 1 | 1 | NULL | NULL | NULL
+4 | "C-3b5bc37ab7" | 3 | "dependency-set" | "fixture.one" | "list" | NULL | NULL | NULL | NULL | 2 | NULL | NULL | NULL | NULL
+5 | "C-3b5bc37ab7" | 4 | "dependency-set" | "fixture.two" | "list" | NULL | NULL | NULL | NULL | 3 | NULL | NULL | NULL | NULL
+6 | "C-3b5bc37ab7" | 5 | "expanded-complexity" | "fixture.Parent" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
+7 | "C-3b5bc37ab7" | 6 | "expanded-lines" | "fixture.Parent" | "integer" | 6 | "integer" | 2 | ">" | 1 | NULL | NULL | NULL | NULL
+8 | "C-3b5bc37ab7" | 7 | "forwarded-input-set" | "source.go:108:member:fixture.one" | "list" | NULL | NULL | NULL | NULL | 1 | 1 | 1 | NULL | NULL
+9 | "C-3b5bc37ab7" | 8 | "forwarded-input-set" | "source.go:108:member:fixture.two" | "list" | NULL | NULL | NULL | NULL | 1 | 1 | 2 | NULL | NULL
+10 | "C-3b5bc37ab7" | 9 | "function-lines" | "fixture.Parent" | "integer" | 1 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
+11 | "C-3b5bc37ab7" | 10 | "helper-count" | "source.go:108" | "integer" | 2 | "integer" | 2 | ">=" | 1 | 1 | NULL | NULL | NULL
+12 | "C-3b5bc37ab7" | 11 | "parameter-overlap" | "source.go:108:mean" | "real" | 1 | "real" | 0.75 | ">=" | 1 | 1 | NULL | NULL | NULL
+13 | "C-3b5bc37ab7" | 12 | "parameter-overlap" | "source.go:108:member:fixture.one" | "real" | 1 | NULL | NULL | NULL | 1 | 1 | 1 | NULL | NULL
+14 | "C-3b5bc37ab7" | 13 | "parameter-overlap" | "source.go:108:member:fixture.two" | "real" | 1 | NULL | NULL | NULL | 1 | 1 | 2 | NULL | NULL
+15 | "C-3b5bc37ab7" | 14 | "parent-input-set" | "source.go:108" | "list" | NULL | NULL | NULL | NULL | 1 | 1 | NULL | NULL | NULL
+
+[cluster_members] id | cluster_id | case_id | helper_declaration_id | ordinal | call_offset
+1 | 1 | "C-3b5bc37ab7" | 2 | 0 | 108
+2 | 1 | "C-3b5bc37ab7" | 3 | 1 | 117
+
+[clusters] id | case_id | cluster_key | owner_declaration_id | file_id | ordinal
+1 | "C-3b5bc37ab7" | "source.go:108" | 1 | 1 | 0
+
+[commits] hash | committed_at
+
+[declaration_dependencies] declaration_id | dependency_id | scored
+
+[declarations] id | file_id | symbol | start_line | end_line | start_offset | end_offset
+1 | 1 | "fixture.Parent" | 3 | 3 | 87 | 126
+2 | 1 | "fixture.one" | 5 | 9 | 128 | 185
+3 | 1 | "fixture.two" | 10 | 14 | 186 | 243
+
+[dependencies] id | identity
+
+[dependency_receipts] declaration_id | dependency_id | receipt_id | case_id
+
+[files] id | path
+1 | "source.go"
+
+[policy_reviews] id | note | review_prompt
+"CE-001" | "This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression."
+
+[receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
+10 | 0 | 1 | "fixture.Parent"
+10 | 1 | 2 | "fixture.one"
+11 | 0 | 1 | "fixture.Parent"
+11 | 1 | 2 | "fixture.one"
+12 | 0 | 1 | "fixture.Parent"
+12 | 1 | 2 | "fixture.one"
+14 | 0 | 1 | "fixture.Parent"
+14 | 1 | 3 | "fixture.two"
+15 | 0 | 1 | "fixture.Parent"
+15 | 1 | 3 | "fixture.two"
+16 | 0 | 1 | "fixture.Parent"
+16 | 1 | 3 | "fixture.two"
+
+[receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
+10 | 0 | 1 | 108 | 1
+11 | 0 | 1 | 108 | 1
+12 | 0 | 1 | 108 | 1
+14 | 0 | 1 | 117 | 1
+15 | 0 | 1 | 117 | 1
+16 | 0 | 1 | 117 | 1
+
+[report] id | schema_version | columbo_version
+1 | 1 | "test"
+
+[source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id
+1 | "C-3b5bc37ab7" | 0 | "declaration" | 1 | 3 | 3 | 87 | 126 | "fixture.Parent" | NULL | NULL | NULL | 1
+2 | "C-3b5bc37ab7" | 1 | "metric-contribution" | 1 | 3 | 3 | 87 | 127 | "function-lines" | "integer" | 1 | NULL | 1
+3 | "C-3b5bc37ab7" | 2 | "helper-call" | 1 | 3 | 3 | 108 | 116 | "fixture.one" | NULL | NULL | NULL | 1
+4 | "C-3b5bc37ab7" | 3 | "parameter" | 1 | 3 | 3 | 112 | 113 | "fixture.Parent:a@99" | NULL | NULL | NULL | 1
+5 | "C-3b5bc37ab7" | 4 | "parameter" | 1 | 3 | 3 | 114 | 115 | "fixture.Parent:b@101" | NULL | NULL | NULL | 1
+6 | "C-3b5bc37ab7" | 5 | "helper-call" | 1 | 3 | 3 | 117 | 125 | "fixture.two" | NULL | NULL | NULL | 1
+7 | "C-3b5bc37ab7" | 6 | "parameter" | 1 | 3 | 3 | 121 | 122 | "fixture.Parent:a@99" | NULL | NULL | NULL | 1
+8 | "C-3b5bc37ab7" | 7 | "parameter" | 1 | 3 | 3 | 123 | 124 | "fixture.Parent:b@101" | NULL | NULL | NULL | 1
+9 | "C-3b5bc37ab7" | 8 | "declaration" | 1 | 5 | 9 | 128 | 185 | "fixture.one" | NULL | NULL | NULL | 2
+10 | "C-3b5bc37ab7" | 9 | "metric-contribution" | 1 | 6 | 6 | 148 | 160 | "expanded-lines" | "integer" | 1 | NULL | 2
+11 | "C-3b5bc37ab7" | 10 | "metric-contribution" | 1 | 7 | 7 | 160 | 172 | "expanded-lines" | "integer" | 1 | NULL | 2
+12 | "C-3b5bc37ab7" | 11 | "metric-contribution" | 1 | 8 | 8 | 172 | 184 | "expanded-lines" | "integer" | 1 | NULL | 2
+13 | "C-3b5bc37ab7" | 12 | "declaration" | 1 | 10 | 14 | 186 | 243 | "fixture.two" | NULL | NULL | NULL | 3
+14 | "C-3b5bc37ab7" | 13 | "metric-contribution" | 1 | 11 | 11 | 206 | 218 | "expanded-lines" | "integer" | 1 | NULL | 3
+15 | "C-3b5bc37ab7" | 14 | "metric-contribution" | 1 | 12 | 12 | 218 | 230 | "expanded-lines" | "integer" | 1 | NULL | 3
+16 | "C-3b5bc37ab7" | 15 | "metric-contribution" | 1 | 13 | 13 | 230 | 242 | "expanded-lines" | "integer" | 1 | NULL | 3
+
+[summary] failed | warned | suppressed
+0 | 0 | 1
+
+[suppressions] id | ordinal | smell | symbol | file_id | line | justification | applied | case_id
+1 | 0 | "cosmetic-extraction" | "fixture.Parent" | 1 | 2 | "accepted during policy review" | 1 | "C-3b5bc37ab7"
+
+[warnings] id | ordinal | code | file_id | line | message

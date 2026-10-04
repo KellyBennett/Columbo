@@ -1,0 +1,6 @@
+CASE C-89406fe185 fixture.F source.go:2-2
+  long-parameter-list: FAIL
+  parameters fixture.F: 5 (limit > 4)
+Warning history-unavailable :0: Git history unavailable; static analysis completed without history evidence.
+Columbo: 1 failed, 0 warned, 0 suppressed
+Database: report.sqlite

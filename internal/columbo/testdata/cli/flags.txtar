@@ -18,7 +18,19 @@ stderr '^columbo: flag provided but not defined: -unknown'
 
 columbo 2 --version --format=bad
 ! stdout .
-stderr '^columbo: invalid format "bad"'
+stderr '^columbo: flag provided but not defined: -format'
+
+columbo 2 --format=json
+! stdout .
+stderr '^columbo: flag provided but not defined: -format'
+
+columbo 2 --format=text
+! stdout .
+stderr '^columbo: flag provided but not defined: -format'
+
+columbo 2 --output=-
+! stdout .
+stderr '^columbo:.*stdout'
 
 columbo 2 --no-history=wat
 ! stdout .
