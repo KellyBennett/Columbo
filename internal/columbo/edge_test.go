@@ -2,7 +2,6 @@ package columbo
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go/ast"
@@ -211,18 +210,7 @@ func TestClusterSchema(t *testing.T) { (&testHarness{T: t}).TestClusterSchema() 
 var _ ast.Node
 
 func (t *testHarness) TestLargeClosedClump() {
-	var src strings.Builder
-	src.WriteString("package fixture\n")
-	params := []string{}
-	for i := 0; i < 32; i++ {
-		name := fmt.Sprintf("A%02d", i)
-		fmt.Fprintf(&src, "type %s struct{}\n", name)
-		params = append(params, fmt.Sprintf("p%d %s", i, name))
-	}
-	for _, name := range []string{"One", "Two", "Three"} {
-		fmt.Fprintf(&src, "func %s(%s){}\n", name, strings.Join(params, ","))
-	}
-	dir := t.fixture(src.String())
+	dir := t.fixture(clumpSource(32))
 	c := quiet()
 	c.Severity["data-clump"] = "fail"
 	cc := t.one(t.investigate(dir, c), "data-clump")

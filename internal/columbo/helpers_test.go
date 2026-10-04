@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go/ast"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -228,37 +227,12 @@ func (t *testHarness) TestExclusionsAndErrors() {
 func TestExclusionsAndErrors(t *testing.T) { (&testHarness{T: t}).TestExclusionsAndErrors() }
 
 func (t *testHarness) TestHistoryProvenance() {
-	if _, e := exec.LookPath("git"); e != nil {
-		t.Skip("git unavailable")
-	}
-	dir := t.fixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
-	run := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_NAME=Fixture", "GIT_AUTHOR_EMAIL=fixture@example.test", "GIT_COMMITTER_NAME=Fixture", "GIT_COMMITTER_EMAIL=fixture@example.test", "GIT_AUTHOR_DATE=2000-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2000-01-01T00:00:00Z")
-		b, e := cmd.CombinedOutput()
-		if e != nil {
-			t.Skipf("git sandbox unavailable: %s", b)
-		}
-		return strings.TrimSpace(string(b))
-	}
-	run("init")
-	run("add", ".")
-	run("commit", "-m", "fixture")
-	hash := run("rev-parse", "HEAD")
+	fixture := t.committedFixture("package fixture\nfunc F(a,b,c,d,e int){}\n")
 	c := quiet()
 	c.Severity["long-parameter-list"] = "fail"
 	c.History = true
-	r := t.investigate(dir, c)
-	cc := t.one(r, "long-parameter-list")
-	found := false
-	for _, rr := range cc.Receipts {
-		if h, ok := rr.(History); ok {
-			t.require(h.Commit == hash && h.CommittedAt == 946684800 && reflect.DeepEqual(h.Files, []string{"source.go"}), h)
-			found = true
-		}
-	}
-	t.require(found, "missing provenance", r)
+	finding := t.one(t.investigate(fixture.dir, c), "long-parameter-list")
+	t.requireHistory(finding, fixture.run(t, "rev-parse", "HEAD"))
 }
 func TestHistoryProvenance(t *testing.T) { (&testHarness{T: t}).TestHistoryProvenance() }
 
