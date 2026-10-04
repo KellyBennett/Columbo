@@ -2,12 +2,13 @@ package columbo
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go/ast"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -108,43 +109,34 @@ func (t *testHarness) TestClusterJSONOrder() {
 }
 func TestClusterJSONOrder(t *testing.T) { (&testHarness{T: t}).TestClusterJSONOrder() }
 
+type expandedLineCase struct {
+	body string
+	want int
+}
+
+var expandedLineCases = []expandedLineCase{{"one(a,b)", 3}, {"x:=one(a,b);_ = x", 4}, {"one(a,b);two(a,b)", 6}}
+
+func (c expandedLineCase) source() string {
+	h := helpers
+	if strings.Contains(c.body, "x:=") {
+		h = strings.ReplaceAll(h, "func one(a,b int) {", "func one(a,b int) int {")
+		h = strings.ReplaceAll(h, "println(a)\n}\nfunc two", "return a\n}\nfunc two")
+	}
+	return "package fixture\nfunc Parent(a,b int){" + c.body + "}\n" + h
+}
 func (t *testHarness) TestExpandedLines() {
-	for _, x := range []struct {
-		body string
-		want int
-	}{{"one(a,b)", 3}, {"x:=one(a,b);_ = x", 4}, {"one(a,b);two(a,b)", 6}} {
-		h := helpers
-		if strings.Contains(x.body, "x:=") {
-			h = strings.ReplaceAll(h, "func one(a,b int) {", "func one(a,b int) int {")
-			h = strings.ReplaceAll(h, "println(a)\n}\nfunc two", "return a\n}\nfunc two")
-		}
-		dir := t.fixture("package fixture\nfunc Parent(a,b int){" + x.body + "}\n" + h)
-		a, e := load(dir, []string{"./..."}, quiet())
-		t.require(e == nil, e)
-		for _, d := range a.declarations {
-			d.measure(a)
-		}
-		d := a.declarations[0]
-		ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
-		t.checkf(len(ss) == x.want, "%s: got %d != %d", x.body, len(ss), x.want)
+	for _, c := range expandedLineCases {
+		f := t.expansionFixture(c.source())
+		assert.Len(t.T, f.lines().sources, c.want, c.body)
 	}
 }
 func TestExpandedLines(t *testing.T) { (&testHarness{T: t}).TestExpandedLines() }
 
 func (t *testHarness) TestExpandedComplexity() {
-	dir := t.fixture("package fixture\nfunc Parent(a,b bool){if a {if b {helper(a)}}}\nfunc helper(a bool){if a {return}}\n")
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	n, rs := a.expandedComplexity(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}}, 0)
-	t.requiref(n == 6, "expanded complexity %d != 6", n)
-	copied := false
-	for _, r := range rs {
-		if len(r.Detail.ExpansionSites) > 0 && r.Detail.Value == 3 && r.Detail.Nesting == 2 {
-			copied = true
-		}
-	}
-	t.require(copied, rs)
+	f := t.expansionFixture("package fixture\nfunc Parent(a,b bool){if a {if b {helper(a)}}}\nfunc helper(a bool){if a {return}}\n")
+	score, evidence := f.complexity()
+	require.Equal(t.T, 6, score, "expanded complexity")
+	require.True(t.T, evidence.hasCopiedContribution(3, 2), "%+v", evidence.sources)
 }
 func TestExpandedComplexity(t *testing.T) { (&testHarness{T: t}).TestExpandedComplexity() }
 
@@ -374,18 +366,13 @@ func (t *testHarness) TestGenericHelperInterface() {
 func TestGenericHelperInterface(t *testing.T) { (&testHarness{T: t}).TestGenericHelperInterface() }
 
 func (t *testHarness) TestExpansionCopyEvidence() {
-	dir := t.fixture("package fixture\nfunc Parent(a,b int){outer(inner(a,b),b);two(a,b)}\nfunc outer(a,b int){_=func(){if a>0{println(a)}}}\nfunc inner(a,b int)int{if a>0{return a};return b}\n" + strings.ReplaceAll(helpers, "func one(a,b int)", "func unused(a,b int)"))
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
+	f := t.expansionFixture("package fixture\nfunc Parent(a,b int){outer(inner(a,b),b);two(a,b)}\nfunc outer(a,b int){_=func(){if a>0{println(a)}}}\nfunc inner(a,b int)int{if a>0{return a};return b}\n" + strings.ReplaceAll(helpers, "func one(a,b int)", "func unused(a,b int)"))
+	keys := f.lines().copyKeys()
+	require.NotEmpty(t.T, keys, "expected expanded copy provenance")
 	seen := map[string]bool{}
-	for _, r := range ss {
-		if len(r.Detail.Expansion) > 0 {
-			k := r.Detail.Expansion[len(r.Detail.Expansion)-1] + ":" + strconv.Itoa(r.StartLine) + ":" + canonical(r.Detail.ExpansionSites)
-			t.require(!(seen[k]), "copy path duplicate", r)
-			seen[k] = true
-		}
+	for _, key := range keys {
+		require.False(t.T, seen[key], "copy path duplicate: %s", key)
+		seen[key] = true
 	}
 }
 func TestExpansionCopyEvidence(t *testing.T) { (&testHarness{T: t}).TestExpansionCopyEvidence() }
