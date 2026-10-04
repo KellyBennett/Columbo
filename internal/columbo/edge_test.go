@@ -131,14 +131,10 @@ func TestCosmeticDistinctBoundaries(t *testing.T) {
 }
 
 func (t *testHarness) TestExpansionBoundaries() {
-	dir := t.fixture("package fixture\nfunc Parent(a bool){helper(a)}\nfunc helper(a bool){if a {Parent(a)}}\n")
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	n, _ := a.expandedComplexity(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}}, 0)
-	t.requiref(n == 1, "cycle cutoff score %d", n)
-	ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
-	t.require(len(ss) == 1, ss)
+	f := t.expansionFixture("package fixture\nfunc Parent(a bool){helper(a)}\nfunc helper(a bool){if a {Parent(a)}}\n")
+	score, _ := f.complexity()
+	require.Equal(t.T, 1, score, "cycle cutoff score")
+	require.Len(t.T, f.lines().sources, 1)
 }
 func TestExpansionBoundaries(t *testing.T) { (&testHarness{T: t}).TestExpansionBoundaries() }
 
@@ -184,18 +180,9 @@ func (t *testHarness) TestHelperCallsFromTests() {
 func TestHelperCallsFromTests(t *testing.T) { (&testHarness{T: t}).TestHelperCallsFromTests() }
 
 func (t *testHarness) TestExpansionChildCopies() {
-	dir := t.fixture(edgeSource3)
-	a, e := load(dir, []string{"./..."}, quiet())
-	t.require(e == nil, e)
-	d := a.declarations[0]
-	ss := a.expandedLines(d, []*declaration{d}, expansion{[]string{d.symbol}, []Site{}})
-	paths := map[string]bool{}
-	for _, r := range ss {
-		if len(r.Detail.Expansion) > 0 && strings.HasSuffix(r.Detail.Expansion[len(r.Detail.Expansion)-1], "inner") {
-			paths[canonical(r.Detail.ExpansionSites)] = true
-		}
-	}
-	t.require(len(paths) == 1, paths)
+	f := t.expansionFixture(edgeSource3)
+	paths := f.lines().childPaths("inner")
+	require.Len(t.T, paths, 1)
 }
 func TestExpansionChildCopies(t *testing.T) { (&testHarness{T: t}).TestExpansionChildCopies() }
 
