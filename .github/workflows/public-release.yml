@@ -10,6 +10,10 @@ jobs:
       GOTOOLCHAIN: local
       GOTELEMETRY: 'off'
       GOFLAGS: '-buildvcs=false'
+      GOOS: linux
+      GOARCH: amd64
+      GOWORK: 'off'
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

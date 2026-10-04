@@ -446,7 +446,7 @@ func (f *file) receipt(kind string, start, end token.Pos, detail Detail) Source 
 	if end > start {
 		q = f.tf.PositionFor(end-1, false)
 	}
-	return Source{kind, f.rel, p.Line, q.Line, f.tf.Offset(start), f.tf.Offset(end), detail}
+	return Source{Kind: kind, File: f.rel, StartLine: p.Line, EndLine: q.Line, StartOffset: f.tf.Offset(start), EndOffset: f.tf.Offset(end), Detail: detail}
 }
 func (d *declaration) variable(v *types.Var) string {
 	return d.file.variableIdentity(d.symbol, v)
@@ -456,7 +456,7 @@ func (f *file) variableIdentity(symbol string, v *types.Var) string {
 }
 func (f *file) line(pos token.Pos) int { return f.tf.Line(pos) }
 func (d *declaration) declReceipt() Source {
-	return d.file.receipt("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
+	return d.source("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
 func (a *engine) newCase(d *declaration, smell, key string) (*Case, error) {
 	severity := a.config.Severity[smell]
@@ -531,6 +531,7 @@ func (a *engine) Analyze() (Report, error) {
 		a.history()
 	}
 	a.report.finish()
+	a.collectDeclarationEvidence()
 	return a.report, nil
 }
 func (a *engine) inspectDeclarations() error {
@@ -582,7 +583,7 @@ func (p parameter) detail(sig *types.Signature) Detail {
 	return Detail{Subject: strconv.Itoa(p.index) + ":" + canonicalType(p.typ, sig), Value: p.arity(), Nesting: nil}
 }
 func (d *declaration) parameterReceipt(p parameter) Source {
-	return p.receipt(d.file, d.signature)
+	return p.receipt(d.file, d.signature).forDeclaration(d.ref())
 }
 
 func (p parameter) arity() int                          { return max(1, len(p.field.Names)) }
@@ -627,7 +628,10 @@ func (d *declaration) matchesObject(obj *types.Func, pos token.Position) bool {
 func (d *declaration) bodyNode() ast.Node       { return d.fn.Body }
 func (d *declaration) functionName() *ast.Ident { return d.fn.Name }
 func (d *declaration) callSite(call *ast.CallExpr) Site {
-	return d.file.callSite(call)
+	site := d.file.callSite(call)
+	ref := d.ref()
+	site.Owner = &ref
+	return site
 }
 func (f *file) tokenPositions(start, end token.Pos) []token.Pos {
 	out := []token.Pos{}
@@ -648,10 +652,86 @@ func (d *declaration) inputIdentity(expr ast.Expr) (string, bool) {
 	return key, ok
 }
 
-func (f *file) callSite(call *ast.CallExpr) Site { return Site{f.rel, f.tf.Offset(call.Pos())} }
+func (f *file) callSite(call *ast.CallExpr) Site {
+	return Site{File: f.rel, CallOffset: f.tf.Offset(call.Pos())}
+}
 func (d *declaration) helperCallReceipt(call *ast.CallExpr, helper string) Source {
-	return d.file.receipt("helper-call", call.Pos(), call.End(), Detail{Subject: helper})
+	return d.source("helper-call", call.Pos(), call.End(), Detail{Subject: helper})
 }
 func (d *declaration) identifierReceipt(id *ast.Ident, key string) Source {
-	return d.file.receipt("parameter", id.Pos(), id.End(), Detail{Subject: key})
+	return d.source("parameter", id.Pos(), id.End(), Detail{Subject: key})
+}
+
+func (d *declaration) ref() DeclarationRef {
+	return DeclarationRef{File: d.file.rel, Symbol: d.symbol}
+}
+
+// Keep declarations only when analysis emitted evidence involving them. The
+// evidence is intentionally not a complete program graph.
+type evidenceSelection map[DeclarationRef]bool
+
+func (a *engine) collectDeclarationEvidence() {
+	selection := evidenceSelection{}
+	for _, c := range a.report.Cases {
+		selection.addCase(c)
+	}
+	a.report.Declarations = selection.declarations(a.declarations)
+}
+func (selection evidenceSelection) addCase(c Case) {
+	for _, support := range c.SupportingDeclarations {
+		selection[support.Declaration] = true
+	}
+}
+func (selection evidenceSelection) declarations(declarations []*declaration) []DeclarationEvidence {
+	out := []DeclarationEvidence{}
+	for _, d := range declarations {
+		if selection[d.ref()] {
+			out = append(out, d.evidence())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].before(out[j]) })
+	return out
+}
+func (evidence DeclarationEvidence) before(other DeclarationEvidence) bool {
+	if evidence.Ref.File != other.Ref.File {
+		return evidence.Ref.File < other.Ref.File
+	}
+	return evidence.Ref.Symbol < other.Ref.Symbol
+}
+func (d *declaration) evidence() DeclarationEvidence {
+	return DeclarationEvidence{Ref: d.ref(), Source: d.declReceipt(), Dependencies: d.dependencyEvidence()}
+}
+func (d *declaration) dependencyInventory() map[string]bool {
+	inventory := map[string]bool{}
+	for _, source := range d.depReceipts {
+		inventory[source.DependencyIdentity] = true
+	}
+	for identity := range d.deps {
+		inventory[identity] = true
+	}
+	return inventory
+}
+func (d *declaration) dependencyEvidence() []DependencyEvidence {
+	dependencies := []DependencyEvidence{}
+	for _, identity := range sortedSet(d.dependencyInventory()) {
+		dependencies = append(dependencies, DependencyEvidence{identity, d.deps[identity]})
+	}
+	return dependencies
+}
+
+func (d *declaration) source(kind string, start, end token.Pos, detail Detail) Source {
+	return d.file.receipt(kind, start, end, detail).forDeclaration(d.ref())
+}
+func (d *declaration) lineContribution(line int, kind string, trace *expansion) Source {
+	return d.file.lineReceipt(line, kind).forDeclaration(d.ref()).withExpansion(trace)
+}
+func (d *declaration) memberAt(site Site) Member {
+	ref := d.ref()
+	return Member{Helper: d.symbol, CallOffset: site.CallOffset, Declaration: &ref}
+}
+func (d *declaration) memberReference(clusterKey string, site Site) MemberRef {
+	return MemberRef{ClusterKey: clusterKey, Helper: d.ref(), CallOffset: site.CallOffset}
+}
+func (d *declaration) rootExpansion() expansion {
+	return expansion{names: []string{d.symbol}, sites: []Site{}, declarations: []DeclarationRef{d.ref()}}
 }

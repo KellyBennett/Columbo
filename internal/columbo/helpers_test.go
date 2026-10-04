@@ -80,14 +80,14 @@ func TestReachableClusterOwnership(t *testing.T) {
 	(&testHarness{T: t}).TestReachableClusterOwnership()
 }
 
-func (t *testHarness) TestClusterJSONOrder() {
+func (t *testHarness) TestClusterSQLOrder() {
 	src := orderedClusterSource()
 	dir := t.fixture(src)
 	c := t.one(t.investigate(dir, cosmeticConfig()), "cosmetic-extraction")
 	t.require(len(c.Clusters) == 2, c)
 	t.require(c.Clusters[0].Members[0].Helper == "fixture.one" && c.Clusters[1].Members[0].Helper == "fixture.three" && c.Clusters[0].Members[1].CallOffset < c.Clusters[1].Members[0].CallOffset, c.Clusters)
 }
-func TestClusterJSONOrder(t *testing.T) { (&testHarness{T: t}).TestClusterJSONOrder() }
+func TestClusterSQLOrder(t *testing.T) { (&testHarness{T: t}).TestClusterSQLOrder() }
 
 type expandedLineCase struct {
 	body string
@@ -127,9 +127,7 @@ func (t *testHarness) TestCosmeticSeverityAndPolicy() {
 	r := t.investigate(dir, c)
 	cc := t.one(r, "cosmetic-extraction")
 	t.requireCosmeticPolicy(cc)
-	for _, format := range []string{"text", "json"} {
-		t.golden(r, filepath.Join("testdata", "suppressed-"+format+".golden"), format)
-	}
+	t.snapshotGoldens(r, filepath.Join("testdata", "suppressed"))
 	t.requireDisabledCosmeticSuppression(dir, c)
 }
 func TestCosmeticSeverityAndPolicy(t *testing.T) {

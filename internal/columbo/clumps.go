@@ -158,22 +158,34 @@ func (m *clumpMiner) patternCase(pattern typeMultiset, support []*declaration) (
 	return c, nil
 }
 func (c *Case) clumpClues(types []string, count int, config Config) {
-	c.Clues = append(c.Clues, metric("clump-types", c.Symbol, types))
-	c.Clues = append(c.Clues, metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">="))
-	c.Clues = append(c.Clues, metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">="))
+	c.Clues = append(c.Clues, metric("clump-types", c.Symbol, types).forDeclaration(c.PrimaryDeclaration))
+	c.Clues = append(c.Clues, metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration))
+	c.Clues = append(c.Clues, metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">=").forDeclaration(c.PrimaryDeclaration))
 }
 func (d *declaration) clumpReceipts(c *Case, s typeMultiset) {
-	c.Receipts = append(c.Receipts, d.declReceipt())
+	receipt := d.declReceipt()
+	c.Receipts = append(c.Receipts, receipt)
+	c.supportDeclaration(d.ref(), "clump-support")
+	c.Clues[2] = c.Clues[2].supportedBy([]Source{receipt})
 	need := s.copy()
 	for _, p := range d.params {
 		d.clumpParameter(c, need, p)
 	}
 }
 func (d *declaration) clumpParameter(c *Case, need typeMultiset, p parameter) {
-	t := canonicalType(p.typ, d.signature)
+	t := d.parameterType(p)
 	if need[t] == 0 {
 		return
 	}
 	need[t]--
-	c.Receipts = append(c.Receipts, d.parameterReceipt(p))
+	c.clumpParameterReceipt(d.parameterReceipt(p))
+}
+
+func (d *declaration) parameterType(p parameter) string {
+	return canonicalType(p.typ, d.signature)
+}
+func (c *Case) clumpParameterReceipt(receipt Source) {
+	c.Receipts = append(c.Receipts, receipt)
+	c.Clues[0] = c.Clues[0].supportedBy([]Source{receipt})
+	c.Clues[1] = c.Clues[1].supportedBy([]Source{receipt})
 }

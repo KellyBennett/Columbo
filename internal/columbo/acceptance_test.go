@@ -2,7 +2,7 @@ package columbo
 
 import (
 	"bytes"
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/sebdah/goldie/v2"
@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -103,9 +104,7 @@ func (t *testHarness) TestAllSevenDefaultFail() {
 	for _, smell := range smells {
 		t.verifyDefaultSmell(r, smell)
 	}
-	for _, format := range []string{"json", "text"} {
-		t.golden(r, filepath.Join("testdata", "all", format+".golden"), format)
-	}
+	t.snapshotGoldens(r, filepath.Join("testdata", "all"))
 }
 func (t *testHarness) verifyDefaultSmell(r Report, smell string) {
 	found := false
@@ -128,15 +127,126 @@ func (t *testHarness) reconcileDefaultCase(c Case) {
 		t.reconcile(c, "expanded-complexity")
 	}
 }
-func (t *testHarness) golden(r Report, path, format string) {
-	b, e := Serialize(r, format)
-	t.require(e == nil, e)
+
+// snapshotGoldens checks the published relational evidence and its SQL-only
+// compact presentation independently. Physical SQLite bytes are not canonical.
+func (t *testHarness) snapshotGoldens(r Report, base string) {
+	t.Helper()
+	db := t.snapshot(r)
+	t.goldenBytes(base+"-rows.golden", t.logicalRows(db))
+	summary, exitCode, err := RenderSnapshot(db, "report.sqlite")
+	t.require(err == nil, err)
+	t.require(exitCode == failureExit(r.Summary.Failed), "stored outcome exit", exitCode, r.Summary)
+	t.require(t.sqlCount(db, `SELECT failed FROM summary`) == r.Summary.Failed, "stored failure count", r.Summary)
+	t.goldenBytes(base+"-summary.golden", summary)
+}
+func (t *testHarness) snapshot(r Report) *sql.DB {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "report.sqlite")
+	err := WriteSnapshot(path, r, "test")
+	t.require(err == nil, err)
+	db, err := OpenSnapshot(path)
+	t.require(err == nil, err)
+	t.Cleanup(func() { t.check(db.Close() == nil, "close snapshot") })
+	return db
+}
+func (t *testHarness) goldenBytes(path string, data []byte) {
+	t.Helper()
 	g, name := goldenFile(t.T, path)
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		e = g.Update(t.T, name, b)
-		t.require(e == nil, e)
+		err := g.Update(t.T, name, data)
+		t.require(err == nil, err)
 	}
-	g.Assert(t.T, name, b)
+	g.Assert(t.T, name, data)
+}
+
+// logicalRows pins every stable column, null, typed value and ordinal. Tables
+// and views are discovered through SQLite, and rows use a total explicit order.
+func (t *testHarness) logicalRows(db *sql.DB) []byte {
+	t.Helper()
+	names := t.sqlStrings(db, `SELECT name FROM sqlite_schema WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	var output strings.Builder
+	for _, name := range names {
+		table := logicalTable{test: t, db: db, name: name}
+		table.writeTo(&output)
+	}
+	return []byte(strings.TrimRight(output.String(), "\n") + "\n")
+}
+
+// logicalTable owns discovery, deterministic row order and cell presentation.
+type logicalTable struct {
+	test *testHarness
+	db   *sql.DB
+	name string
+}
+
+func (table logicalTable) quotedName() string {
+	return `"` + strings.ReplaceAll(table.name, `"`, `""`) + `"`
+}
+func (table logicalTable) columns() []string {
+	rows, err := table.db.Query("SELECT * FROM " + table.quotedName() + " LIMIT 0")
+	table.test.noError(err)
+	defer rows.Close()
+	columns, err := rows.Columns()
+	table.test.noError(err)
+	return columns
+}
+func (table logicalTable) orderedRows(columns []string) *sql.Rows {
+	order := make([]string, len(columns))
+	for i := range order {
+		order[i] = strconv.Itoa(i + 1)
+	}
+	rows, err := table.db.Query("SELECT * FROM " + table.quotedName() + " ORDER BY " + strings.Join(order, ","))
+	table.test.noError(err)
+	return rows
+}
+func (table logicalTable) writeTo(output *strings.Builder) {
+	columns := table.columns()
+	rows := table.orderedRows(columns)
+	defer rows.Close()
+	fmt.Fprintf(output, "[%s] %s\n", table.name, strings.Join(columns, " | "))
+	for rows.Next() {
+		output.WriteString(table.formattedRow(rows, len(columns)) + "\n")
+	}
+	table.test.noError(rows.Err())
+	output.WriteByte('\n')
+}
+func (table logicalTable) formattedRow(rows *sql.Rows, count int) string {
+	values := make([]any, count)
+	pointers := make([]any, count)
+	for i := range values {
+		pointers[i] = &values[i]
+	}
+	table.test.noError(rows.Scan(pointers...))
+	parts := make([]string, count)
+	for i, value := range values {
+		parts[i] = logicalValue(value)
+	}
+	return strings.Join(parts, " | ")
+}
+func failureExit(failed int) int {
+	if failed > 0 {
+		return 1
+	}
+	return 0
+}
+func logicalValue(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return "NULL"
+	case string:
+		return strconv.Quote(v)
+	case []byte:
+		return fmt.Sprintf("x'%x'", v)
+	default:
+		return logicalNumber(value)
+	}
+}
+func logicalNumber(value any) string {
+	if number, ok := value.(float64); ok {
+		return strconv.FormatFloat(number, 'g', -1, 64)
+	}
+	return fmt.Sprint(value)
 }
 func goldenFile(t testing.TB, path string) (*goldie.Goldie, string) {
 	return goldie.New(t, goldie.WithFixtureDir(filepath.Dir(path))), strings.TrimSuffix(filepath.Base(path), ".golden")
@@ -248,18 +358,23 @@ func (t *testHarness) TestSeverityAndExits() {
 func (t *testHarness) severityExit(dir, severity string) {
 	t.write(dir, ".columbo.yml", "history: {enabled: false}\nseverity: {long-parameter-list: "+severity+"}\n")
 	var out, err bytes.Buffer
-	code := Run([]string{"--format=json"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	code := Run([]string{"--output=report.sqlite"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
 	want := 0
 	if severity == "fail" {
 		want = 1
 	}
 	t.requiref(code == want, "%s: exit %d (%s)", severity, code, err.String())
-	t.validReportJSON(out.Bytes())
+	t.requireSeveritySnapshot(dir, out.Bytes(), want)
 }
-func (t *testHarness) validReportJSON(data []byte) {
-	var report Report
-	err := json.Unmarshal(data, &report)
-	t.require(err == nil, err)
+func (t *testHarness) requireSeveritySnapshot(dir string, stdout []byte, want int) {
+	path := filepath.Join(dir, "report.sqlite")
+	db, err := OpenSnapshot(path)
+	t.noError(err)
+	defer db.Close()
+	summary, exitCode, err := RenderSnapshot(db, path)
+	t.noError(err)
+	t.equal(want, exitCode, "exit did not follow stored outcomes")
+	t.equal(summary, stdout, "CLI summary disagrees with snapshot")
 }
 func (t *testHarness) malformedPackageExit(dir string) {
 	t.write(dir, "bad.go", "package fixture\nvar x = missing\n")

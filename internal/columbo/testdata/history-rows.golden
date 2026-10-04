@@ -1,0 +1,71 @@
+[case_declarations] case_id | declaration_id | role
+"C-89406fe185" | 1 | "primary"
+
+[case_guidance] case_id | kind | ordinal | item
+"C-89406fe185" | "avoid" | 0 | "Bundling unrelated inputs into an opaque bag solely to reduce the count."
+"C-89406fe185" | "lead" | 0 | "Examine whether inputs form a cohesive domain object."
+"C-89406fe185" | "lead" | 1 | "Separate responsibilities that require different inputs."
+
+[case_history] case_id | ordinal | commit_hash | kind
+
+[case_history_files] case_id | history_ordinal | ordinal | file_id
+
+[case_policy_reviews] case_id | ordinal | policy_id
+
+[cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
+"C-89406fe185" | 0 | 1 | "long-parameter-list" | "FAIL" | 0 | 2 | 2 | "Many parameters can obscure which inputs belong together." | "fixture.F exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
+
+[clue_receipts] case_id | clue_id | receipt_id
+"C-89406fe185" | 1 | 2
+"C-89406fe185" | 1 | 3
+"C-89406fe185" | 1 | 4
+"C-89406fe185" | 1 | 5
+"C-89406fe185" | 1 | 6
+
+[clue_values] clue_id | ordinal | value
+
+[clues] id | case_id | ordinal | kind | subject | value_type | numeric_value | limit_type | limit_value | operator | declaration_id | cluster_id | member_id | pair_left_member_id | pair_right_member_id
+1 | "C-89406fe185" | 0 | "parameters" | "fixture.F" | "integer" | 5 | "integer" | 4 | ">" | 1 | NULL | NULL | NULL | NULL
+
+[cluster_members] id | cluster_id | case_id | helper_declaration_id | ordinal | call_offset
+
+[clusters] id | case_id | cluster_key | owner_declaration_id | file_id | ordinal
+
+[commits] hash | committed_at
+
+[declaration_dependencies] declaration_id | dependency_id | scored
+
+[declarations] id | file_id | symbol | start_line | end_line | start_offset | end_offset
+1 | 1 | "fixture.F" | 2 | 2 | 16 | 39
+
+[dependencies] id | identity
+
+[dependency_receipts] declaration_id | dependency_id | receipt_id | case_id
+
+[files] id | path
+1 | "source.go"
+
+[policy_reviews] id | note | review_prompt
+
+[receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
+
+[receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
+
+[report] id | schema_version | columbo_version
+1 | 1 | "test"
+
+[source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id
+1 | "C-89406fe185" | 0 | "declaration" | 1 | 2 | 2 | 16 | 39 | "fixture.F" | NULL | NULL | NULL | 1
+2 | "C-89406fe185" | 1 | "parameter" | 1 | 2 | 2 | 23 | 36 | "0:int" | "integer" | 5 | NULL | 1
+3 | "C-89406fe185" | 2 | "parameter" | 1 | 2 | 2 | 23 | 36 | "1:int" | "integer" | 5 | NULL | 1
+4 | "C-89406fe185" | 3 | "parameter" | 1 | 2 | 2 | 23 | 36 | "2:int" | "integer" | 5 | NULL | 1
+5 | "C-89406fe185" | 4 | "parameter" | 1 | 2 | 2 | 23 | 36 | "3:int" | "integer" | 5 | NULL | 1
+6 | "C-89406fe185" | 5 | "parameter" | 1 | 2 | 2 | 23 | 36 | "4:int" | "integer" | 5 | NULL | 1
+
+[summary] failed | warned | suppressed
+1 | 0 | 0
+
+[suppressions] id | ordinal | smell | symbol | file_id | line | justification | applied | case_id
+
+[warnings] id | ordinal | code | file_id | line | message
+1 | 0 | "history-unavailable" | NULL | 0 | "Git history unavailable; static analysis completed without history evidence."

@@ -1,0 +1,83 @@
+Finalized implementation handoff for [KellyBennett/Columbo](https://github.com/KellyBennett/Columbo). Replace JSON with SQLite as the sole reporting source of truth. Analysis stores verdicts and evidence once; agents and compact terminal summaries query that database. This spec supersedes legacy SPEC requirements for CLI/report formats and full-text output. All other analysis, enforcement and evidence semantics remain authoritative.
+
+## Scope and interface
+
+Invocation:
+
+```sh
+columbo --output report.sqlite ./...
+sqlite3 -readonly report.sqlite '.schema'
+```
+
+Every analysis run writes SQLite, defaulting to `columbo.sqlite` in the invocation directory; `--output PATH` selects another file. Remove `--format`; reject old format flags and stdout as a database destination with exit 2. After publication, SQL readers emit a compact stdout summary. Each case entry contains ID, smell, symbol/location, stored verdict, suppression reason when applicable, triggering metrics/comparisons and required policy-review prompts. Include WARN and suppressed cases, warnings, totals and the database path. Full receipts, why/diagnosis and leads/avoid stay in SQLite. Diagnostics go to stderr; preserve existing warning rules.
+
+Exit 0/1 means completed analysis without/with unsuppressed FAIL cases, determined by SQL over stored verdicts and suppression flags. Exit 2 means analysis or delivery failed. One invocation produces one self-contained snapshot, queried read-only. No server, accumulating history, query service, migration framework or complete program graph. Coverage remains emitted evidence, including supporting declarations and helpers; absence from the database does not prove absence from the codebase.
+
+## Relational model
+
+Map the [current report model](https://github.com/KellyBennett/Columbo/blob/main/internal/columbo/model.go) into these relational groups. Every relationship below uses a declared foreign key. Names may be refined consistently with the published schema and queries.
+
+- `report`: one row with SQLite schema version and Columbo version. A `summary` SQL view counts stored case outcomes. `files` holds unique module-relative paths. `declarations` identifies evidence-bearing declarations by file and qualified symbol, preserving existing init and blank-function identities
+
+- `cases`: existing case ID, primary declaration FK, smell, verdict, suppressed flag, source lines, why and diagnosis. `case_declarations` links supporting declarations with explicit roles. `case_guidance` stores ordered lead/avoid items
+
+- `clues`: case FK, ordinal, kind, original subject, typed numeric value, nullable limit/operator, and explicit applicable declaration/cluster/member references. `clue_values` stores ordered string values, preserving repeated clump types. Numeric versus list values are checked alternatives; an empty list remains distinguishable from null. Pair-overlap clues reference both members, so agents never parse encoded subject strings
+
+- `dependencies`: canonical dependency identities. `declaration_dependencies` joins declarations to dependencies with a scored flag. `dependency_receipts` links those relationships to source receipts. Preserve both `dependency` and `dependency-inventory`: inventory-only evidence must never increase the scored count or helper overlap. This follows the [current scoring distinction](https://github.com/KellyBennett/Columbo/blob/main/internal/columbo/metrics.go)
+
+- `clusters`: case FK, existing cluster key, owner declaration FK, file FK and ordinal. `cluster_members`: cluster FK, helper declaration FK, lexical ordinal and call offset. A cluster can appear under multiple cases; its membership remains case-scoped. Forwarding sets and overlap clues link to the relevant cluster/member
+
+- `source_receipts`: case FK, ordinal, kind, file FK, physical line/byte ranges, subject, nullable value/nesting and source declaration FK where known. `receipt_expansion_declarations` and `receipt_expansion_sites` retain both ordered paths as child rows. `clue_receipts` links actual supporting receipts where the analysis establishes that relationship; sharing a case alone is insufficient
+
+- `commits`, `case_history` and `case_history_files` preserve ordered history receipts and each case’s exact matching file subset. `suppressions` retains every directive, justification, applied flag and nullable case FK. `warnings` retains every warning and its location. `policy_reviews` and `case_policy_reviews` preserve policy IDs, literal review notes/prompts and per-case order
+
+Carry typed evidence links from analysis into the writer; never recover relationships by parsing display subjects. Store rule outcomes once. Terminal and exit-status readers query the completed snapshot without consuming a parallel report or rerunning rules. Retain original subjects for fidelity. Stable evidence belongs in columns or child tables; the current model needs no JSON payload.
+
+## Agent queries and discovery
+
+Ship a short schema reference with cardinalities, null semantics and runnable queries. Expose the schema version in `report` and `PRAGMA user_version`; SQLite introspection remains sufficient to discover tables, columns and keys. Index foreign keys plus common filters on case smell/verdict/suppressed, declaration symbol, dependency identity, and receipt file/range/kind.
+
+Two representative queries, against the proposed names:
+
+```sql
+-- Scored collaborators shared by evidence-bearing declarations
+SELECT d.identity, COUNT(DISTINCT dd.declaration_id) AS users
+FROM declaration_dependencies dd
+JOIN dependencies d ON d.id = dd.dependency_id
+WHERE dd.scored = 1
+GROUP BY d.id, d.identity
+HAVING COUNT(DISTINCT dd.declaration_id) > 1
+ORDER BY users DESC, d.identity;
+
+-- Helpers in a case, preserving cluster and call order
+SELECT cl.cluster_key, m.ordinal, f.symbol, m.call_offset
+FROM clusters cl
+JOIN cluster_members m ON m.cluster_id = cl.id
+JOIN declarations f ON f.id = m.helper_declaration_id
+WHERE cl.case_id = :case_id
+ORDER BY cl.ordinal, m.ordinal;
+```
+
+Also include queries for unsuppressed failures, metric-to-receipt reconciliation, source locations shared across cases, expansion paths, and suppression/policy explanations.
+
+## Preservation and completion
+
+Preserve [existing evidence semantics](https://github.com/KellyBennett/Columbo/blob/main/SPEC.md#output): comparisons, displayed values, guidance, suppression accounting and history behavior. Preserve canonical case identity and ordering algorithms, including internal canonical encoding, independently of removing the JSON report encoder. Never recompute verdicts from rounded SQL values. Preserve offsets, nulls, list/multiset order and both expansion paths. Distinct copied evidence remains distinct; contribution sums reconcile.
+
+Use primary/unique/check constraints and enabled foreign keys. Case-scoped links must enforce same-case ownership, including clue/receipt and cluster/member/pair links. Same inputs produce identical logical rows, IDs and ordinals; file bytes need not match. Queries specify meaningful ordering. Preserve the [Go 1.25.1 and CGO_ENABLED=0 acceptance environment](https://github.com/KellyBennett/Columbo/blob/main/.github/workflows/test.yml); select and pin a compatible embedded SQLite driver.
+
+Build a temporary sibling file in one transaction, validate foreign keys and integrity, close it, then publish atomically. Stamp a dedicated Columbo SQLite application ID and matching schema version in `report` and `user_version`. Replace only a regular, non-symlink Columbo snapshot with supported versions, expected schema and valid integrity/foreign keys; refuse unrelated, invalid or unsupported files unchanged. Pre-publication failure leaves the prior snapshot untouched and emits no analysis summary. Delivery needs no journal/WAL sidecars. Summary-write failure exits 2 even if publication already succeeded.
+
+## Acceptance checklist
+
+1. Preserve all seven smells and edge-fixture evidence: empty output, suppressions, case-specific history, history failures, CE-001, cluster ordering and distinct expansion copies. Compare old JSON fixtures during development only; retain canonical identity/order regressions
+
+2. SQL summaries and exit codes match stored outcomes; contributions reconcile and inventory-only dependencies remain unscored. Test summary readers against saved databases without analysis, including triggering comparisons, WARN/suppressed policy prompts and warnings. Reject orphaned and cross-case links
+
+3. Run discovery and example queries on fixtures. Test safe repeated replacement, interrupted/disk writes, invalid/unrelated/unsupported destinations and summary-write failures. Verify documented exit 2 behavior, logical determinism and self-contained snapshots
+
+4. Ship one SQLite writer and SQL-backed terminal renderer. Remove JSON reporting and any jq recipes/docs/tests/CI wiring present on the implementation base, including [PR 17](https://github.com/KellyBennett/Columbo/pull/17) if merged. Update README, SPEC, artifact ignore/capture/upload guidance and CI together. Replace JSON goldens with logical-row and compact-summary goldens; pass Go tests, vet, build and unchanged self-check under the pinned environment
+
+5. Run a bounded fresh-agent comparison against the previous JSON-plus-jq version, with engineering-defined fixed prompts, model and budget. Cover shared dependencies, contributing locations, ordered clusters, distinct copies and suppressed/policy cases. Correctness and evidence fidelity are required. Record query failures/retries, tool calls and context volume; efficiency is informational, not a condition for the chosen SQLite cutover. Fix correctness gaps before completion
+
+The previous version and fixtures may remain development-only baselines. Ship no JSON export, compatibility mode or dual reporting architecture. Deliver code/tests, updated schema and SQL examples, verification results and any explicit blockers.

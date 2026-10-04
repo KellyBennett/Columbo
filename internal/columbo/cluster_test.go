@@ -1,7 +1,6 @@
 package columbo
 
 import (
-	"encoding/json"
 	"github.com/stretchr/testify/require"
 	"strings"
 )
@@ -67,15 +66,4 @@ func (t *testHarness) requireOwnedCluster(c Case, owner string) {
 	for _, input := range evidence.inputs {
 		require.True(t.T, strings.HasPrefix(input, owner+":"), input)
 	}
-}
-
-// reportDocument tests the serialized schema rather than the in-memory structs.
-func (t *testHarness) reportDocument(r Report) map[string]any {
-	t.Helper()
-	data, err := Serialize(r, "json")
-	t.require(err == nil, err)
-	var document map[string]any
-	err = json.Unmarshal(data, &document)
-	t.require(err == nil, err)
-	return document
 }

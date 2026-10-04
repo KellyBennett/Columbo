@@ -1,0 +1,15 @@
+CASE C-c7dd4d4d98 saved.F0 saved.go:1-1
+  long-parameter-list: FAIL
+  parameters saved.F0: 1 (limit > 99)
+CASE C-403343f731 saved.F1 saved.go:2-2
+  long-parameter-list: WARN
+  parameters saved.F1: 2 (limit > 99)
+CASE C-51731b967d saved.F2 saved.go:3-3
+  cosmetic-extraction: SUPPRESSED (original: WARN)
+  suppression saved.go:3: accepted policy fixture
+  expanded-lines saved.F2: 3 (limit > 4)
+  Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+Warning history-unavailable :0: Git history unavailable; static analysis completed without history evidence.
+Columbo: 1 failed, 1 warned, 1 suppressed
+Database: saved.sqlite

@@ -1,6 +1,7 @@
 package columbo
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +12,7 @@ const usage = `Usage: columbo [flags] [packages...]
 
 Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
-  --format text|json  report format (default text)
+  --output PATH       SQLite snapshot (default columbo.sqlite)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -22,7 +23,7 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, format                                    string
+	config, output                                    string
 	noHistory, showVersion, help, shortHelp, explicit bool
 	patterns                                          []string
 }
@@ -30,7 +31,6 @@ type command struct {
 	invocation Invocation
 	options    commandOptions
 	config     Config
-	report     Report
 }
 
 func Run(args []string, invocation Invocation) int {
@@ -47,11 +47,13 @@ func Run(args []string, invocation Invocation) int {
 	return c.analyze()
 }
 func (i Invocation) versionText() []byte {
-	version := i.Version
-	if version == "" {
-		version = "dev"
+	return []byte("columbo " + i.buildVersion() + "\n")
+}
+func (i Invocation) buildVersion() string {
+	if i.Version == "" {
+		return "dev"
 	}
-	return []byte("columbo " + version + "\n")
+	return i.Version
 }
 func (o *commandOptions) parse(args []string) error {
 	fs := o.flagSet()
@@ -59,8 +61,8 @@ func (o *commandOptions) parse(args []string) error {
 		return e
 	}
 	o.arguments(fs)
-	if o.format != "text" && o.format != "json" {
-		return fmt.Errorf("invalid format %q", o.format)
+	if o.output == "" || o.output == "-" {
+		return fmt.Errorf("output must name a SQLite file, not stdout")
 	}
 	return nil
 }
@@ -74,7 +76,7 @@ func (o *commandOptions) arguments(fs *flag.FlagSet) {
 }
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
-	fs.StringVar(&o.format, "format", "text", "")
+	fs.StringVar(&o.output, "output", "columbo.sqlite", "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
@@ -127,29 +129,51 @@ func (c *command) analyze() int {
 	if e != nil {
 		return c.fatal(e)
 	}
-	c.report = r
-	return c.output()
+	return c.publish(r)
 }
-func (c *command) output() int {
-	b, e := Serialize(c.report, c.options.format)
+func (c *command) snapshotPath() string {
+	if filepath.IsAbs(c.options.output) {
+		return c.options.output
+	}
+	return filepath.Join(c.invocation.Dir, c.options.output)
+}
+func (c *command) publish(report Report) int {
+	path := c.snapshotPath()
+	if e := WriteSnapshot(path, report, c.invocation.buildVersion()); e != nil {
+		return c.fatal(e)
+	}
+	db, e := OpenSnapshot(path)
 	if e != nil {
 		return c.fatal(e)
 	}
-	c.warnings()
-	if e = writeOutput(c.invocation.Stdout, b); e != nil {
+	defer db.Close()
+	return c.output(db, path)
+}
+func (c *command) output(db *sql.DB, path string) int {
+	b, code, e := RenderSnapshot(db, path)
+	if e != nil {
+		return c.fatal(e)
+	}
+	if e := c.warnings(db); e != nil {
+		return c.fatal(e)
+	}
+	return c.deliverSummary(b, code)
+}
+func (c *command) deliverSummary(b []byte, code int) int {
+	if e := writeOutput(c.invocation.Stdout, b); e != nil {
 		return c.fatal(fmt.Errorf("output write failed: %w", e))
 	}
-	if c.report.Summary.Failed > 0 {
-		return 1
-	}
-	return 0
+	return code
 }
-func (c *command) warnings() {
-	for _, w := range c.report.Warnings {
-		if c.options.format == "text" || w.Code == "history-unavailable" {
-			c.invocation.warning(w.Message)
-		}
+func (c *command) warnings(db *sql.DB) error {
+	messages, e := snapshotWarningMessages(db)
+	if e != nil {
+		return e
 	}
+	for _, message := range messages {
+		c.invocation.warning(message)
+	}
+	return nil
 }
 
 func (o *commandOptions) flagSet() *flag.FlagSet {

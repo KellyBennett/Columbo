@@ -18,67 +18,110 @@ type Summary struct {
 	Warned     int `json:"warned"`
 	Suppressed int `json:"suppressed"`
 }
+
+// DeclarationRef is a physical declaration identity. Display subjects are never
+// used to reconstruct this identity or any evidence relationship.
+type DeclarationRef struct {
+	File   string
+	Symbol string
+}
+type DependencyEvidence struct {
+	Identity string
+	Scored   bool
+}
+type DeclarationEvidence struct {
+	Ref          DeclarationRef
+	Source       Source
+	Dependencies []DependencyEvidence
+}
+type CaseDeclaration struct {
+	Declaration DeclarationRef
+	Role        string
+}
+type MemberRef struct {
+	ClusterKey string
+	Helper     DeclarationRef
+	CallOffset int
+}
+
 type Report struct {
-	Version      int           `json:"version"`
-	Summary      Summary       `json:"summary"`
-	Cases        []Case        `json:"cases"`
-	Suppressions []Suppression `json:"suppressions"`
-	Warnings     []Warning     `json:"warnings"`
+	Version      int                   `json:"version"`
+	Summary      Summary               `json:"summary"`
+	Cases        []Case                `json:"cases"`
+	Suppressions []Suppression         `json:"suppressions"`
+	Warnings     []Warning             `json:"warnings"`
+	Declarations []DeclarationEvidence `json:"-"`
 }
 type Case struct {
-	ID            string         `json:"id"`
-	Smell         string         `json:"smell"`
-	Verdict       string         `json:"verdict"`
-	Symbol        string         `json:"symbol"`
-	File          string         `json:"file"`
-	StartLine     int            `json:"start_line"`
-	EndLine       int            `json:"end_line"`
-	Suppressed    bool           `json:"suppressed"`
-	Clues         []Clue         `json:"clues"`
-	Clusters      []Cluster      `json:"clusters"`
-	Why           string         `json:"why"`
-	Diagnosis     string         `json:"diagnosis"`
-	Leads         []string       `json:"leads"`
-	Avoid         []string       `json:"avoid"`
-	Receipts      []any          `json:"receipts"`
-	PolicyReviews []PolicyReview `json:"policy_reviews"`
+	ID                     string            `json:"id"`
+	Smell                  string            `json:"smell"`
+	Verdict                string            `json:"verdict"`
+	Symbol                 string            `json:"symbol"`
+	File                   string            `json:"file"`
+	StartLine              int               `json:"start_line"`
+	EndLine                int               `json:"end_line"`
+	Suppressed             bool              `json:"suppressed"`
+	Clues                  []Clue            `json:"clues"`
+	Clusters               []Cluster         `json:"clusters"`
+	Why                    string            `json:"why"`
+	Diagnosis              string            `json:"diagnosis"`
+	Leads                  []string          `json:"leads"`
+	Avoid                  []string          `json:"avoid"`
+	Receipts               []any             `json:"receipts"`
+	PolicyReviews          []PolicyReview    `json:"policy_reviews"`
+	PrimaryDeclaration     *DeclarationRef   `json:"-"`
+	SupportingDeclarations []CaseDeclaration `json:"-"`
 }
 type Clue struct {
-	Kind     string `json:"kind"`
-	Subject  string `json:"subject"`
-	Value    any    `json:"value"`
-	Limit    any    `json:"limit"`
-	Operator any    `json:"operator"`
+	Kind               string          `json:"kind"`
+	Subject            string          `json:"subject"`
+	Value              any             `json:"value"`
+	Limit              any             `json:"limit"`
+	Operator           any             `json:"operator"`
+	Declaration        *DeclarationRef `json:"-"`
+	ClusterKey         string          `json:"-"`
+	Member             *MemberRef      `json:"-"`
+	Pair               []MemberRef     `json:"-"`
+	SupportingReceipts []string        `json:"-"`
 }
 type Cluster struct {
-	Key     string   `json:"key"`
-	Owner   string   `json:"owner"`
-	File    string   `json:"file"`
-	Members []Member `json:"members"`
+	Key              string          `json:"key"`
+	Owner            string          `json:"owner"`
+	File             string          `json:"file"`
+	Members          []Member        `json:"members"`
+	OwnerDeclaration *DeclarationRef `json:"-"`
 }
 type Member struct {
-	Helper     string `json:"helper"`
-	CallOffset int    `json:"call_offset"`
+	Helper      string          `json:"helper"`
+	CallOffset  int             `json:"call_offset"`
+	Declaration *DeclarationRef `json:"-"`
 }
 type Site struct {
-	File       string `json:"file"`
-	CallOffset int    `json:"call_offset"`
+	File       string          `json:"file"`
+	CallOffset int             `json:"call_offset"`
+	Owner      *DeclarationRef `json:"-"`
 }
 type Detail struct {
-	Subject        string   `json:"subject"`
-	Value          any      `json:"value"`
-	Nesting        any      `json:"nesting"`
-	Expansion      []string `json:"expansion"`
-	ExpansionSites []Site   `json:"expansion_sites"`
+	Subject               string           `json:"subject"`
+	Value                 any              `json:"value"`
+	Nesting               any              `json:"nesting"`
+	Expansion             []string         `json:"expansion"`
+	ExpansionSites        []Site           `json:"expansion_sites"`
+	ExpansionDeclarations []DeclarationRef `json:"-"`
 }
 type Source struct {
-	Kind        string `json:"kind"`
-	File        string `json:"file"`
-	StartLine   int    `json:"start_line"`
-	EndLine     int    `json:"end_line"`
-	StartOffset int    `json:"start_offset"`
-	EndOffset   int    `json:"end_offset"`
-	Detail      Detail `json:"detail"`
+	Kind                   string          `json:"kind"`
+	File                   string          `json:"file"`
+	StartLine              int             `json:"start_line"`
+	EndLine                int             `json:"end_line"`
+	StartOffset            int             `json:"start_offset"`
+	EndOffset              int             `json:"end_offset"`
+	Detail                 Detail          `json:"detail"`
+	Declaration            *DeclarationRef `json:"-"`
+	DependencyIdentity     string          `json:"-"`
+	DependencyScored       bool            `json:"-"`
+	EvidenceKey            string          `json:"-"`
+	AggregateContributions bool            `json:"-"`
 }
 type History struct {
 	Kind        string   `json:"kind"`
@@ -118,9 +161,9 @@ func ValidatePublicRelease() error {
 	return nil
 }
 func canonical(v any) string {
-	b, _ := serializeJSON(v)
+	b, _ := encodeCanonicalJSON(v)
 	normalized := decodeCanonical(b)
-	b, _ = serializeJSON(normalized)
+	b, _ = encodeCanonicalJSON(normalized)
 	return strings.TrimSuffix(string(b), "\n")
 }
 func decodeCanonical(b []byte) any {
@@ -178,6 +221,9 @@ type receiptCollection struct {
 func (c *Case) normalizeReceipts() {
 	rs := &receiptCollection{aggregated: map[string]Source{}}
 	for _, r := range c.Receipts {
+		if source, ok := r.(Source); ok {
+			c.sourceDeclarations(source)
+		}
 		rs.add(r)
 	}
 	c.Receipts = rs.finish()
@@ -188,7 +234,7 @@ func (rs *receiptCollection) add(r any) {
 		rs.history = append(rs.history, r)
 		return
 	}
-	if s.Kind == "metric-contribution" && strings.Contains(s.Detail.Subject, "complexity") {
+	if s.AggregateContributions {
 		rs.aggregate(s)
 		return
 	}
@@ -216,6 +262,7 @@ func uniqueSources(sources []Source) []any {
 	for _, s := range sources {
 		key := canonical(s)
 		if key != last {
+			s.EvidenceKey = sourceEvidenceKey(s)
 			out = append(out, s)
 			last = key
 		}
@@ -254,30 +301,7 @@ func (r *Report) finishCase(c *Case) {
 	}
 	r.Summary.Warned++
 }
-func textClueNumber(kind string, v any) string {
-	if kind == "parameter-overlap" || kind == "dependency-overlap" || kind == "foreign-own-ratio" {
-		switch n := v.(type) {
-		case float64:
-			return fmt.Sprintf("%.6f", n)
-		case int:
-			return fmt.Sprintf("%.6f", float64(n))
-		}
-	}
-	return canonical(v)
-}
-
-func Serialize(r Report, format string) ([]byte, error) {
-	if format == "json" {
-		return serializeJSON(r)
-	}
-	w := &textWriter{}
-	for _, c := range r.Cases {
-		c.writeText(w, r.Suppressions)
-	}
-	r.writeSummary(w)
-	return w.Bytes(), nil
-}
-func serializeJSON(v any) ([]byte, error) {
+func encodeCanonicalJSON(v any) ([]byte, error) {
 	var b bytes.Buffer
 	e := json.NewEncoder(&b)
 	e.SetEscapeHTML(false)
@@ -287,98 +311,18 @@ func serializeJSON(v any) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-type textWriter struct{ bytes.Buffer }
-
-func (w *textWriter) emit(format string, args ...any) { fmt.Fprintf(&w.Buffer, format, args...) }
-func (c *Case) writeText(w *textWriter, suppressions []Suppression) {
-	w.emit("CASE %s — %s\nVERDICT\n  ", c.ID, c.Symbol)
-	c.writeVerdict(w, suppressions)
-	w.emit("SMELL\n  %s\nCLUES\n", c.Smell)
-	c.writeClusters(w)
-	c.writeClues(w)
-	c.writeGuidance(w)
-	c.writeReceipts(w)
-	c.writePolicy(w)
-	w.emit("\n")
-}
-func (c *Case) writeVerdict(w *textWriter, suppressions []Suppression) {
-	if !c.Suppressed {
-		w.emit("%s\n", c.Verdict)
-		return
-	}
-	w.emit("SUPPRESSED (original: %s)\n", c.Verdict)
-	for _, s := range suppressions {
-		if s.CaseID == c.ID {
-			w.emit("  %s:%d — %s\n", s.File, s.Line, s.Justification)
-		}
-	}
-}
-func (c *Case) writeClusters(w *textWriter) {
-	for _, cl := range c.Clusters {
-		cl.writeText(w)
-	}
-}
-func (cl Cluster) writeText(w *textWriter) {
-	w.emit("  cluster %s owner=%s file=%s\n", cl.Key, cl.Owner, cl.File)
-	for _, m := range cl.Members {
-		w.emit("    %s call_offset=%d\n", m.Helper, m.CallOffset)
-	}
-}
-func (c *Case) writeClues(w *textWriter) {
-	for _, q := range c.Clues {
-		q.writeText(w)
-	}
-}
-func (q Clue) writeText(w *textWriter) {
-	w.emit("  %s %s: %s", q.Kind, q.Subject, textClueNumber(q.Kind, q.Value))
-	if q.Limit != nil {
-		w.emit(" (limit %v %s)", q.Operator, textClueNumber(q.Kind, q.Limit))
-	}
-	w.emit("\n")
-}
-func (c *Case) writeGuidance(w *textWriter) {
-	w.emit("WHY THIS MATTERS\n  %s\nDIAGNOSIS\n  %s\nLEADS\n", c.Why, c.Diagnosis)
-	for _, s := range c.Leads {
-		w.emit("  → %s\n", s)
-	}
-	w.emit("AVOID\n")
-	for _, s := range c.Avoid {
-		w.emit("  ✗ %s\n", s)
-	}
-}
-func (c *Case) writeReceipts(w *textWriter) {
-	w.emit("RECEIPTS\n")
-	for _, s := range c.Receipts {
-		w.emit("  %s\n", canonical(s))
-	}
-}
-func (c *Case) writePolicy(w *textWriter) {
-	if len(c.PolicyReviews) == 0 {
-		return
-	}
-	w.emit("DOGFOODING POLICY REVIEW\n")
-	for _, p := range c.PolicyReviews {
-		w.emit("  %s\n  %s\n  %s\n", p.ID, p.Note, p.ReviewPrompt)
-	}
-}
-func (r Report) writeSummary(w *textWriter) {
-	if len(r.Cases) == 0 {
-		w.emit("Columbo: no cases\n")
-		return
-	}
-	w.emit("Columbo: %d failed, %d warned, %d suppressed\n", r.Summary.Failed, r.Summary.Warned, r.Summary.Suppressed)
-}
 func (c *Case) value(kind string, value any) {
-	c.Clues = append(c.Clues, metric(kind, c.Symbol, value))
+	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).forDeclaration(c.PrimaryDeclaration))
 }
 func (c *Case) threshold(kind string, value any, limit any, op string) {
-	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).compare(limit, op))
+	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).compare(limit, op).forDeclaration(c.PrimaryDeclaration))
 }
 
 func (s Source) withExpansion(trace *expansion) Source {
 	if trace != nil {
 		s.Detail.Expansion = append([]string{}, trace.names...)
 		s.Detail.ExpansionSites = append([]Site{}, trace.sites...)
+		s.Detail.ExpansionDeclarations = append([]DeclarationRef{}, trace.declarations...)
 	}
 	return s
 }
@@ -391,7 +335,7 @@ func emptyCase() *Case {
 func caseFromSource(smell, severity string, source Source) *Case {
 	c := emptyCase()
 	c.Smell, c.Verdict, c.Symbol = smell, strings.ToUpper(severity), source.Detail.Subject
-	c.File, c.StartLine, c.EndLine = source.File, source.StartLine, source.EndLine
+	c.sourceIdentity(source)
 	c.Receipts = append(c.Receipts, source)
 	guidance(c)
 	c.addPolicyReview()
@@ -405,5 +349,98 @@ func (c *Case) addPolicyReview() {
 func (d Detail) withoutExpansion() Detail {
 	d.Expansion = []string{}
 	d.ExpansionSites = []Site{}
+	d.ExpansionDeclarations = []DeclarationRef{}
 	return d
+}
+
+// sourceEvidenceKey uses the same private canonical encoding as receipt
+// normalization. Only aggregate contributions omit their pre-summed value.
+func sourceEvidenceKey(s Source) string {
+	if s.AggregateContributions {
+		s.Detail.Value = nil
+	}
+	return canonical(s)
+}
+func (s Source) forDeclaration(ref DeclarationRef) Source {
+	s.Declaration = &ref
+	return s
+}
+func (q Clue) forDeclaration(ref *DeclarationRef) Clue {
+	q.Declaration = ref
+	return q
+}
+
+// clueSupport owns one clue's explicit, de-duplicated receipt references.
+type clueSupport struct {
+	clue *Clue
+	seen map[string]bool
+}
+
+func newClueSupport(q *Clue) *clueSupport {
+	support := &clueSupport{clue: q, seen: map[string]bool{}}
+	for _, key := range q.SupportingReceipts {
+		support.seen[key] = true
+	}
+	return support
+}
+func (support *clueSupport) add(source Source) {
+	key := sourceEvidenceKey(source)
+	if !support.seen[key] {
+		support.clue.SupportingReceipts = append(support.clue.SupportingReceipts, key)
+		support.seen[key] = true
+	}
+}
+func (q Clue) supportedBy(receipts []Source) Clue {
+	support := newClueSupport(&q)
+	for _, source := range receipts {
+		support.add(source)
+	}
+	return q
+}
+func (c *Case) supportDeclaration(ref DeclarationRef, role string) {
+	for _, existing := range c.SupportingDeclarations {
+		if existing.Declaration == ref && existing.Role == role {
+			return
+		}
+	}
+	c.SupportingDeclarations = append(c.SupportingDeclarations, CaseDeclaration{ref, role})
+}
+
+func (c *Case) sourceDeclarations(source Source) {
+	if source.Declaration != nil && !c.hasDeclaration(*source.Declaration) {
+		c.supportDeclaration(*source.Declaration, "evidence")
+	}
+	for _, ref := range source.Detail.ExpansionDeclarations {
+		c.supportDeclaration(ref, "expansion")
+	}
+}
+func (c *Case) hasDeclaration(ref DeclarationRef) bool {
+	for _, support := range c.SupportingDeclarations {
+		if support.Declaration == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Case) sourceIdentity(source Source) {
+	c.File, c.StartLine, c.EndLine = source.File, source.StartLine, source.EndLine
+	c.PrimaryDeclaration = source.Declaration
+	if source.Declaration != nil {
+		c.supportDeclaration(*source.Declaration, "primary")
+	}
+}
+
+func (c *Case) includeDeclaration(d *declaration, role string) {
+	c.Receipts = append(c.Receipts, d.declReceipt())
+	c.supportDeclaration(d.ref(), role)
+}
+
+func (c *Case) parameterMetricReceipt(receipt Source) {
+	c.Receipts = append(c.Receipts, receipt)
+	c.Clues[len(c.Clues)-1] = c.Clues[len(c.Clues)-1].supportedBy([]Source{receipt})
+}
+func (q Clue) forMember(ref MemberRef) Clue {
+	q.Member = &ref
+	return q
 }

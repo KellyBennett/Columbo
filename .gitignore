@@ -1,2 +1,8 @@
 /columbo
 /coverage.out
+
+# Completed analysis snapshots and transient SQLite sidecars
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
