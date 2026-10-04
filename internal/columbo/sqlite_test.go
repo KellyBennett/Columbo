@@ -70,13 +70,12 @@ func (h *sqliteHarness) checkEmptyAndReadOnly() {
 	require.Error(h.T, err)
 	require.NoError(h.T, snapshotNoSidecars(h.path))
 }
-func TestSQLiteRepeatedAtomicReplacement(t *testing.T) {
-	newSQLiteHarness(t).checkRepeatedAtomicReplacement()
+func TestSQLiteExistingSnapshotRefused(t *testing.T) {
+	newSQLiteHarness(t).checkExistingSnapshotRefused()
 }
-func (h *sqliteHarness) checkRepeatedAtomicReplacement() {
+func (h *sqliteHarness) checkExistingSnapshotRefused() {
 	h.writeEmpty()
-	h.write(sqliteTestReport())
-	h.writeEmpty()
+	h.preserved(sqliteTestReport())
 	db := h.open()
 	var count int
 	require.NoError(h.T, db.QueryRow("SELECT COUNT(*) FROM cases").Scan(&count))
@@ -89,12 +88,42 @@ func TestSQLiteInvalidDestinationsPreserved(t *testing.T) {
 			h := newSQLiteHarness(t)
 			h.writeEmpty()
 			h.mutation(statement)
+			h.invalidSnapshot()
 			h.preserved(Report{})
 		})
 	}
 }
 func TestSQLiteCorruptAndUnrelatedPreserved(t *testing.T) {
 	newSQLiteHarness(t).checkCorruptAndUnrelatedPreserved()
+}
+
+// sqliteX is an ordinary user table: only the literal sqlite_ prefix is reserved.
+// Its contents must remain visible to readers and protected from publication.
+func TestSQLiteUserTableWithSQLitePrefixPreserved(t *testing.T) {
+	newSQLiteHarness(t).checkUserTableWithSQLitePrefixPreserved()
+}
+func (h *sqliteHarness) checkUserTableWithSQLitePrefixPreserved() {
+	h.writeEmpty()
+	h.mutation("CREATE TABLE sqliteX (value TEXT); INSERT INTO sqliteX VALUES ('unrelated user data')")
+	h.invalidSnapshot()
+	h.preserved(Report{})
+	require.Equal(h.T, "unrelated user data", h.userTableValue())
+	h.userTableDiscovered()
+}
+func (h *sqliteHarness) invalidSnapshot() {
+	db, err := OpenSnapshot(h.path)
+	require.Error(h.T, err)
+	require.Nil(h.T, db)
+}
+func (h *sqliteHarness) userTableValue() string {
+	db := h.mutable()
+	var value string
+	require.NoError(h.T, db.QueryRow("SELECT value FROM sqliteX").Scan(&value))
+	return value
+}
+func (h *sqliteHarness) userTableDiscovered() {
+	rows := (&testHarness{h.T}).logicalRows(h.mutable())
+	require.Contains(h.T, string(rows), "[sqliteX] value\n\"unrelated user data\"")
 }
 func (h *sqliteHarness) checkCorruptAndUnrelatedPreserved() {
 	for _, content := range []string{"", "not sqlite", "SQLite format 3\x00truncated"} {
@@ -116,15 +145,36 @@ func (h *sqliteHarness) checkSymlinkAndSidecarsRefused() {
 	require.NoError(h.T, os.WriteFile(h.path+"-wal", []byte("sidecar"), 0600))
 	h.preserved(Report{})
 }
+func TestSQLiteAbsentDestinationWithSidecarsRefused(t *testing.T) {
+	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
+		t.Run(suffix, func(t *testing.T) { newSQLiteHarness(t).checkAbsentSidecar(suffix) })
+	}
+}
+func (h *sqliteHarness) checkAbsentSidecar(suffix string) {
+	sidecar := &sqliteHarness{T: h.T, path: h.path + suffix}
+	require.NoError(h.T, os.WriteFile(sidecar.path, []byte("existing sidecar"), 0600))
+	h.rejectedFresh(Report{})
+	require.Equal(h.T, []byte("existing sidecar"), sidecar.bytes())
+}
 func TestSQLitePrepublicationFailuresPreservePrevious(t *testing.T) {
-	h := newSQLiteHarness(t)
-	h.writeEmpty()
+	newSQLiteHarness(t).checkInvalidReportsPreservePrevious()
+}
+func (h *sqliteHarness) checkInvalidReportsPreservePrevious() {
+	previous := h.previousSnapshot()
+	before := previous.bytes()
 	report := sqliteTestReport()
 	report.Cases[0].Receipts = append(report.Cases[0].Receipts, struct{}{})
-	h.preserved(report)
+	h.rejectedFresh(report)
 	report.Cases[0].Receipts = nil
 	report.Cases[0].Clues[0].SupportingReceipts = []string{"unknown"}
-	h.preserved(report)
+	h.rejectedFresh(report)
+	require.Equal(h.T, before, previous.bytes())
+}
+func (h *sqliteHarness) rejectedFresh(report Report) {
+	h.Helper()
+	require.Error(h.T, WriteSnapshot(h.path, report, "test"))
+	h.noOutput()
+	h.noTemporarySnapshots()
 }
 func TestSQLiteNumericTypes(t *testing.T) {
 	h := newSQLiteHarness(t)
@@ -171,10 +221,9 @@ func (h *sqliteHarness) checkNonfiniteAndMalformedValuesRejected() {
 	for _, value := range []any{nil, math.NaN(), math.Inf(1), "string", []int{1}} {
 		h.Run("invalid numeric", func(t *testing.T) {
 			h := newSQLiteHarness(t)
-			h.writeEmpty()
 			report := sqliteTestReport()
 			report.Cases[0].Clues[0].Value = value
-			h.preserved(report)
+			h.rejectedFresh(report)
 		})
 	}
 }

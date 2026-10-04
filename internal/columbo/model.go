@@ -311,11 +311,8 @@ func encodeCanonicalJSON(v any) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (c *Case) value(kind string, value any) {
-	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).forDeclaration(c.PrimaryDeclaration))
-}
-func (c *Case) threshold(kind string, value any, limit any, op string) {
-	c.Clues = append(c.Clues, metric(kind, c.Symbol, value).compare(limit, op).forDeclaration(c.PrimaryDeclaration))
+func (c *Case) metric(kind string, value any) Clue {
+	return metric(kind, c.Symbol, value).forDeclaration(c.PrimaryDeclaration)
 }
 
 func (s Source) withExpansion(trace *expansion) Source {
@@ -436,10 +433,6 @@ func (c *Case) includeDeclaration(d *declaration, role string) {
 	c.supportDeclaration(d.ref(), role)
 }
 
-func (c *Case) parameterMetricReceipt(receipt Source) {
-	c.Receipts = append(c.Receipts, receipt)
-	c.Clues[len(c.Clues)-1] = c.Clues[len(c.Clues)-1].supportedBy([]Source{receipt})
-}
 func (q Clue) forMember(ref MemberRef) Clue {
 	q.Member = &ref
 	return q

@@ -12,8 +12,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// WriteSnapshot builds a complete sibling database before replacing the output.
-// Existing destinations must be supported, intact Columbo snapshots.
+// WriteSnapshot publishes a complete sibling database at a new output path.
+// Atomic no-clobber creation preserves every existing destination.
 func WriteSnapshot(path string, report Report, version string) error {
 	return writeSnapshotWithIO(path, snapshotContents{report: report, version: version}, snapshotFilesystem{})
 }
@@ -38,7 +38,6 @@ type snapshotIO interface {
 }
 type snapshotPublicationTarget struct {
 	from, to string
-	replace  bool
 }
 type snapshotFilesystem struct{}
 
@@ -48,10 +47,7 @@ func (snapshotFilesystem) Build(path string, contents snapshotContents) error {
 func (snapshotFilesystem) Sync(path string) error                         { return syncSnapshot(path) }
 func (snapshotFilesystem) Publish(target snapshotPublicationTarget) error { return target.publish() }
 func (target snapshotPublicationTarget) publish() error {
-	if target.replace {
-		return os.Rename(target.from, target.to)
-	}
-	// Linking is an atomic no-clobber publication for a previously absent path.
+	// Linking atomically requires an absent destination at the actual publication.
 	// The deferred temporary cleanup removes the other name of this same inode.
 	return os.Link(target.from, target.to)
 }
@@ -60,7 +56,6 @@ func (snapshotFilesystem) SyncDirectory(path string) error { return syncSnapshot
 type snapshotPublication struct {
 	output, temporary string
 	contents          snapshotContents
-	previous          os.FileInfo
 	operations        snapshotIO
 }
 
@@ -80,8 +75,7 @@ func (p *snapshotPublication) prepare() error {
 		return err
 	}
 	p.output = name
-	p.previous, err = inspectDestination(name)
-	if err != nil {
+	if err = snapshotDestinationAbsent(name); err != nil {
 		return err
 	}
 	p.temporary, err = newSnapshotTemporary(filepath.Dir(name))
@@ -94,10 +88,10 @@ func (p *snapshotPublication) build() error {
 	return p.operations.Sync(p.temporary)
 }
 func (p *snapshotPublication) publish() error {
-	if err := unchangedDestination(p.output, p.previous); err != nil {
+	if err := snapshotNoSidecars(p.output); err != nil {
 		return err
 	}
-	if err := p.operations.Publish(snapshotPublicationTarget{from: p.temporary, to: p.output, replace: p.previous != nil}); err != nil {
+	if err := p.operations.Publish(snapshotPublicationTarget{from: p.temporary, to: p.output}); err != nil {
 		return fmt.Errorf("publish snapshot: %w", err)
 	}
 	return p.operations.SyncDirectory(filepath.Dir(p.output))
@@ -168,35 +162,15 @@ func snapshotNoSidecars(path string) error {
 	}
 	return nil
 }
-func inspectDestination(path string) (os.FileInfo, error) {
-	info, err := snapshotRegularFile(path)
+func snapshotDestinationAbsent(path string) error {
+	_, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, snapshotNoSidecars(path)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return info, validateExistingSnapshot(path)
-}
-func validateExistingSnapshot(path string) error {
-	db, err := OpenSnapshot(path)
-	if err != nil {
-		return fmt.Errorf("refuse replacing destination: %w", err)
-	}
-	return db.Close()
-}
-func unchangedDestination(path string, previous os.FileInfo) error {
-	current, err := snapshotRegularFile(path)
-	if previous == nil && errors.Is(err, os.ErrNotExist) {
 		return snapshotNoSidecars(path)
 	}
 	if err != nil {
-		return fmt.Errorf("destination changed during snapshot creation: %w", err)
+		return err
 	}
-	if previous == nil || !os.SameFile(previous, current) || previous.Size() != current.Size() || !previous.ModTime().Equal(current.ModTime()) {
-		return fmt.Errorf("destination changed during snapshot creation")
-	}
-	return snapshotNoSidecars(path)
+	return fmt.Errorf("snapshot destination already exists; choose a fresh output path: %s", path)
 }
 func removeSnapshotTemporary(path string) {
 	for _, suffix := range []string{"", "-journal", "-wal", "-shm"} {
@@ -422,7 +396,7 @@ func snapshotSchemaMatch(want, got map[string]string) error {
 	return nil
 }
 func snapshotSchemaObjects(db snapshotQuery) (map[string]string, error) {
-	rows, err := db.Query("SELECT type,name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")
+	rows, err := db.Query("SELECT type,name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' ORDER BY type,name")
 	if err != nil {
 		return nil, err
 	}

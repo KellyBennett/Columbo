@@ -181,19 +181,75 @@ func (result commandResult) requireFailure(t *testHarness) {
 }
 func (t *testHarness) checkCLISnapshotPublication() {
 	dir := t.fixture(cliFindingSource)
-	for _, name := range []string{"columbo.sqlite", "chosen.sqlite"} {
+	for _, name := range []string{"", "chosen.sqlite"} {
 		t.checkCLIOutputSelection(dir, name)
 	}
 }
 func (t *testHarness) checkCLIOutputSelection(dir, name string) {
 	args := []string{"--no-history"}
-	if name != "columbo.sqlite" {
+	if name != "" {
 		args = append(args, "--output="+name)
 	}
 	result := t.runCLI(dir, args...)
 	t.equal(1, result.code, result.stderr)
-	t.checkPublishedSummary(filepath.Join(dir, name), result.stdout)
+	path := filepath.Join(dir, name)
+	if name == "" {
+		path = t.onlyDefaultSnapshot(dir)
+	}
+	t.checkPublishedSummary(path, result.stdout)
 	t.empty(result.stderr)
+}
+func (t *testHarness) defaultSnapshots(dir string) []string {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(dir, "columbo-*.sqlite"))
+	t.noError(err)
+	for _, path := range paths {
+		require.Regexp(t.T, `^columbo-[A-Z2-7]{26}\.sqlite$`, filepath.Base(path))
+	}
+	return paths
+}
+func (t *testHarness) onlyDefaultSnapshot(dir string) string {
+	t.Helper()
+	paths := t.defaultSnapshots(dir)
+	t.length(paths, 1)
+	return paths[0]
+}
+func TestCLIRepeatedRunsCreateFreshSnapshots(t *testing.T) {
+	(&testHarness{T: t}).checkRepeatedRunsCreateFreshSnapshots()
+}
+func (t *testHarness) checkRepeatedRunsCreateFreshSnapshots() {
+	dir := t.fixture(cliFindingSource)
+	first := t.runCLI(dir, "--no-history")
+	t.equal(1, first.code, first.stderr)
+	previous := t.onlyDefaultSnapshot(dir)
+	before := t.read(previous)
+	second := t.runCLI(dir, "--no-history")
+	t.equal(1, second.code, second.stderr)
+	t.checkNewDefaultSnapshot(dir, previous, second.stdout)
+	t.equal(before, t.read(previous), "earlier snapshots must remain unchanged")
+	t.checkPublishedSummary(previous, first.stdout)
+}
+func (t *testHarness) checkNewDefaultSnapshot(dir, previous string, stdout []byte) {
+	paths := t.defaultSnapshots(dir)
+	t.length(paths, 2)
+	for _, path := range paths {
+		if path != previous {
+			t.checkPublishedSummary(path, stdout)
+		}
+	}
+}
+func TestCLIExplicitExistingSnapshotRefused(t *testing.T) {
+	(&testHarness{T: t}).checkExplicitExistingSnapshotRefused()
+}
+func (t *testHarness) checkExplicitExistingSnapshotRefused() {
+	dir := t.fixture(cliFindingSource)
+	path := filepath.Join(dir, "chosen.sqlite")
+	t.equal(1, t.runCLI(dir, "--no-history", "--output="+path).code)
+	before := t.read(path)
+	result := t.runCLI(dir, "--no-history", "--output="+path)
+	result.requireFailure(t)
+	t.contains(result.stderr, "choose a fresh output path")
+	t.equal(before, t.read(path))
 }
 func (t *testHarness) checkPublishedSummary(path string, stdout []byte) {
 	db, err := OpenSnapshot(path)
@@ -226,7 +282,7 @@ func TestCLISummaryWriteFailureKeepsSnapshot(t *testing.T) {
 func (t *testHarness) checkCLISummaryWriteFailure() {
 	dir := t.fixture(cliFindingSource)
 	t.checkFailingSummarySink(dir)
-	db, err := OpenSnapshot(filepath.Join(dir, "columbo.sqlite"))
+	db, err := OpenSnapshot(filepath.Join(dir, "summary.sqlite"))
 	t.noError(err, "summary delivery failure occurs after complete publication")
 	defer db.Close()
 	t.equal(1, t.sqlCount(db, `SELECT failed FROM summary`))
@@ -235,7 +291,7 @@ func (t *testHarness) checkCLISummaryWriteFailure() {
 func (t *testHarness) checkFailingSummarySink(dir string) {
 	var stderr bytes.Buffer
 	sink := &brokenSink{}
-	code := Run([]string{"--no-history"}, Invocation{Dir: dir, Stdout: sink, Stderr: &stderr})
+	code := Run([]string{"--no-history", "--output=summary.sqlite"}, Invocation{Dir: dir, Stdout: sink, Stderr: &stderr})
 	t.equal(2, code)
 	t.equal(3, sink.accepted)
 	t.contains(stderr.String(), "sink failure")
@@ -246,11 +302,12 @@ func TestCLIFailureLeavesPriorSnapshot(t *testing.T) {
 func (t *testHarness) checkCLIFailureLeavesPriorSnapshot() {
 	dir := t.fixture(cliFindingSource)
 	t.equal(1, t.runCLI(dir, "--no-history").code)
-	path := filepath.Join(dir, "columbo.sqlite")
+	path := t.onlyDefaultSnapshot(dir)
 	before := t.read(path)
 	t.write(dir, "bad.go", "package fixture\nvar X=missing\n")
 	t.runCLI(dir, "--no-history").requireFailure(t)
 	t.equal(before, t.read(path))
+	t.length(t.defaultSnapshots(dir), 1)
 }
 
 func TestStoredSummaryWithoutAnalysis(t *testing.T) {
@@ -567,7 +624,7 @@ func (t *testHarness) TestCLIUnusedSuppressionWarning() {
 	t.equal(0, result.code)
 	t.equal(message+"\n", result.stderr)
 	t.contains(string(result.stdout), message)
-	t.checkUnusedSuppressionSnapshot(filepath.Join(dir, "columbo.sqlite"))
+	t.checkUnusedSuppressionSnapshot(t.onlyDefaultSnapshot(dir))
 }
 func (t *testHarness) checkUnusedSuppressionSnapshot(path string) {
 	db, err := OpenSnapshot(path)

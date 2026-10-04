@@ -164,7 +164,7 @@ func (t *testHarness) goldenBytes(path string, data []byte) {
 // and views are discovered through SQLite, and rows use a total explicit order.
 func (t *testHarness) logicalRows(db *sql.DB) []byte {
 	t.Helper()
-	names := t.sqlStrings(db, `SELECT name FROM sqlite_schema WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	names := t.sqlStrings(db, `SELECT name FROM sqlite_schema WHERE type IN ('table','view') AND name NOT GLOB 'sqlite_*' ORDER BY name`)
 	var output strings.Builder
 	for _, name := range names {
 		table := logicalTable{test: t, db: db, name: name}
@@ -358,16 +358,16 @@ func (t *testHarness) TestSeverityAndExits() {
 func (t *testHarness) severityExit(dir, severity string) {
 	t.write(dir, ".columbo.yml", "history: {enabled: false}\nseverity: {long-parameter-list: "+severity+"}\n")
 	var out, err bytes.Buffer
-	code := Run([]string{"--output=report.sqlite"}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	path := filepath.Join(dir, "report-"+severity+".sqlite")
+	code := Run([]string{"--output=" + path}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
 	want := 0
 	if severity == "fail" {
 		want = 1
 	}
 	t.requiref(code == want, "%s: exit %d (%s)", severity, code, err.String())
-	t.requireSeveritySnapshot(dir, out.Bytes(), want)
+	t.requireSeveritySnapshot(path, out.Bytes(), want)
 }
-func (t *testHarness) requireSeveritySnapshot(dir string, stdout []byte, want int) {
-	path := filepath.Join(dir, "report.sqlite")
+func (t *testHarness) requireSeveritySnapshot(path string, stdout []byte, want int) {
 	db, err := OpenSnapshot(path)
 	t.noError(err)
 	defer db.Close()

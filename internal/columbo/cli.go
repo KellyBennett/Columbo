@@ -1,6 +1,7 @@
 package columbo
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -12,7 +13,7 @@ const usage = `Usage: columbo [flags] [packages...]
 
 Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
-  --output PATH       SQLite snapshot (default columbo.sqlite)
+  --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -76,7 +77,7 @@ func (o *commandOptions) arguments(fs *flag.FlagSet) {
 }
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
-	fs.StringVar(&o.output, "output", "columbo.sqlite", "")
+	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")

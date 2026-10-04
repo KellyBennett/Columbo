@@ -449,32 +449,34 @@ func (i *ordinaryInvestigation) check(check metricCheck) error {
 	if e != nil || c == nil {
 		return e
 	}
-	check.explain(c, limit)
-	i.declaration.ordinaryEvidence(c, check.smell)
+	i.declaration.ordinaryEvidence(c, check, limit)
 	i.engine.report.Cases = append(i.engine.report.Cases, *c)
 	return nil
 }
 func (check metricCheck) explain(c *Case, limit int64) {
-	c.threshold(check.kind, check.value, limit, ">")
 	support := check.receipts
 	if check.kind == "dependencies" {
 		support = scoredDependencyReceipts(check.receipts)
 	}
-	c.Clues[len(c.Clues)-1] = c.Clues[len(c.Clues)-1].supportedBy(support)
+	clue := c.metric(check.kind, check.value).compare(limit, ">").supportedBy(support)
+	c.Clues = append(c.Clues, clue)
 	appendSources(c, check.receipts)
 }
-func (d *declaration) ordinaryEvidence(c *Case, smell string) {
-	switch smell {
-	case "excessive-dependencies":
+func (d *declaration) ordinaryEvidence(c *Case, check metricCheck, limit int64) {
+	if check.kind == "parameters" {
+		check.receipts = d.parameterReceipts()
+	}
+	check.explain(c, limit)
+	if check.smell == "excessive-dependencies" {
 		c.Clues = append(c.Clues, d.dependencyClue())
-	case "long-parameter-list":
-		d.parameterEvidence(c)
 	}
 }
-func (d *declaration) parameterEvidence(c *Case) {
+func (d *declaration) parameterReceipts() []Source {
+	receipts := []Source{}
 	for _, p := range d.params {
-		c.parameterMetricReceipt(d.parameterReceipt(p))
+		receipts = append(receipts, d.parameterReceipt(p))
 	}
+	return receipts
 }
 func sortedSet(m map[string]bool) []string {
 	out := []string{}

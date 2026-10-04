@@ -1,6 +1,6 @@
 # SQLite cutover validation
 
-Validated on 2026-10-04 with Go 1.25.1, Linux/amd64, `CGO_ENABLED=0`, `GOTOOLCHAIN=local`, `GOTELEMETRY=off`, `GOWORK=off`, and `GOFLAGS=-buildvcs=false`.
+Initial cutover validation ran on 2026-10-04 with Go 1.25.1, Linux/amd64, `CGO_ENABLED=0`, `GOTOOLCHAIN=local`, `GOTELEMETRY=off`, `GOWORK=off`, and `GOFLAGS=-buildvcs=false`. The fresh-snapshot amendment and its additional verification are recorded separately below.
 
 ## Correctness and enforcement
 
@@ -13,6 +13,18 @@ Validated on 2026-10-04 with Go 1.25.1, Linux/amd64, `CGO_ENABLED=0`, `GOTOOLCHA
 - Independent review found no unresolved semantic must-fix
 
 The provisional CE-001 public-release gate remains unchanged. This is a reporting cutover, not a policy resolution or public release.
+
+## 2026-10-04 fresh-snapshot amendment
+
+The accepted contract now creates `columbo-<token>.sqlite` by default and refuses every existing explicit destination. Earlier snapshots remain unchanged. CI still enforces the unchanged strict `./columbo ./...` command and captures `columbo-*.sqlite`; the query fixture retains its explicit fresh runner-temp path.
+
+Schema validation and discovery exclude only SQLite's literal `sqlite_` prefix using `NOT GLOB 'sqlite_*'`. The previous `LIKE 'sqlite_%'` predicate treated the underscore as a wildcard and could hide an ordinary user table such as `sqliteX`. `TestSQLiteUserTableWithSQLitePrefixPreserved` requires that table to remain discoverable, makes the altered database invalid as a Columbo snapshot, and verifies its data is preserved on refused publication.
+
+Publication regressions cover a file created immediately before publication and a competing valid snapshot replaced by unrelated data before publication (`TestSQLiteAbsentPublicationNeverClobbersNewFile` and `TestSQLitePublicationNeverClobbersConcurrentReplacement`). Atomic no-clobber creation must refuse both destinations and preserve the competing bytes. CLI regressions check successive default runs, the prescribed token shape, exact summary paths, unchanged earlier files, and refusal of an existing explicit snapshot.
+
+Clue support now attaches to named local clues before append. Ordinary parameter metrics collect parameter-field receipts first; Feature Envy builds own, foreign and ratio clues with their established support; Cosmetic Extraction supports each local metric before applying its comparison. Data Clump uses named types, size and occurrences support collectors until the evidence is complete. No support relationship depends on a clue's slice position. Focused tests passed under the pinned environment, including `TestSnapshotClueSupportRoles`, `TestFeatureEnvyRatioReceiptSupport`, contribution reconciliation and the unchanged all-seven logical-row/compact-summary goldens.
+
+Final local amendment checks passed under that same pinned environment: `go test ./... -count=1`, `go vet ./...`, CLI build, unchanged `./columbo ./...` (0 FAIL, 0 WARN, 0 suppressed), all 11 published SQL files / 22 statements against a fresh all-seven fixture, and `git diff --check`. Independent static re-review found all three Squint findings addressed and no new actionable gap. Malformed-report/value and storage-failure tests use fresh targets so they still exercise construction and validation; directory-sync and summary-delivery failures retain the published database.
 
 ## Bounded retrieval comparison
 

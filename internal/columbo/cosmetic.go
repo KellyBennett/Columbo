@@ -356,16 +356,12 @@ func (i *cosmeticInvestigation) metrics() {
 	i.metric("expanded-complexity", i.complexity, "cognitive-complexity")
 }
 func (i *cosmeticInvestigation) metric(kind string, value int, threshold string) {
-	defer func() {
-		q := &i.finding.Clues[len(i.finding.Clues)-1]
-		*q = q.supportedBy(i.metricReceipts(kind))
-	}()
+	clue := i.finding.metric(kind, value).supportedBy(i.metricReceipts(kind))
 	limit := i.engine.config.Counts[threshold]
 	if int64(value) > limit {
-		i.finding.threshold(kind, value, limit, ">")
-		return
+		clue = clue.compare(limit, ">")
 	}
-	i.finding.value(kind, value)
+	i.finding.Clues = append(i.finding.Clues, clue)
 }
 func (i *cosmeticInvestigation) originalAndExpandedReceipts() {
 	appendSources(i.finding, i.parent.lineReceipts)
