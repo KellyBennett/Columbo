@@ -1,20 +1,31 @@
 package columbo
 
-import "strings"
+import (
+	"strings"
+	"testing"
 
-// These test queries keep policy and identity checks with their case data.
-func (c Case) hasSuppressedWarningPolicy() bool {
-	return c.Verdict == "WARN" && c.Suppressed && len(c.PolicyReviews) == 1 && c.PolicyReviews[0] == policy
-}
-func (c Case) identityWithoutPolicyReviews() string {
-	c.PolicyReviews = []PolicyReview{}
-	id, _ := identity(c.Smell, c.File, c.Symbol, "")
-	return id
-}
+	"github.com/stretchr/testify/require"
+)
+
 func (t *testHarness) requireCosmeticPolicy(c Case) {
 	t.Helper()
-	t.require(c.hasSuppressedWarningPolicy(), c)
-	t.require(c.identityWithoutPolicyReviews() == c.ID, "review changed identity")
+	require.Equal(t.T, "WARN", c.Verdict)
+	require.True(t.T, c.Suppressed)
+	require.Equal(t.T, []PolicyReview{policy}, c.PolicyReviews)
+}
+
+func TestPolicyReviewPreservesCase(t *testing.T) {
+	(&testHarness{T: t}).TestPolicyReviewPreservesCase()
+}
+func (t *testHarness) TestPolicyReviewPreservesCase() {
+	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
+	want := t.one(t.investigate(dir, cosmeticConfig()), "cosmetic-extraction")
+	require.Equal(t, "FAIL", want.Verdict)
+	before := canonical(want)
+	got := want
+	got.PolicyReviews = []PolicyReview{}
+	got.addPolicyReview()
+	require.Equal(t, before, canonical(got), "policy annotation changed case evidence or enforcement")
 }
 func (t *testHarness) requireDisabledCosmeticSuppression(dir string, config Config) {
 	t.Helper()
