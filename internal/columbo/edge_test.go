@@ -183,7 +183,7 @@ func (t *testHarness) TestExpansionChildCopies() {
 func TestExpansionChildCopies(t *testing.T) { (&testHarness{T: t}).TestExpansionChildCopies() }
 
 func (t *testHarness) TestCanonicalTypeMatchesGoFormatting() {
-	value, err := evaluatedType("func([]byte) rune")
+	value, err := evaluatedType("func(input []byte) (output rune)")
 	t.require(err == nil, err)
 	want := "func([]uint8) int32"
 	got := canonicalType(value, nil)
