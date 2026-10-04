@@ -2,7 +2,6 @@ package columbo
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -199,10 +198,7 @@ func TestCanonicalTypeMatchesGoFormatting(t *testing.T) {
 func (t *testHarness) TestClusterSchema() {
 	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
 	r := t.investigate(dir, cosmeticConfig())
-	b, _ := Serialize(r, "json")
-	var m map[string]any
-	e := json.Unmarshal(b, &m)
-	t.require(e == nil, e)
+	m := t.reportDocument(r)
 	cc := m["cases"].([]any)[0].(map[string]any)
 	t.require(len(cc) == 16, "case field count", len(cc))
 	cluster := cc["clusters"].([]any)[0].(map[string]any)
