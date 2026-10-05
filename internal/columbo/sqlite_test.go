@@ -105,30 +105,25 @@ func TestSQLiteCorruptAndUnrelatedPreserved(t *testing.T) {
 // sqliteX is an ordinary user table: only the literal sqlite_ prefix is reserved.
 // Its contents must remain visible to readers and protected from publication.
 func TestSQLiteUserTableWithSQLitePrefixPreserved(t *testing.T) {
-	newSQLiteHarness(t).checkUserTableWithSQLitePrefixPreserved()
-}
-func (h *sqliteHarness) checkUserTableWithSQLitePrefixPreserved() {
+	h := newSQLiteHarness(t)
 	h.writeEmpty()
 	h.mutation("CREATE TABLE sqliteX (value TEXT); INSERT INTO sqliteX VALUES ('unrelated user data')")
 	h.invalidSnapshot()
 	h.preserved(Report{})
-	require.Equal(h.T, "unrelated user data", h.userTableValue())
-	h.userTableDiscovered()
+	h.requireUserTablePreserved()
+}
+func (h *sqliteHarness) requireUserTablePreserved() {
+	db := h.mutable()
+	var value string
+	require.NoError(h.T, db.QueryRow("SELECT value FROM sqliteX").Scan(&value))
+	require.Equal(h.T, "unrelated user data", value)
+	rows := (&testHarness{h.T}).logicalRows(h.mutable())
+	require.Contains(h.T, string(rows), "[sqliteX] value\n\"unrelated user data\"")
 }
 func (h *sqliteHarness) invalidSnapshot() {
 	db, err := OpenSnapshot(h.path)
 	require.Error(h.T, err)
 	require.Nil(h.T, db)
-}
-func (h *sqliteHarness) userTableValue() string {
-	db := h.mutable()
-	var value string
-	require.NoError(h.T, db.QueryRow("SELECT value FROM sqliteX").Scan(&value))
-	return value
-}
-func (h *sqliteHarness) userTableDiscovered() {
-	rows := (&testHarness{h.T}).logicalRows(h.mutable())
-	require.Contains(h.T, string(rows), "[sqliteX] value\n\"unrelated user data\"")
 }
 func (h *sqliteHarness) checkCorruptAndUnrelatedPreserved() {
 	for _, content := range []string{"", "not sqlite", "SQLite format 3\x00truncated"} {

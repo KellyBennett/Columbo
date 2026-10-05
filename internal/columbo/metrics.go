@@ -217,7 +217,7 @@ func (c *dependencyCollector) recordNamed(t *types.Named) {
 	}
 }
 func (c *dependencyCollector) excluded(t *types.Named) bool {
-	return c.engine.privateType(t.Obj(), c.declaration.file.path) || c.declaration.receiverType(t)
+	return privateType(t.Obj(), c.declaration.file.packagePath()) || c.declaration.receiverType(t)
 }
 func (d *declaration) receiverType(t *types.Named) bool {
 	if d.signature.Recv() == nil {
