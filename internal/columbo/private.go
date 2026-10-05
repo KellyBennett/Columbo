@@ -54,7 +54,7 @@ func (i *typeReferenceIndex) definitions(f *file) {
 
 func (i *typeReferenceIndex) definition(obj types.Object, f *file) {
 	t, ok := obj.(*types.TypeName)
-	if !ok || t.Exported() || !i.production(f) {
+	if !ok || t.Exported() || t.IsAlias() || !i.production(f) {
 		return
 	}
 	key := i.engine.typeKey(t)
@@ -87,7 +87,14 @@ func (s *privateReferences) visit(n ast.Node) bool {
 
 func (s *privateReferences) typeName(id *ast.Ident) *types.TypeName {
 	obj, _ := s.info.Uses[id].(*types.TypeName)
-	return obj
+	if obj == nil {
+		return nil
+	}
+	named, _ := types.Unalias(obj.Type()).(*types.Named)
+	if named == nil {
+		return nil
+	}
+	return named.Obj()
 }
 
 func (s *privateReferences) fieldReceiver(selector *ast.SelectorExpr) *types.TypeName {
