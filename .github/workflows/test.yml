@@ -60,9 +60,13 @@ jobs:
         run: |
           root="$PWD"
           status=0
-          (cd internal/columbo/testdata/all && "$root/columbo" --github-annotations=false --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
+          (cd internal/columbo/testdata/all && "$root/columbo" --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
           if [ "$status" -gt 1 ]; then exit "$status"; fi
           ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
+      - name: Test Checks API projection, batching and failure behavior
+        env:
+          COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
+        run: python3 -m unittest discover -s scripts -p test_github_check.py -v
       - name: Retain query fixture snapshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,6 +77,9 @@ jobs:
 
   columbo:
     name: Columbo self-check
+    permissions:
+      contents: read
+      checks: write
     needs: acceptance
     runs-on: ubuntu-24.04
     env:
@@ -92,11 +99,26 @@ jobs:
       - name: Build Columbo from this revision
         run: go build -o columbo ./cmd/columbo
       - name: Investigate Columbo, including its tests
-        run: ./columbo ./...
+        id: investigate
+        shell: bash
+        run: |
+          status=0
+          ./columbo --output "$RUNNER_TEMP/columbo-self-check.sqlite" ./... || status=$?
+          printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Publish every finding through the Checks API
+        if: always() && steps.investigate.outputs.exit-code != ''
+        uses: ./
+        with:
+          snapshot: ${{ runner.temp }}/columbo-self-check.sqlite
+          exit-code: ${{ steps.investigate.outputs.exit-code }}
+          publication-status: ${{ runner.temp }}/columbo-publication.json
       - name: Retain self-check evidence even when findings fail
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: columbo-self-check-snapshot
-          path: columbo-*.sqlite
+          path: |
+            ${{ runner.temp }}/columbo-self-check.sqlite
+            ${{ runner.temp }}/columbo-publication.json
           if-no-files-found: warn

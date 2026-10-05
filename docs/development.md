@@ -16,9 +16,14 @@ CGO_ENABLED=0 go vet ./...
 ./scripts/test-sqlite-queries.sh report.sqlite
 ```
 
-CI also builds Columbo from the checked-out revision and runs `./columbo ./...` in a separate **Columbo self-check** job. This includes the application's tests and enforces the default FAIL severities and thresholds. Findings fail the job; the log contains the compact summary and the `columbo-self-check-snapshot` artifact captures `columbo-*.sqlite` with the full evidence and refactoring leads even on failure. A green acceptance-test job does not imply a green self-check; existing findings must be addressed for the full workflow to pass.
+CI also builds Columbo from the checked-out revision and analyzes `./...` with default policy in a separate **Columbo self-check** job. This includes the application's tests and enforces the default FAIL severities and thresholds. Findings fail the job; the log contains the compact summary and the `columbo-self-check-snapshot` artifact captures the self-check SQLite snapshot and publication metadata with the full evidence and refactoring leads even on failure. A green acceptance-test job does not imply a green self-check; existing findings must be addressed for the full workflow to pass.
 
-GitHub Actions automatically receives file-and-line annotations from the same saved findings. The self-check keeps its existing `./columbo ./...` command and read-only permissions. The intentionally failing query fixture disables annotations to avoid surfacing expected test findings as PR diagnostics. Use `--github-annotations=false` to disable annotations elsewhere, or `--github-annotations` to exercise them locally. Regression tests cover stored severities and comparisons, suppressions, policy notes, escaping, and explicit/default CLI selection.
+The self-check publishes all stored findings through the repository-root composite action with job-scoped `checks: write`. The action reads SQLite independently of the Go application's private sqlc boundary, just like the published-query validation script. Python regression tests exercise the API adapter against the actual all-seven fixture snapshot and a fake API sink:
+
+```sh
+COLUMBO_TEST_SNAPSHOT=report.sqlite python3 -m unittest discover -s scripts -p test_github_check.py -v
+```
+
 
 Acceptance tests pin Go 1.25.1, Linux/amd64, and a fixed build environment. The suite includes all seven default FAIL smells and checked-in logical SQLite-row/compact-summary goldens. CI also runs every published SQL query read-only against the all-seven fixture snapshot. Refresh goldens deliberately with `UPDATE_GOLDEN=1 go test ./internal/columbo`.
 
