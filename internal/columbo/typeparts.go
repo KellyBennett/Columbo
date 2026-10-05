@@ -38,6 +38,16 @@ func fieldComponents(t fieldType) []types.Type {
 	}
 	return out
 }
+
+// callResultComponents expands multi-value expressions. Single results are
+// already recorded directly by the dependency collector.
+func callResultComponents(t types.Type) []types.Type {
+	if tuple, ok := t.(*types.Tuple); ok {
+		return tupleComponents(tuple)
+	}
+	return nil
+}
+
 func tupleComponents(t *types.Tuple) []types.Type {
 	out := []types.Type{}
 	for i := 0; i < t.Len(); i++ {

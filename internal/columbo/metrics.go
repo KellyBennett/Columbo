@@ -233,28 +233,31 @@ type dependencyScan struct {
 	info        *types.Info
 	packagePath string
 	sites       map[string]Source
+	path        []ast.Node
 }
 
 func (d *declaration) dependencyScan(a *engine) *dependencyScan {
 	d.deps = map[string]bool{}
 	d.depTypePackages = map[string]bool{}
+	d.depUses = newDependencyUses()
 	c := &dependencyCollector{engine: a, declaration: d, packages: d.depTypePackages, signature: d.signature}
 	return &dependencyScan{declaration: d, collector: c, info: d.file.typeInfo(), packagePath: d.file.packagePath(), sites: map[string]Source{}}
 }
-func (s *dependencyScan) add(n ast.Node, t types.Type) {
+func (s *dependencyScan) add(n ast.Node, t types.Type, origin string) {
 	if n == nil {
 		return
 	}
 	s.collector.identities = map[string]bool{}
 	s.collector.walk(t)
 	for id := range s.collector.identities {
-		s.record(n, id)
+		s.record(n, id, origin)
 	}
 }
-func (s *dependencyScan) record(n ast.Node, id string) {
+func (s *dependencyScan) record(n ast.Node, id, origin string) {
 	s.declaration.deps[id] = true
 	r := s.declaration.dependencyReceipt(n, id)
 	s.sites[canonical(r)] = r
+	s.declaration.depUses.record(origin, id, r)
 }
 func (d *declaration) dependencyReceipt(n ast.Node, id string) Source {
 	source := d.source("dependency", n.Pos(), n.End(), Detail{Subject: id, Value: nil, Nesting: nil})
@@ -262,6 +265,21 @@ func (d *declaration) dependencyReceipt(n ast.Node, id string) Source {
 	return source
 }
 func (s *dependencyScan) visit(n ast.Node) bool {
+	if !s.trackNode(n) {
+		return false
+	}
+	s.inspectNode(n)
+	return true
+}
+func (s *dependencyScan) trackNode(n ast.Node) bool {
+	if n == nil {
+		s.path = s.path[:len(s.path)-1]
+		return false
+	}
+	s.path = append(s.path, n)
+	return true
+}
+func (s *dependencyScan) inspectNode(n ast.Node) {
 	s.explicitType(n)
 	switch n := n.(type) {
 	case *ast.Ident:
@@ -271,7 +289,6 @@ func (s *dependencyScan) visit(n ast.Node) bool {
 	case ast.Expr:
 		s.expression(n)
 	}
-	return true
 }
 func (s *dependencyScan) explicitType(n ast.Node) {
 	e, ok := n.(ast.Expr)
@@ -279,20 +296,20 @@ func (s *dependencyScan) explicitType(n ast.Node) {
 		return
 	}
 	if tv, yes := s.info.Types[e]; yes && tv.IsType() {
-		s.add(e, tv.Type)
+		s.add(e, tv.Type, "declared")
 	}
 }
 func (s *dependencyScan) identifier(n *ast.Ident) {
 	obj := s.info.Uses[n]
 	if obj != nil && obj.Pkg() != nil && obj.Pkg().Path() != s.packagePath {
-		s.record(n, "package:"+obj.Pkg().Path())
+		s.record(n, "package:"+obj.Pkg().Path(), "package")
 	}
 }
 func (s *dependencyScan) call(n *ast.CallExpr) {
-	s.add(n, s.info.TypeOf(n.Fun))
-	s.add(n, s.info.TypeOf(n))
+	s.add(n, s.info.TypeOf(n.Fun), "signature")
+	s.callResults(n)
 	for _, arg := range n.Args {
-		s.add(arg, s.info.TypeOf(arg))
+		s.add(arg, s.info.TypeOf(arg), "supplied")
 	}
 }
 func (s *dependencyScan) expression(e ast.Expr) {
@@ -305,11 +322,11 @@ func (s *dependencyScan) expression(e ast.Expr) {
 		s.selection(n)
 	}
 }
-func (s *dependencyScan) expressionType(e ast.Expr) { s.add(e, s.info.TypeOf(e)) }
+func (s *dependencyScan) expressionType(e ast.Expr) { s.add(e, s.info.TypeOf(e), "declared") }
 func (s *dependencyScan) selection(n *ast.SelectorExpr) {
 	if sel := s.info.Selections[n]; sel != nil {
-		s.add(n, sel.Recv())
-		s.add(n, sel.Type())
+		s.add(n, sel.Recv(), "receiver")
+		s.selectedType(n, sel.Type())
 	}
 }
 func (s *dependencyScan) finish() {
@@ -469,6 +486,7 @@ func (d *declaration) ordinaryEvidence(c *Case, check metricCheck, limit int64) 
 	check.explain(c, limit)
 	if check.smell == "excessive-dependencies" {
 		c.Clues = append(c.Clues, d.dependencyClue())
+		c.Clues = append(c.Clues, d.dependencyUseClues()...)
 	}
 }
 func (d *declaration) parameterReceipts() []Source {

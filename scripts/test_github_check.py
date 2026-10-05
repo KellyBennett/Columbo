@@ -48,6 +48,15 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("Review:", cosmetic["message"])
         self.assertIn("lead:", cosmetic["message"])
 
+    def test_dependency_origins_are_projected(self):
+        annotations, _ = publisher.read_snapshot(self.snapshot, 1)
+        finding = next(item for item in annotations if "excessive-dependencies" in item["title"])
+        self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
+        self.assertIn("Dependency origins (lists overlap; each identity counts once)", finding["message"])
+        self.assertIn("Declared or constructed types:", finding["message"])
+        self.assertIn("Does the caller know details its dependency could own?", finding["message"])
+        self.assertNotIn("may coordinate responsibilities with separate ownership", finding["message"])
+
     def test_stored_warn_and_suppression_are_respected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "saved.sqlite"
@@ -60,6 +69,22 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual("warning", annotations[0]["annotation_level"])
         self.assertIn("6 failed, 1 warned, 1 suppressed", summary)
         self.assertFalse(any("C-ad03ea5957" in item["message"] for item in annotations))
+
+    def test_snapshot_without_dependency_origins_is_readable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "old.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                ids = "SELECT id FROM clues WHERE kind LIKE 'dependency-use-%'"
+                db.execute(f"DELETE FROM clue_receipts WHERE clue_id IN ({ids})")
+                db.execute(f"DELETE FROM clue_values WHERE clue_id IN ({ids})")
+                db.execute(f"DELETE FROM clues WHERE id IN ({ids})")
+            annotations, summary = publisher.read_snapshot(path, 1)
+        self.assertEqual(8, len(annotations))
+        self.assertIn("8 failed, 0 warned, 0 suppressed", summary)
+        finding = next(item for item in annotations if "excessive-dependencies" in item["title"])
+        self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
+        self.assertNotIn("Dependency origins", finding["message"])
 
     def test_batches_do_not_drop_or_duplicate_findings(self):
         for count in (0, 1, 50, 51, 155):

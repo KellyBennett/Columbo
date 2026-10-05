@@ -18,6 +18,8 @@ Its philosophy is simple:
 
 Columbo's checks run without an LLM. They're deliberately strict; a finding is a reason to investigate, not proof that there's only one right design.
 
+Dependency findings are leads to investigate ownership, repeated policy, and implicit contracts. Their detailed evidence separates supplied arguments and consumed results from signature types and discarded results; these overlapping origins explain the existing score without changing its threshold.
+
 ## Set it up
 
 Install with Go 1.25.1, then run from your Go module:
