@@ -114,7 +114,7 @@ func emptyReport() Report {
 	return Report{Version: 1, Cases: []Case{}, Suppressions: []Suppression{}, Warnings: []Warning{}}
 }
 func (a *engine) packageConfig() *packages.Config {
-	return &packages.Config{Dir: a.dir, Tests: true, Fset: a.fset, Mode: packageLoadMode, ParseFile: parsePhysicalFile}
+	return &packages.Config{Dir: a.dir, Tests: false, Fset: a.fset, Mode: packageLoadMode, ParseFile: parsePhysicalFile}
 }
 
 const packageLoadMode = packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedDeps | packages.NeedExportFile | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo | packages.NeedModule

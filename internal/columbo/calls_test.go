@@ -124,7 +124,7 @@ func Calls(b Box[int], embedded Embedded, i I, alias Alias, f func(int), fs []fu
 }
 `
 
-// A same-package test variant must not double a generic helper's direct calls;
+// Test files must not affect a generic helper's direct calls;
 // Origin still joins instantiations to the one physical source declaration.
 func (t *testHarness) TestGenericParenthesizedHelperJoins() {
 	dir := t.fixture(genericHelperSource)
@@ -138,7 +138,7 @@ func TestGenericParenthesizedHelperJoins(t *testing.T) {
 	(&testHarness{T: t}).TestGenericParenthesizedHelperJoins()
 }
 func (t *testHarness) requireGenericJoins(a *engine) {
-	t.require(len(a.declarations) == 4, "physical declarations", a.declarations)
+	t.require(len(a.declarations) == 3, "production declarations", a.declarations)
 	t.require(len(a.calls) == 2, "physical calls", a.calls)
 	for _, target := range a.calls {
 		t.require(target.candidate, target.symbol)

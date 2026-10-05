@@ -27,6 +27,8 @@ CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@latest
 columbo ./...
 ```
 
+Columbo currently analyzes production Go code only. Files ending in `_test.go` are excluded from findings and from the references, interfaces, and suppressions used as evidence. Test-specific rules may be added later.
+
 No configuration is required. To change thresholds or choose which smells fail, warn, or stay off, add [`.columbo.yml`](SPEC.md#configuration).
 
 ### In CI

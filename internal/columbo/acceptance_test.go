@@ -470,7 +470,7 @@ func (t *testHarness) TestModuleAndTests() {
 	t.write(dir, "external_test.go", "package fixture_test\nfunc External(a,b,c,d,e int){}\n")
 	c := longParameterConfig()
 	r := t.investigate(dir, c)
-	t.require(len(r.Cases) == 2, r)
+	t.require(len(r.Cases) == 1, r)
 	_, e := Analyze(dir, []string{"./missing/..."}, c)
 	t.require(e != nil, "unmatched patterns accepted")
 	_, e = Analyze(t.TempDir(), []string{"./..."}, c)
