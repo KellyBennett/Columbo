@@ -6,3 +6,6 @@
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+
+# Pinned architecture guard tools
+/.tools/

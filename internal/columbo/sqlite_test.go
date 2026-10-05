@@ -1,8 +1,13 @@
 package columbo
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"fmt"
+	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +30,7 @@ func (h *sqliteHarness) write(report Report) {
 }
 func (h *sqliteHarness) open() *sql.DB {
 	h.Helper()
-	db, err := OpenSnapshot(h.path)
+	db, err := openTestSnapshot(h.path)
 	require.NoError(h.T, err)
 	h.Cleanup(func() { require.NoError(h.T, db.Close()) })
 	return db
@@ -270,4 +275,173 @@ func (f *sqliteFixture) clue() {
 }
 func sqliteTestSource(ref DeclarationRef) Source {
 	return Source{Kind: "metric-contribution", File: ref.File, StartLine: 1, EndLine: 1, StartOffset: 0, EndOffset: 1, Detail: Detail{Subject: "function-lines", Value: 1}, Declaration: &ref, EvidenceKey: "typed-key"}
+}
+
+// Independent raw SQL oracles validate the public SQLite file, not the generated
+// query implementation. The production reader is validated before this opens.
+func openTestSnapshot(path string) (*sql.DB, error) {
+	reader, err := OpenSnapshot(path)
+	if err != nil {
+		return nil, err
+	}
+	if err = reader.Close(); err != nil {
+		return nil, err
+	}
+	return openSnapshotDatabase(path, true)
+}
+func snapshotDatabaseURI(path string, readonly bool) string {
+	uri := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	query := url.Values{"_pragma": {"foreign_keys(1)"}}
+	if readonly {
+		query.Set("mode", "ro")
+		query.Set("immutable", "1")
+		query.Add("_pragma", "query_only(1)")
+	}
+	uri.RawQuery = query.Encode()
+	return uri.String()
+}
+func openSnapshotDatabase(path string, readonly bool) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", snapshotDatabaseURI(path, readonly))
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err = db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+// Raw fault injection preserves the disk-limit/interrupted-schema tests without
+// exposing database handles or arbitrary SQL through the production boundary.
+func createSnapshotSchema(tx *sql.Tx) error {
+	schema, err := os.ReadFile("../snapshotdb/schema.sql")
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(string(schema)); err != nil {
+		return err
+	}
+	_, err = tx.Exec(fmt.Sprintf("PRAGMA application_id=%d; PRAGMA user_version=%d", SQLiteApplicationID, SchemaVersion))
+	return err
+}
+func populateTestSnapshot(db *sql.DB, contents snapshotContents) error {
+	if _, err := db.Exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL"); err != nil {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = writeTestSnapshot(tx, contents); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+func writeTestSnapshot(tx *sql.Tx, contents snapshotContents) error {
+	if err := createSnapshotSchema(tx); err != nil {
+		return err
+	}
+	if err := newSnapshotWriter(testTransactionQueries(tx)).write(contents.report, contents.version); err != nil {
+		return err
+	}
+	return validateTestSnapshotData(tx)
+}
+func validateTestSnapshotData(tx *sql.Tx) error {
+	if err := validateTestIntegrity(tx); err != nil {
+		return err
+	}
+	rows, err := tx.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("snapshot foreign key validation failed")
+	}
+	return rows.Err()
+}
+func validateTestIntegrity(tx *sql.Tx) error {
+	var integrity string
+	if err := tx.QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil {
+		return err
+	}
+	if integrity != "ok" {
+		return errors.New("snapshot integrity validation failed")
+	}
+	return nil
+}
+func TestSQLiteGeneratedBoundaryReadOnly(t *testing.T) { newSQLiteHarness(t).generatedReadOnly() }
+func (h *sqliteHarness) generatedReadOnly() {
+	h.writeEmpty()
+	reader, err := OpenSnapshot(h.path)
+	require.NoError(h.T, err)
+	defer reader.Close()
+	require.ErrorContains(h.T, snapshotReadOnlyError(reader.Queries()), "readonly")
+	require.NoError(h.T, snapshotNoSidecars(h.path))
+}
+func snapshotReadOnlyError(queries snapshotdb.Querier) error {
+	return queries.InsertWarning(context.Background(), snapshotdb.InsertWarningParams{Code: "attempt", Message: "readonly"})
+}
+func TestSQLiteGeneratedNumericRoundTrip(t *testing.T) { newSQLiteHarness(t).generatedRoundTrip() }
+func (h *sqliteHarness) generatedRoundTrip() {
+	h.numericDatabase().Close()
+	reader, err := OpenSnapshot(h.path)
+	require.NoError(h.T, err)
+	defer reader.Close()
+	h.generatedNumericRows(reader.Queries())
+}
+func (h *sqliteHarness) generatedNumericRows(queries snapshotdb.Querier) {
+	rows, err := generatedMetricRows(queries)
+	require.NoError(h.T, err)
+	require.Len(h.T, rows, 2)
+	require.Equal(h.T, int64(9007199254740993), rows[0].NumericValue)
+	require.Equal(h.T, int64(9007199254740992), rows[0].LimitValue)
+	require.Equal(h.T, float64(1), rows[1].NumericValue)
+	require.Equal(h.T, float64(.75), rows[1].LimitValue)
+	require.NotNil(h.T, rows[0].Operator)
+	_, err = queries.WarningMessages(context.Background())
+	require.NoError(h.T, err)
+}
+
+func testDatabaseQueries(db *sql.DB) snapshotdb.Querier    { return snapshotdb.New(db) }
+func testTransactionQueries(tx *sql.Tx) snapshotdb.Querier { return snapshotdb.New(tx) }
+func generatedMetricRows(queries snapshotdb.Querier) ([]snapshotdb.SummaryMetricsRow, error) {
+	return queries.SummaryMetrics(context.Background(), snapshotdb.SummaryMetricsParams{CaseID: "C-first"})
+}
+
+func TestSQLiteGeneratedCompletionRequiresReport(t *testing.T) {
+	newSQLiteHarness(t).generatedCompletionRequiresReport()
+}
+func (h *sqliteHarness) generatedCompletionRequiresReport() {
+	writer, err := snapshotdb.Create(h.path)
+	require.NoError(h.T, err)
+	defer writer.Close()
+	require.ErrorContains(h.T, writer.Complete(), "report identity")
+}
+func TestSQLiteGeneratedBoundaryRejectsSidecars(t *testing.T) {
+	newSQLiteHarness(t).generatedSidecarRejected()
+}
+func (h *sqliteHarness) generatedSidecarRejected() {
+	h.writeEmpty()
+	require.NoError(h.T, os.WriteFile(h.path+"-wal", []byte("unfinished"), 0600))
+	require.ErrorContains(h.T, snapshotBoundaryOpenError(h.path), "sidecar")
+}
+func TestSQLiteGeneratedBoundaryRejectsSymlinks(t *testing.T) {
+	newSQLiteHarness(t).generatedSymlinkRejected()
+}
+func (h *sqliteHarness) generatedSymlinkRejected() {
+	h.writeEmpty()
+	link := h.path + ".link"
+	require.NoError(h.T, os.Symlink(h.path, link))
+	require.ErrorContains(h.T, snapshotBoundaryOpenError(link), "non-symlink")
+}
+func snapshotBoundaryOpenError(path string) error {
+	reader, err := snapshotdb.Open(path)
+	if reader != nil {
+		_ = reader.Close()
+	}
+	return err
 }

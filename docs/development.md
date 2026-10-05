@@ -20,6 +20,8 @@ CI also builds Columbo from the checked-out revision and runs `./columbo ./...` 
 
 Acceptance tests pin Go 1.25.1, Linux/amd64, and a fixed build environment. The suite includes all seven default FAIL smells and checked-in logical SQLite-row/compact-summary goldens. CI also runs every published SQL query read-only against the all-seven fixture snapshot. Refresh goldens deliberately with `UPDATE_GOLDEN=1 go test ./internal/columbo`.
 
+Snapshot database operations use pinned sqlc-generated bindings behind a guarded private lifecycle. See the [sqlc migration guide](sqlc-migration.md) and [database access boundary](database-access-boundary.md) for regeneration, dedicated lint and regression commands.
+
 CE-001 is a provisional dogfooding policy. Ordinary builds and tests support it; `go run ./cmd/releasecheck` deliberately fails until the policy is resolved before public v1 release.
 
 Cgo inputs are rejected with exit 2 when the loader cannot establish original physical-source/type correspondence; generated compiler wrappers never substitute for source receipts.

@@ -1,9 +1,11 @@
 package columbo
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
+	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 	"math"
+	"reflect"
 	"sort"
 )
 
@@ -17,7 +19,7 @@ type snapshotReceiptKey struct{ caseID, key string }
 // A snapshotWriter owns the transaction and the first error. Once an operation
 // fails, subsequent inserts become no-ops and the transaction is rolled back.
 type snapshotWriter struct {
-	tx           *sql.Tx
+	queries      snapshotdb.Querier
 	err          error
 	files        map[string]int64
 	declarations map[DeclarationRef]int64
@@ -29,11 +31,11 @@ type snapshotWriter struct {
 	policies     map[string]PolicyReview
 }
 
-func newSnapshotWriter(tx *sql.Tx) *snapshotWriter {
-	return &snapshotWriter{tx: tx, files: map[string]int64{}, declarations: map[DeclarationRef]int64{}, dependencies: map[string]int64{}, clusters: map[snapshotClusterKey]int64{}, members: map[snapshotMemberKey]int64{}, receipts: map[snapshotReceiptKey]int64{}, commits: map[string]int64{}, policies: map[string]PolicyReview{}}
+func newSnapshotWriter(queries snapshotdb.Querier) *snapshotWriter {
+	return &snapshotWriter{queries: queries, files: map[string]int64{}, declarations: map[DeclarationRef]int64{}, dependencies: map[string]int64{}, clusters: map[snapshotClusterKey]int64{}, members: map[snapshotMemberKey]int64{}, receipts: map[snapshotReceiptKey]int64{}, commits: map[string]int64{}, policies: map[string]PolicyReview{}}
 }
 func (w *snapshotWriter) write(report Report, version string) error {
-	w.exec("INSERT INTO report VALUES (1, ?, ?)", SchemaVersion, version)
+	w.writeHeader(version)
 	w.writeDeclarations(report.Declarations)
 	for ordinal, c := range report.Cases {
 		w.writeCase(c, ordinal)
@@ -41,6 +43,11 @@ func (w *snapshotWriter) write(report Report, version string) error {
 	w.writeSuppressions(report.Suppressions)
 	w.writeWarnings(report.Warnings)
 	return w.err
+}
+func (w *snapshotWriter) writeHeader(version string) {
+	w.exec(func() error {
+		return w.queries.InsertReport(context.Background(), snapshotdb.InsertReportParams{SchemaVersion: int64(SchemaVersion), ColumboVersion: version})
+	})
 }
 func (w *snapshotWriter) record(err error) {
 	if w.err == nil {
@@ -52,23 +59,16 @@ func (w *snapshotWriter) require(condition bool, message string) {
 		w.record(fmt.Errorf("%s", message))
 	}
 }
-func (w *snapshotWriter) exec(query string, args ...any) {
-	if w.err != nil {
-		return
+func (w *snapshotWriter) exec(write func() error) {
+	if w.err == nil {
+		w.record(write())
 	}
-	_, err := w.tx.Exec(query, args...)
-	w.record(err)
 }
-func (w *snapshotWriter) insert(query string, args ...any) int64 {
+func (w *snapshotWriter) insert(write func() (int64, error)) int64 {
 	if w.err != nil {
 		return 0
 	}
-	result, err := w.tx.Exec(query, args...)
-	w.record(err)
-	if err != nil {
-		return 0
-	}
-	id, err := result.LastInsertId()
+	id, err := write()
 	w.record(err)
 	return id
 }
@@ -76,7 +76,9 @@ func (w *snapshotWriter) file(path string) int64 {
 	if id, ok := w.files[path]; ok {
 		return id
 	}
-	id := w.insert("INSERT INTO files(path) VALUES (?)", path)
+	id := w.insert(func() (int64, error) {
+		return w.queries.InsertFile(context.Background(), snapshotdb.InsertFileParams{Path: path})
+	})
 	w.files[path] = id
 	return id
 }
@@ -85,17 +87,20 @@ func (w *snapshotWriter) declaration(ref DeclarationRef) int64 {
 	w.require(ok, "missing typed declaration "+ref.Symbol+" in "+ref.File)
 	return id
 }
-func (w *snapshotWriter) optionalDeclaration(ref *DeclarationRef) any {
+func (w *snapshotWriter) optionalDeclaration(ref *DeclarationRef) *int64 {
 	if ref == nil {
 		return nil
 	}
-	return w.declaration(*ref)
+	id := w.declaration(*ref)
+	return &id
 }
 func (w *snapshotWriter) dependency(identity string) int64 {
 	if id, ok := w.dependencies[identity]; ok {
 		return id
 	}
-	id := w.insert("INSERT INTO dependencies(identity) VALUES (?)", identity)
+	id := w.insert(func() (int64, error) {
+		return w.queries.InsertDependency(context.Background(), snapshotdb.InsertDependencyParams{Identity: identity})
+	})
 	w.dependencies[identity] = id
 	return id
 }
@@ -114,9 +119,19 @@ func declarationRefLess(left, right DeclarationRef) bool {
 }
 func (w *snapshotWriter) writeDeclaration(d DeclarationEvidence) {
 	file := w.file(d.Ref.File)
+	params, err := d.snapshotDeclaration(file)
+	w.record(err)
+	id := w.insert(func() (int64, error) { return w.queries.InsertDeclaration(context.Background(), params) })
+	w.registerDeclaration(d, id)
+}
+func (d DeclarationEvidence) snapshotDeclaration(fileID int64) (snapshotdb.InsertDeclarationParams, error) {
 	s := d.Source
-	w.require(s.File == d.Ref.File, "declaration source file does not match typed reference")
-	id := w.insert("INSERT INTO declarations(file_id,symbol,start_line,end_line,start_offset,end_offset) VALUES (?,?,?,?,?,?)", file, d.Ref.Symbol, s.StartLine, s.EndLine, s.StartOffset, s.EndOffset)
+	if s.File != d.Ref.File {
+		return snapshotdb.InsertDeclarationParams{}, fmt.Errorf("declaration source file does not match typed reference")
+	}
+	return snapshotdb.InsertDeclarationParams{FileID: fileID, Symbol: d.Ref.Symbol, StartLine: int64(s.StartLine), EndLine: int64(s.EndLine), StartOffset: int64(s.StartOffset), EndOffset: int64(s.EndOffset)}, nil
+}
+func (w *snapshotWriter) registerDeclaration(d DeclarationEvidence, id int64) {
 	w.declarations[d.Ref] = id
 	w.writeDeclarationDependencies(id, d.Dependencies)
 }
@@ -125,7 +140,9 @@ func (w *snapshotWriter) writeDeclarationDependencies(declarationID int64, evide
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Identity < ordered[j].Identity })
 	for _, dep := range ordered {
 		dependencyID := w.dependency(dep.Identity)
-		w.exec("INSERT INTO declaration_dependencies VALUES (?,?,?)", declarationID, dependencyID, dep.Scored)
+		w.exec(func() error {
+			return w.queries.InsertDeclarationDependency(context.Background(), snapshotdb.InsertDeclarationDependencyParams{DeclarationID: int64(declarationID), DependencyID: int64(dependencyID), Scored: snapshotFlag(dep.Scored)})
+		})
 	}
 }
 func (w *snapshotWriter) writeCase(c Case, ordinal int) {
@@ -139,7 +156,9 @@ func (c Case) writeSnapshot(w *snapshotWriter, ordinal int) {
 	}
 	id := w.declaration(*c.PrimaryDeclaration)
 	w.require(c.File == c.PrimaryDeclaration.File && c.Symbol == c.PrimaryDeclaration.Symbol, "case primary declaration does not match location")
-	w.exec("INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?)", c.ID, ordinal, id, c.Smell, c.Verdict, c.Suppressed, c.StartLine, c.EndLine, c.Why, c.Diagnosis)
+	w.exec(func() error {
+		return w.queries.InsertCase(context.Background(), snapshotdb.InsertCaseParams{ID: c.ID, Ordinal: int64(ordinal), PrimaryDeclarationID: int64(id), Smell: c.Smell, Verdict: c.Verdict, Suppressed: snapshotFlag(c.Suppressed), StartLine: int64(c.StartLine), EndLine: int64(c.EndLine), Why: c.Why, Diagnosis: c.Diagnosis})
+	})
 	w.caseDeclaration(c.ID, *c.PrimaryDeclaration, "primary")
 }
 func (w *snapshotWriter) writeCaseEvidence(c Case) {
@@ -154,7 +173,9 @@ func (w *snapshotWriter) writeCaseEvidence(c Case) {
 }
 func (w *snapshotWriter) caseDeclaration(caseID string, ref DeclarationRef, role string) {
 	id := w.declaration(ref)
-	w.exec("INSERT OR IGNORE INTO case_declarations VALUES (?,?,?)", caseID, id, role)
+	w.exec(func() error {
+		return w.queries.LinkCaseDeclaration(context.Background(), snapshotdb.LinkCaseDeclarationParams{CaseID: caseID, DeclarationID: int64(id), Role: role})
+	})
 }
 func (w *snapshotWriter) writeGuidance(c Case) {
 	groups := []struct {
@@ -163,7 +184,9 @@ func (w *snapshotWriter) writeGuidance(c Case) {
 	}{{"lead", c.Leads}, {"avoid", c.Avoid}}
 	for _, group := range groups {
 		for ordinal, item := range group.items {
-			w.exec("INSERT INTO case_guidance VALUES (?,?,?,?)", c.ID, group.kind, ordinal, item)
+			w.exec(func() error {
+				return w.queries.InsertGuidance(context.Background(), snapshotdb.InsertGuidanceParams{CaseID: c.ID, Kind: group.kind, Ordinal: int64(ordinal), Item: item})
+			})
 		}
 	}
 }
@@ -175,16 +198,18 @@ func (w *snapshotWriter) writeClusters(c Case) {
 func (w *snapshotWriter) writeCluster(caseID string, ordinal int, cluster Cluster) {
 	owner := cluster.snapshotOwner(w)
 	file := w.file(cluster.File)
-	id := w.insert("INSERT INTO clusters(case_id,cluster_key,owner_declaration_id,file_id,ordinal) VALUES (?,?,?,?,?)", caseID, cluster.Key, owner, file, ordinal)
+	id := w.insert(func() (int64, error) {
+		return w.queries.InsertCluster(context.Background(), snapshotdb.InsertClusterParams{CaseID: caseID, ClusterKey: cluster.Key, OwnerDeclarationID: int64(owner), FileID: int64(file), Ordinal: int64(ordinal)})
+	})
 	w.clusters[snapshotClusterKey{caseID, cluster.Key}] = id
 	for index, member := range cluster.Members {
 		w.writeMember(snapshotClusterKey{caseID, cluster.Key}, id, index, member)
 	}
 }
-func (cluster Cluster) snapshotOwner(w *snapshotWriter) any {
+func (cluster Cluster) snapshotOwner(w *snapshotWriter) int64 {
 	w.require(cluster.OwnerDeclaration != nil, "cluster has no typed owner")
 	if cluster.OwnerDeclaration == nil {
-		return nil
+		return 0
 	}
 	w.require(cluster.Owner == cluster.OwnerDeclaration.Symbol && cluster.File == cluster.OwnerDeclaration.File, "cluster owner does not match typed declaration")
 	return w.declaration(*cluster.OwnerDeclaration)
@@ -196,7 +221,12 @@ func (w *snapshotWriter) writeMember(cluster snapshotClusterKey, clusterID int64
 		return
 	}
 	w.require(member.Helper == member.Declaration.Symbol, "member helper does not match typed declaration")
-	id := w.insert("INSERT INTO cluster_members(cluster_id,case_id,helper_declaration_id,ordinal,call_offset) VALUES (?,?,?,?,?)", clusterID, cluster.caseID, helper, ordinal, member.CallOffset)
+	id := w.insert(func() (int64, error) {
+		return w.queries.InsertClusterMember(context.Background(), snapshotdb.InsertClusterMemberParams{ClusterID: int64(clusterID), CaseID: cluster.caseID, HelperDeclarationID: *helper, Ordinal: int64(ordinal), CallOffset: int64(member.CallOffset)})
+	})
+	w.registerMember(cluster, member, id)
+}
+func (w *snapshotWriter) registerMember(cluster snapshotClusterKey, member Member, id int64) {
 	w.members[snapshotMemberKey{cluster.caseID, MemberRef{ClusterKey: cluster.key, Helper: *member.Declaration, CallOffset: member.CallOffset}}] = id
 }
 func (w *snapshotWriter) writeReceipts(c Case) {
@@ -213,14 +243,23 @@ func (w *snapshotWriter) writeReceipts(c Case) {
 		}
 	}
 }
-func (w *snapshotWriter) writeSource(caseID string, ordinal int, s Source) {
-	file := w.file(s.File)
-	declarationID := w.optionalDeclaration(s.Declaration)
-	numeric := w.number(s.Detail.Value, true)
-	nesting, err := snapshotNesting(s.Detail.Nesting)
+func (w *snapshotWriter) writeSource(caseID string, ordinal int, source Source) {
+	params, err := source.snapshotSource(caseID, ordinal, w.file(source.File))
 	w.record(err)
-	id := w.insert("INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", caseID, ordinal, s.Kind, file, s.StartLine, s.EndLine, s.StartOffset, s.EndOffset, s.Detail.Subject, numeric.kind, numeric.value, nesting, declarationID)
-	w.sourceRelations(snapshotReceiptKey{caseID, s.EvidenceKey}, id, s)
+	params.SourceDeclarationID = w.optionalDeclaration(source.Declaration)
+	id := w.insert(func() (int64, error) { return w.queries.InsertSourceReceipt(context.Background(), params) })
+	w.sourceRelations(snapshotReceiptKey{caseID, source.EvidenceKey}, id, source)
+}
+func (s Source) snapshotSource(caseID string, ordinal int, fileID int64) (snapshotdb.InsertSourceReceiptParams, error) {
+	numeric, err := snapshotNumericValue(s.Detail.Value, true)
+	if err != nil {
+		return snapshotdb.InsertSourceReceiptParams{}, err
+	}
+	nesting, err := snapshotNesting(s.Detail.Nesting)
+	if err != nil {
+		return snapshotdb.InsertSourceReceiptParams{}, err
+	}
+	return snapshotdb.InsertSourceReceiptParams{CaseID: caseID, Ordinal: int64(ordinal), Kind: s.Kind, FileID: fileID, StartLine: int64(s.StartLine), EndLine: int64(s.EndLine), StartOffset: int64(s.StartOffset), EndOffset: int64(s.EndOffset), Subject: s.Detail.Subject, ValueType: snapshotOptionalText(numeric.kind), Value: numeric.value, Nesting: nesting}, nil
 }
 func (w *snapshotWriter) sourceRelations(key snapshotReceiptKey, id int64, source Source) {
 	if key.key != "" {
@@ -235,13 +274,28 @@ func (w *snapshotWriter) sourceRelations(key snapshotReceiptKey, id int64, sourc
 	}
 }
 func (w *snapshotWriter) writeDependencyReceipt(caseID string, id int64, source Source) {
+	params := source.snapshotDependency(w)
+	w.validateDependency(params, source.DependencyScored)
+	w.exec(func() error {
+		return w.queries.InsertDependencyReceipt(context.Background(), snapshotdb.InsertDependencyReceiptParams{DeclarationID: params.DeclarationID, DependencyID: params.DependencyID, ReceiptID: id, CaseID: caseID})
+	})
+}
+func (source Source) snapshotDependency(w *snapshotWriter) snapshotdb.DependencyScoredParams {
 	declarationID := w.optionalDeclaration(source.Declaration)
 	w.require(declarationID != nil, "dependency receipt has no typed declaration")
 	dependencyID := w.dependency(source.DependencyIdentity)
-	var scored bool
-	w.record(w.tx.QueryRow("SELECT scored FROM declaration_dependencies WHERE declaration_id=? AND dependency_id=?", declarationID, dependencyID).Scan(&scored))
-	w.require(scored == source.DependencyScored, "dependency receipt disagrees with scored inventory")
-	w.exec("INSERT INTO dependency_receipts VALUES (?,?,?,?)", declarationID, dependencyID, id, caseID)
+	if declarationID == nil {
+		return snapshotdb.DependencyScoredParams{}
+	}
+	return snapshotdb.DependencyScoredParams{DeclarationID: *declarationID, DependencyID: dependencyID}
+}
+func (w *snapshotWriter) validateDependency(params snapshotdb.DependencyScoredParams, expected bool) {
+	if w.err != nil {
+		return
+	}
+	scored, err := w.queries.DependencyScored(context.Background(), params)
+	w.record(err)
+	w.require((scored != 0) == expected, "dependency receipt disagrees with scored inventory")
 }
 func (w *snapshotWriter) writeExpansionDeclarations(receiptID int64, detail Detail) {
 	w.require(len(detail.Expansion) == len(detail.ExpansionDeclarations), "expansion declarations lack typed references")
@@ -251,14 +305,18 @@ func (w *snapshotWriter) writeExpansionDeclarations(receiptID int64, detail Deta
 	for ordinal, ref := range detail.ExpansionDeclarations {
 		id := w.declaration(ref)
 		w.require(detail.Expansion[ordinal] == ref.Symbol, "expansion name does not match typed declaration")
-		w.exec("INSERT INTO receipt_expansion_declarations VALUES (?,?,?,?)", receiptID, ordinal, id, detail.Expansion[ordinal])
+		w.exec(func() error {
+			return w.queries.InsertExpansionDeclaration(context.Background(), snapshotdb.InsertExpansionDeclarationParams{ReceiptID: int64(receiptID), Ordinal: int64(ordinal), DeclarationID: int64(id), Symbol: detail.Expansion[ordinal]})
+		})
 	}
 }
 func (w *snapshotWriter) writeExpansionSites(receiptID int64, sites []Site) {
 	for ordinal, site := range sites {
 		file := w.file(site.File)
 		owner := w.optionalDeclaration(site.Owner)
-		w.exec("INSERT INTO receipt_expansion_sites VALUES (?,?,?,?,?)", receiptID, ordinal, file, site.CallOffset, owner)
+		w.exec(func() error {
+			return w.queries.InsertExpansionSite(context.Background(), snapshotdb.InsertExpansionSiteParams{ReceiptID: int64(receiptID), Ordinal: int64(ordinal), FileID: int64(file), CallOffset: int64(site.CallOffset), OwnerDeclarationID: owner})
+		})
 	}
 }
 func (w *snapshotWriter) writeClues(c Case) {
@@ -270,8 +328,11 @@ func (w *snapshotWriter) writeClue(caseID string, ordinal int, clue Clue) {
 	value, err := snapshotClueValue(clue.Value)
 	w.record(err)
 	limit := w.number(clue.Limit, true)
+	operator := w.nullableText(clue.Operator)
 	refs := w.clueReferences(caseID, clue)
-	id := w.insert("INSERT INTO clues(case_id,ordinal,kind,subject,value_type,numeric_value,limit_type,limit_value,operator,declaration_id,cluster_id,member_id,pair_left_member_id,pair_right_member_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", caseID, ordinal, clue.Kind, clue.Subject, value.kind, value.value, limit.kind, limit.value, clue.Operator, refs.declaration, refs.cluster, refs.member, refs.left, refs.right)
+	id := w.insert(func() (int64, error) {
+		return w.queries.InsertClue(context.Background(), snapshotdb.InsertClueParams{CaseID: caseID, Ordinal: int64(ordinal), Kind: clue.Kind, Subject: clue.Subject, ValueType: value.kind, NumericValue: value.value, LimitType: snapshotOptionalText(limit.kind), LimitValue: limit.value, Operator: operator, DeclarationID: refs.declaration, ClusterID: refs.cluster, MemberID: refs.member, PairLeftMemberID: refs.left, PairRightMemberID: refs.right})
+	})
 	w.writeClueValues(id, value.items)
 	w.writeClueReceipts(caseID, id, clue.SupportingReceipts)
 }
@@ -282,18 +343,22 @@ func (w *snapshotWriter) number(value any, nullable bool) snapshotNumeric {
 }
 func (w *snapshotWriter) writeClueValues(id int64, values []string) {
 	for ordinal, value := range values {
-		w.exec("INSERT INTO clue_values VALUES (?,?,?)", id, ordinal, value)
+		w.exec(func() error {
+			return w.queries.InsertClueValue(context.Background(), snapshotdb.InsertClueValueParams{ClueID: int64(id), Ordinal: int64(ordinal), Value: value})
+		})
 	}
 }
 func (w *snapshotWriter) writeClueReceipts(caseID string, clueID int64, keys []string) {
 	for _, key := range keys {
 		receiptID, ok := w.receipts[snapshotReceiptKey{caseID, key}]
 		w.require(ok, "clue references missing typed receipt")
-		w.exec("INSERT INTO clue_receipts VALUES (?,?,?)", caseID, clueID, receiptID)
+		w.exec(func() error {
+			return w.queries.LinkClueReceipt(context.Background(), snapshotdb.LinkClueReceiptParams{CaseID: caseID, ClueID: int64(clueID), ReceiptID: int64(receiptID)})
+		})
 	}
 }
 
-type snapshotClueReferences struct{ declaration, cluster, member, left, right any }
+type snapshotClueReferences struct{ declaration, cluster, member, left, right *int64 }
 
 func (w *snapshotWriter) clueReferences(caseID string, clue Clue) snapshotClueReferences {
 	refs := snapshotClueReferences{declaration: w.optionalDeclaration(clue.Declaration)}
@@ -306,17 +371,17 @@ func (w *snapshotWriter) clueReferences(caseID string, clue Clue) snapshotClueRe
 	refs.left, refs.right = w.cluePair(caseID, clue.Pair)
 	return refs
 }
-func (w *snapshotWriter) clueCluster(caseID, key string) int64 {
+func (w *snapshotWriter) clueCluster(caseID, key string) *int64 {
 	id, ok := w.clusters[snapshotClusterKey{caseID, key}]
 	w.require(ok, "clue references missing typed cluster")
-	return id
+	return &id
 }
-func (w *snapshotWriter) clueMember(caseID string, ref MemberRef) int64 {
+func (w *snapshotWriter) clueMember(caseID string, ref MemberRef) *int64 {
 	id, ok := w.members[snapshotMemberKey{caseID, ref}]
 	w.require(ok, "clue references missing typed cluster member")
-	return id
+	return &id
 }
-func (w *snapshotWriter) cluePair(caseID string, pair []MemberRef) (any, any) {
+func (w *snapshotWriter) cluePair(caseID string, pair []MemberRef) (*int64, *int64) {
 	if len(pair) == 0 {
 		return nil, nil
 	}
@@ -328,10 +393,14 @@ func (w *snapshotWriter) cluePair(caseID string, pair []MemberRef) (any, any) {
 }
 func (w *snapshotWriter) writeHistory(caseID string, ordinal int, history History) {
 	w.writeCommit(history)
-	w.exec("INSERT INTO case_history VALUES (?,?,?,?)", caseID, ordinal, history.Commit, history.Kind)
+	w.exec(func() error {
+		return w.queries.InsertHistory(context.Background(), snapshotdb.InsertHistoryParams{CaseID: caseID, Ordinal: int64(ordinal), CommitHash: history.Commit, Kind: history.Kind})
+	})
 	for index, path := range history.Files {
 		file := w.file(path)
-		w.exec("INSERT INTO case_history_files VALUES (?,?,?,?)", caseID, ordinal, index, file)
+		w.exec(func() error {
+			return w.queries.InsertHistoryFile(context.Background(), snapshotdb.InsertHistoryFileParams{CaseID: caseID, HistoryOrdinal: int64(ordinal), Ordinal: int64(index), FileID: int64(file)})
+		})
 	}
 }
 func (w *snapshotWriter) writeCommit(history History) {
@@ -339,13 +408,17 @@ func (w *snapshotWriter) writeCommit(history History) {
 		w.require(stamp == history.CommittedAt, "conflicting commit timestamps")
 		return
 	}
-	w.exec("INSERT INTO commits VALUES (?,?)", history.Commit, history.CommittedAt)
+	w.exec(func() error {
+		return w.queries.InsertCommit(context.Background(), snapshotdb.InsertCommitParams{Hash: history.Commit, CommittedAt: int64(history.CommittedAt)})
+	})
 	w.commits[history.Commit] = history.CommittedAt
 }
 func (w *snapshotWriter) writePolicies(c Case) {
 	for ordinal, policy := range c.PolicyReviews {
 		w.policy(policy)
-		w.exec("INSERT INTO case_policy_reviews VALUES (?,?,?)", c.ID, ordinal, policy.ID)
+		w.exec(func() error {
+			return w.queries.LinkPolicy(context.Background(), snapshotdb.LinkPolicyParams{CaseID: c.ID, Ordinal: int64(ordinal), PolicyID: policy.ID})
+		})
 	}
 }
 func (w *snapshotWriter) policy(policy PolicyReview) {
@@ -353,7 +426,9 @@ func (w *snapshotWriter) policy(policy PolicyReview) {
 		w.require(previous == policy, "conflicting policy review "+policy.ID)
 		return
 	}
-	w.exec("INSERT INTO policy_reviews VALUES (?,?,?)", policy.ID, policy.Note, policy.ReviewPrompt)
+	w.exec(func() error {
+		return w.queries.InsertPolicy(context.Background(), snapshotdb.InsertPolicyParams{ID: policy.ID, Note: policy.Note, ReviewPrompt: policy.ReviewPrompt})
+	})
 	w.policies[policy.ID] = policy
 }
 func (w *snapshotWriter) writeSuppressions(suppressions []Suppression) {
@@ -363,7 +438,10 @@ func (w *snapshotWriter) writeSuppressions(suppressions []Suppression) {
 }
 func (s Suppression) writeSnapshot(w *snapshotWriter, ordinal int) {
 	file := w.file(s.File)
-	w.exec("INSERT INTO suppressions(ordinal,smell,symbol,file_id,line,justification,applied,case_id) VALUES (?,?,?,?,?,?,?,?)", ordinal, s.Smell, s.Symbol, file, s.Line, s.Justification, s.Applied, s.CaseID)
+	caseID := w.nullableText(s.CaseID)
+	w.exec(func() error {
+		return w.queries.InsertSuppression(context.Background(), snapshotdb.InsertSuppressionParams{Ordinal: int64(ordinal), Smell: s.Smell, Symbol: s.Symbol, FileID: int64(file), Line: int64(s.Line), Justification: s.Justification, Applied: snapshotFlag(s.Applied), CaseID: caseID})
+	})
 }
 func (w *snapshotWriter) writeWarnings(warnings []Warning) {
 	for ordinal, warning := range warnings {
@@ -371,17 +449,21 @@ func (w *snapshotWriter) writeWarnings(warnings []Warning) {
 	}
 }
 func (warning Warning) writeSnapshot(w *snapshotWriter, ordinal int) {
-	var file any
+	var file *int64
 	if warning.File != "" {
-		file = w.file(warning.File)
+		id := w.file(warning.File)
+		file = &id
 	}
-	w.exec("INSERT INTO warnings(ordinal,code,file_id,line,message) VALUES (?,?,?,?,?)", ordinal, warning.Code, file, warning.Line, warning.Message)
+	w.exec(func() error {
+		return w.queries.InsertWarning(context.Background(), snapshotdb.InsertWarningParams{Ordinal: int64(ordinal), Code: warning.Code, FileID: file, Line: int64(warning.Line), Message: warning.Message})
+	})
 }
 
 type snapshotNumeric struct {
-	kind, value any
-	items       []string
-	err         error
+	kind  string
+	value any
+	items []string
+	err   error
 }
 
 func snapshotNumericValue(value any, nullable bool) (snapshotNumeric, error) {
@@ -426,13 +508,50 @@ func snapshotClueValue(value any) (snapshotNumeric, error) {
 	}
 	return snapshotNumericValue(value, false)
 }
-func snapshotNesting(value any) (any, error) {
+func snapshotNesting(value any) (*int64, error) {
 	number, err := snapshotNumericValue(value, true)
 	if err != nil {
 		return nil, err
 	}
-	if number.kind != nil && number.kind != "integer" {
+	if number.kind != "" && number.kind != "integer" {
 		return nil, fmt.Errorf("nesting must be an integer")
 	}
-	return number.value, nil
+	if number.kind == "" {
+		return nil, nil
+	}
+	return snapshotIntegerPointer(number.value), nil
+}
+
+func snapshotFlag(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+func snapshotOptionalText(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+func (w *snapshotWriter) nullableText(value any) *string {
+	text, err := snapshotNullableText(value)
+	w.record(err)
+	return text
+}
+func snapshotNullableText(value any) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("unsupported snapshot text %T", value)
+	}
+	return &text, nil
+}
+
+// snapshotNesting has already validated a supported signed integer kind.
+func snapshotIntegerPointer(value any) *int64 {
+	integer := reflect.ValueOf(value).Int()
+	return &integer
 }

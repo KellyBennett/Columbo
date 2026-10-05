@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: sqlite
+    schema: internal/snapshotdb/schema.sql
+    queries: internal/snapshotdb/queries.sql
+    gen:
+      go:
+        package: snapshotdb
+        out: internal/snapshotdb
+        sql_package: database/sql
+        emit_interface: true
+        emit_pointers_for_null_types: true
+        query_parameter_limit: 0

@@ -1,0 +1,68 @@
+# Only the database-access architecture checks. This is not a general lint gate.
+version: "2"
+run:
+  timeout: 5m
+  tests: true
+  relative-path-mode: cfg
+linters:
+  default: none
+  enable:
+    - depguard
+    - forbidigo
+  settings:
+    depguard:
+      rules:
+        database-access:
+          list-mode: original
+          files:
+            - $all
+          deny:
+            # Explicit fixture/tool trees are never application dependencies.
+            - pkg: github.com/KellyBennett/Columbo/internal/columbo/testdata
+              desc: Analyzer corpus packages cannot be runtime imports
+            - pkg: github.com/KellyBennett/Columbo/.tools
+              desc: Tool installation files cannot be runtime imports
+            - pkg: github.com/KellyBennett/Columbo/.git
+              desc: Git metadata cannot be runtime imports
+            - pkg: github.com/KellyBennett/Columbo/vendor
+              desc: Repository vendor paths cannot be runtime imports
+            - pkg: database/sql$
+              desc: Database handles belong to internal/snapshotdb/lifecycle.go; use its typed Querier
+            - pkg: database/sql/driver$
+              desc: Raw SQL driver handles belong to internal/snapshotdb/lifecycle.go
+            - pkg: modernc.org/sqlite
+              desc: The SQLite driver belongs to internal/snapshotdb/lifecycle.go
+            - pkg: github.com/mattn/go-sqlite3
+              desc: SQLite drivers belong to internal/snapshotdb/lifecycle.go
+            - pkg: github.com/ncruces/go-sqlite3
+              desc: SQLite drivers belong to internal/snapshotdb/lifecycle.go
+    forbidigo:
+      analyze-types: true
+      exclude-godoc-examples: false
+      forbid:
+        # Reserve raw SQL API references across concrete types, local interfaces,
+        # wrappers, promoted methods, method values, and method expressions.
+        - pattern: '(^|\.)((Exec|Query|QueryRow|Prepare)(Context)?|Raw)$'
+          msg: Raw SQL API names are reserved for snapshotdb lifecycle and verified sqlc output
+        - pattern: '^sql\.(Open|OpenDB|Register)$'
+          pkg: '^database/sql$'
+          msg: Opening or registering database handles belongs to snapshotdb lifecycle
+        # sqlc's concrete Queries and DBTX constructors are not the public seam.
+        - pattern: '^snapshotdb\.(DBTX|Queries|New)$|^snapshotdb\.Queries\.WithTx$'
+          pkg: '^github\.com/KellyBennett/Columbo/internal/snapshotdb$'
+          msg: Use snapshotdb Open/Create and the generated Querier; raw handles must stay private
+  exclusions:
+    # Fake generated comments must never bypass these checks.
+    generated: disable
+    presets: []
+    rules:
+      - path: '^internal/snapshotdb/(lifecycle|db|models|queries\.sql|querier)\.go$'
+        linters: [depguard, forbidigo]
+      # Independent database oracles and adversarial malformed/constraint tests.
+      # No runtime file, future test, or directory-wide exception is allowed.
+      - path: '^internal/columbo/(acceptance_test|reporting_test|sqlite_test|sqlite_atomic_test|sqlite_constraints_test|policy_test)\.go$'
+        linters: [depguard, forbidigo]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false

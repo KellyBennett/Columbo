@@ -1,0 +1,8 @@
+package consumer
+import alias "database/sql"
+import "context"
+type Embedded struct { *alias.DB }
+func Bad(q Embedded) {
+    prepare := q.PrepareContext
+    _, _ = prepare(context.Background(), "SELECT 1")
+}

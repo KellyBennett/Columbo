@@ -1,0 +1,18 @@
+{
+  "lifecycle": "internal/snapshotdb/lifecycle.go",
+  "generated": [
+    "internal/snapshotdb/db.go",
+    "internal/snapshotdb/models.go",
+    "internal/snapshotdb/queries.sql.go",
+    "internal/snapshotdb/querier.go"
+  ],
+  "test_exceptions": {
+    "internal/columbo/acceptance_test.go": "Independent logical-row oracle over every SQLite table",
+    "internal/columbo/reporting_test.go": "Independent published-query/report reconciliation and read-only assertions",
+    "internal/columbo/sqlite_test.go": "Malformed snapshot construction, storage-type oracle, constraint rejection",
+    "internal/columbo/sqlite_atomic_test.go": "Storage-failure injection and preservation oracle",
+    "internal/columbo/sqlite_constraints_test.go": "Independent forbidden-update/ownership constraint assertions",
+    "internal/columbo/policy_test.go": "Independent relational-group and schema-version assertions"
+  },
+  "analyzer_corpus": "internal/columbo/testdata"
+}

@@ -1,0 +1,6 @@
+package consumer
+type Local interface { PrepareContext(string) }
+func Bad(q Local) {
+    prepare := Local.PrepareContext
+    prepare(q, "SELECT 1")
+}

@@ -252,10 +252,10 @@ func (t *testHarness) checkExplicitExistingSnapshotRefused() {
 	t.equal(before, t.read(path))
 }
 func (t *testHarness) checkPublishedSummary(path string, stdout []byte) {
-	db, err := OpenSnapshot(path)
+	db, err := openTestSnapshot(path)
 	t.noError(err)
 	defer db.Close()
-	summary, exitCode, err := RenderSnapshot(db, path)
+	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), path)
 	t.noError(err)
 	t.equal(1, exitCode)
 	t.equal(summary, stdout)
@@ -282,7 +282,7 @@ func TestCLISummaryWriteFailureKeepsSnapshot(t *testing.T) {
 func (t *testHarness) checkCLISummaryWriteFailure() {
 	dir := t.fixture(cliFindingSource)
 	t.checkFailingSummarySink(dir)
-	db, err := OpenSnapshot(filepath.Join(dir, "summary.sqlite"))
+	db, err := openTestSnapshot(filepath.Join(dir, "summary.sqlite"))
 	t.noError(err, "summary delivery failure occurs after complete publication")
 	defer db.Close()
 	t.equal(1, t.sqlCount(db, `SELECT failed FROM summary`))
@@ -320,7 +320,7 @@ func (t *testHarness) checkStoredSummaryWithoutAnalysis() {
 	report := savedSummaryFixture()
 	report.Summary = Summary{Failed: 999, Warned: 999, Suppressed: 999}
 	db := t.snapshot(report)
-	summary, failed, err := RenderSnapshot(db, "saved.sqlite")
+	summary, failed, err := RenderSnapshot(testDatabaseQueries(db), "saved.sqlite")
 	t.noError(err)
 	t.equal(1, failed)
 	t.checkSavedSummaryText(summary)
@@ -627,7 +627,7 @@ func (t *testHarness) TestCLIUnusedSuppressionWarning() {
 	t.checkUnusedSuppressionSnapshot(t.onlyDefaultSnapshot(dir))
 }
 func (t *testHarness) checkUnusedSuppressionSnapshot(path string) {
-	db, err := OpenSnapshot(path)
+	db, err := openTestSnapshot(path)
 	t.noError(err)
 	defer db.Close()
 	t.equal(1, t.sqlCount(db, `SELECT COUNT(*) FROM suppressions WHERE applied=0 AND case_id IS NULL`))
@@ -639,7 +639,7 @@ func TestStoredSummaryReadFailure(t *testing.T) { (&testHarness{T: t}).TestStore
 func (t *testHarness) TestStoredSummaryReadFailure() {
 	db := t.snapshot(savedSummaryFixture())
 	t.noError(db.Close())
-	summary, exitCode, err := RenderSnapshot(db, "saved.sqlite")
+	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), "saved.sqlite")
 	t.hasError(err)
 	t.equal(2, exitCode)
 	t.empty(summary, "failed readers must not return a partial analysis summary")

@@ -1,0 +1,3 @@
+package consumer
+type Local interface { Query(string) }
+func Bad(q Local) { q.Query("SELECT 1") } // /nolint:forbidigo

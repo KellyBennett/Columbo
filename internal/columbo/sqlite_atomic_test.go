@@ -54,7 +54,7 @@ func sqliteLimitedBuild(path string, contents snapshotContents) error {
 	if _, err = db.Exec("PRAGMA max_page_count=1"); err != nil {
 		return err
 	}
-	return populateSnapshot(db, contents)
+	return populateTestSnapshot(db, contents)
 }
 func sqliteInterruptedBuild(path string) error {
 	db, err := openSnapshotDatabase(path, false)
