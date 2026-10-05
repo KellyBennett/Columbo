@@ -66,6 +66,10 @@ jobs:
       - name: Test Checks API projection, batching and failure behavior
         env:
           COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
+        run: python3 -m unittest discover -s scripts -p 'test_*action*.py' -v
+      - name: Test publisher
+        env:
+          COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
         run: python3 -m unittest discover -s scripts -p test_github_check.py -v
       - name: Retain query fixture snapshot
         if: always()
@@ -92,33 +96,7 @@ jobs:
       CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.1'
-          cache: true
-      - name: Build Columbo from this revision
-        run: go build -o columbo ./cmd/columbo
-      - name: Investigate Columbo, including its tests
-        id: investigate
-        shell: bash
-        run: |
-          status=0
-          ./columbo --output "$RUNNER_TEMP/columbo-self-check.sqlite" ./... || status=$?
-          printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
-      - name: Publish every finding through the Checks API
-        if: always() && steps.investigate.outputs.exit-code != ''
+      - name: Investigate and publish all findings
         uses: ./
         with:
-          snapshot: ${{ runner.temp }}/columbo-self-check.sqlite
-          exit-code: ${{ steps.investigate.outputs.exit-code }}
-          publication-status: ${{ runner.temp }}/columbo-publication.json
-      - name: Retain self-check evidence even when findings fail
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: columbo-self-check-snapshot
-          path: |
-            ${{ runner.temp }}/columbo-self-check.sqlite
-            ${{ runner.temp }}/columbo-publication.json
-          if-no-files-found: warn
+          artifact-name: columbo-self-check-snapshot

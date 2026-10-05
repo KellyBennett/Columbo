@@ -46,38 +46,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.1'
-      - name: Install Columbo
-        run: CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@main
-      - name: Investigate
-        id: investigate
-        shell: bash
-        run: |
-          status=0
-          columbo --output "$RUNNER_TEMP/columbo.sqlite" ./... || status=$?
-          printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
-          exit "$status"
-      - name: Publish all findings
-        if: always() && steps.investigate.outputs.exit-code != ''
-        uses: KellyBennett/Columbo@main
-        with:
-          snapshot: ${{ runner.temp }}/columbo.sqlite
-          exit-code: ${{ steps.investigate.outputs.exit-code }}
-          publication-status: ${{ runner.temp }}/columbo-publication.json
-      - name: Keep the evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: columbo-evidence
-          path: |
-            ${{ runner.temp }}/columbo.sqlite
-            ${{ runner.temp }}/columbo-publication.json
-          if-no-files-found: warn
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: KellyBennett/Columbo@main
 ```
 
-For reproducible CI, pin both the install command and publisher action to the Columbo version or commit you want to use. Other CI systems can run the same install and analysis commands; keep Columbo's exit status so findings fail the build.
+The action builds Columbo from its own revision, analyzes all Go packages, publishes findings, and uploads the log, SQLite report, build provenance, and publication status as `columbo-evidence`. Findings and upload failures fail the job after evidence is retained. It selects Go from your module's `go.mod`.
+
+Use `@main` to dogfood the latest Columbo, or pin the action to a commit for reproducible CI. Optional inputs are `working-directory`, `config`, `go-version`, `artifact-name`, and check `name`. For multiple invocations, give each a different artifact name. Other CI systems can use the CLI and retain its exit status and report.
 
 The publisher action reads the completed SQLite snapshot and creates a separate **Columbo findings** check on the PR head commit. It sends every unsuppressed finding in batches of at most 50, including file/line ranges, case IDs, stored verdicts, metrics, diagnoses, leads and required policy reviews. FAIL becomes failure, WARN becomes warning. Suppressed cases remain in the evidence. An analysis failure (exit 2) creates a failing check without reading a stale report. Publication errors also fail CI and record the confirmed annotation count; the action never claims a partial upload is complete.
 

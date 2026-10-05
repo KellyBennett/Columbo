@@ -1,12 +1,18 @@
-name: Columbo findings
-description: Publish a completed Columbo SQLite report through the GitHub Checks API.
+name: Columbo
+description: Analyze Go code, annotate every finding, and retain the evidence.
 inputs:
-  snapshot:
-    description: Path to the completed SQLite report.
-    required: true
-  exit-code:
-    description: Columbo analysis exit code (0, 1, or 2).
-    required: true
+  working-directory:
+    description: Go module directory relative to the checkout.
+    default: '.'
+  config:
+    description: Optional configuration path relative to the Go module directory.
+    default: ''
+  go-version:
+    description: Optional Go version override; otherwise use the checked-out module's go.mod.
+    default: ''
+  artifact-name:
+    description: Evidence artifact name; use different names for multiple invocations in a job.
+    default: columbo-evidence
   token:
     description: GitHub token with checks write permission.
     default: ${{ github.token }}
@@ -14,14 +20,8 @@ inputs:
     description: Name of the separate check run.
     default: Columbo findings
   head-sha:
-    description: Commit to annotate; PR head by default, rather than the synthetic merge commit.
+    description: Commit to annotate; defaults to the PR head.
     default: ${{ github.event.pull_request.head.sha || github.sha }}
-  details-url:
-    description: Link to the workflow and its full evidence artifacts.
-    default: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  publication-status:
-    description: Optional path to save annotation publication counts and check identity.
-    default: ''
 outputs:
   check-url:
     description: URL of the published check.
@@ -32,18 +32,44 @@ outputs:
 runs:
   using: composite
   steps:
-    - id: publish
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.working-directory }}/go.mod
+        cache: false
+    - name: Build and analyze
+      id: analyze
+      shell: bash
+      env:
+        COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        COLUMBO_CONFIG: ${{ inputs.config }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"
+    - name: Publish findings
+      id: publish
+      if: ${{ !cancelled() && steps.analyze.outputs.exit-code != '' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-        COLUMBO_SNAPSHOT: ${{ inputs.snapshot }}
-        COLUMBO_EXIT_CODE: ${{ inputs.exit-code }}
+        COLUMBO_EVIDENCE: ${{ steps.analyze.outputs.evidence }}
+        COLUMBO_EXIT_CODE: ${{ steps.analyze.outputs.exit-code }}
         COLUMBO_CHECK_NAME: ${{ inputs.name }}
         COLUMBO_HEAD_SHA: ${{ inputs.head-sha }}
-        COLUMBO_DETAILS_URL: ${{ inputs.details-url }}
-        COLUMBO_PUBLICATION_STATUS: ${{ inputs.publication-status }}
       run: |
         python3 "$GITHUB_ACTION_PATH/scripts/github-check.py" \
-          --snapshot "$COLUMBO_SNAPSHOT" --exit-code "$COLUMBO_EXIT_CODE" \
+          --snapshot "$COLUMBO_EVIDENCE/report.sqlite" --exit-code "$COLUMBO_EXIT_CODE" \
           --name "$COLUMBO_CHECK_NAME" --head-sha "$COLUMBO_HEAD_SHA" \
-          --details-url "$COLUMBO_DETAILS_URL" --publication-status "$COLUMBO_PUBLICATION_STATUS"
+          --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+          --publication-status "$COLUMBO_EVIDENCE/publication.json"
+    - name: Retain evidence
+      if: ${{ !cancelled() && steps.analyze.outputs.evidence != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.analyze.outputs.evidence }}/
+        if-no-files-found: error
+    - name: Enforce analysis result
+      if: ${{ !cancelled() && steps.analyze.outputs.exit-code != '' }}
+      shell: bash
+      env:
+        COLUMBO_EXIT_CODE: ${{ steps.analyze.outputs.exit-code }}
+      run: exit "$COLUMBO_EXIT_CODE"
