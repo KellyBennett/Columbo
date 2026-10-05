@@ -1,0 +1,49 @@
+name: Columbo findings
+description: Publish a completed Columbo SQLite report through the GitHub Checks API.
+inputs:
+  snapshot:
+    description: Path to the completed SQLite report.
+    required: true
+  exit-code:
+    description: Columbo analysis exit code (0, 1, or 2).
+    required: true
+  token:
+    description: GitHub token with checks write permission.
+    default: ${{ github.token }}
+  name:
+    description: Name of the separate check run.
+    default: Columbo findings
+  head-sha:
+    description: Commit to annotate; PR head by default, rather than the synthetic merge commit.
+    default: ${{ github.event.pull_request.head.sha || github.sha }}
+  details-url:
+    description: Link to the workflow and its full evidence artifacts.
+    default: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  publication-status:
+    description: Optional path to save annotation publication counts and check identity.
+    default: ''
+outputs:
+  check-url:
+    description: URL of the published check.
+    value: ${{ steps.publish.outputs.check-url }}
+  annotation-count:
+    description: Number of annotations successfully published.
+    value: ${{ steps.publish.outputs.annotation-count }}
+runs:
+  using: composite
+  steps:
+    - id: publish
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        COLUMBO_SNAPSHOT: ${{ inputs.snapshot }}
+        COLUMBO_EXIT_CODE: ${{ inputs.exit-code }}
+        COLUMBO_CHECK_NAME: ${{ inputs.name }}
+        COLUMBO_HEAD_SHA: ${{ inputs.head-sha }}
+        COLUMBO_DETAILS_URL: ${{ inputs.details-url }}
+        COLUMBO_PUBLICATION_STATUS: ${{ inputs.publication-status }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/scripts/github-check.py" \
+          --snapshot "$COLUMBO_SNAPSHOT" --exit-code "$COLUMBO_EXIT_CODE" \
+          --name "$COLUMBO_CHECK_NAME" --head-sha "$COLUMBO_HEAD_SHA" \
+          --details-url "$COLUMBO_DETAILS_URL" --publication-status "$COLUMBO_PUBLICATION_STATUS"
