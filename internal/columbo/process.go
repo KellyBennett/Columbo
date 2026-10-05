@@ -12,7 +12,7 @@ func Main(version string) int {
 	return Run(os.Args[1:], processInvocation(dir, version))
 }
 func processInvocation(dir, version string) Invocation {
-	return Invocation{Dir: dir, Version: version, Stdout: os.Stdout, Stderr: os.Stderr}
+	return Invocation{Dir: dir, Version: version, Stdout: os.Stdout, Stderr: os.Stderr, GitHubActions: os.Getenv("GITHUB_ACTIONS") == "true"}
 }
 func processError(e error, code int) int {
 	os.Stderr.WriteString(e.Error() + "\n")

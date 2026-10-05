@@ -17,6 +17,7 @@ Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
   --no-history        disable optional Git provenance
+  --github-annotations emit GitHub annotations (default true in GitHub Actions)
   --version           print build version
   --help              print usage
 `
@@ -24,11 +25,13 @@ Investigate Go code smells. Packages default to ./...; flags precede packages.
 type Invocation struct {
 	Dir, Version   string
 	Stdout, Stderr io.Writer
+	GitHubActions  bool
 }
 type commandOptions struct {
 	config, output                                    string
 	noHistory, showVersion, help, shortHelp, explicit bool
 	patterns                                          []string
+	githubAnnotations                                 bool
 }
 type command struct {
 	invocation Invocation
@@ -37,7 +40,7 @@ type command struct {
 }
 
 func Run(args []string, invocation Invocation) int {
-	c := &command{invocation: invocation}
+	c := &command{invocation: invocation, options: commandOptions{githubAnnotations: invocation.GitHubActions}}
 	if e := c.options.parse(args); e != nil {
 		return c.fatal(e)
 	}
@@ -81,6 +84,7 @@ func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
 	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
+	fs.BoolVar(&o.githubAnnotations, "github-annotations", o.githubAnnotations, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
 	fs.BoolVar(&o.shortHelp, "h", false, "")
@@ -153,7 +157,7 @@ func (c *command) publish(report Report) int {
 	return c.output(snapshot.Queries(), path)
 }
 func (c *command) output(queries snapshotdb.Querier, path string) int {
-	b, code, e := RenderSnapshot(queries, path)
+	b, code, e := renderSnapshot(queries, path, c.options.githubAnnotations)
 	if e != nil {
 		return c.fatal(e)
 	}

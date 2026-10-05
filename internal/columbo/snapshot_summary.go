@@ -12,17 +12,23 @@ import (
 // RenderSnapshot reads an already completed snapshot. It never evaluates rules
 // or accepts an analyzer report; the stored outcomes also determine its exit code.
 func RenderSnapshot(queries snapshotdb.Querier, path string) ([]byte, int, error) {
-	renderer := &snapshotRenderer{queries: queries}
+	return renderSnapshot(queries, path, false)
+}
+
+func renderSnapshot(queries snapshotdb.Querier, path string, annotations bool) ([]byte, int, error) {
+	renderer := &snapshotRenderer{queries: queries, annotations: annotations}
 	if err := renderer.render(path); err != nil {
 		return nil, 2, err
 	}
-	return renderer.buffer.Bytes(), renderer.exitCode(), nil
+	return renderer.output(), renderer.exitCode(), nil
 }
 
 type snapshotRenderer struct {
-	queries snapshotdb.Querier
-	buffer  bytes.Buffer
-	failed  int64
+	queries     snapshotdb.Querier
+	buffer      bytes.Buffer
+	failed      int64
+	annotations bool
+	github      bytes.Buffer
 }
 
 func (r *snapshotRenderer) emit(format string, args ...any) {
@@ -59,11 +65,15 @@ func (r *snapshotRenderer) cases() error {
 	return nil
 }
 func (r *snapshotRenderer) caseEntry(c summaryCase) error {
+	start := r.buffer.Len()
 	c.writeHeader(r)
 	for _, stage := range []func(string) error{r.suppressions, r.metrics, r.policyReviews} {
 		if err := stage(c.ID); err != nil {
 			return err
 		}
+	}
+	if r.annotations && c.Suppressed == 0 {
+		c.annotate(r, string(r.buffer.Bytes()[start:]))
 	}
 	return nil
 }
@@ -149,9 +159,18 @@ func (r *snapshotRenderer) warnings() error {
 		return err
 	}
 	for _, entry := range entries {
-		r.emit("Warning %s %s:%d: %s\n", entry.Code, entry.Path, entry.Line, entry.Message)
+		summaryWarning(entry).write(r)
 	}
 	return nil
+}
+
+type summaryWarning snapshotdb.SummaryWarningsRow
+
+func (w summaryWarning) write(r *snapshotRenderer) {
+	r.emit("Warning %s %s:%d: %s\n", w.Code, w.Path, w.Line, w.Message)
+	if r.annotations {
+		githubAnnotation{severity: "warning", title: "Columbo: " + w.Code, path: w.Path, line: w.Line, message: w.Message}.write(r)
+	}
 }
 func (r *snapshotRenderer) totals() error {
 	totals, err := r.queries.SummaryTotals(context.Background())
