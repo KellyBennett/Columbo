@@ -24,7 +24,7 @@ CREATE TABLE cases (
  id TEXT PRIMARY KEY,
  ordinal INTEGER NOT NULL UNIQUE CHECK (ordinal >= 0),
  primary_declaration_id INTEGER NOT NULL REFERENCES declarations(id),
- smell TEXT NOT NULL CHECK (smell IN ('long-function','long-parameter-list','high-cognitive-complexity','excessive-dependencies','feature-envy','data-clump','cosmetic-extraction')),
+ smell TEXT NOT NULL CHECK (smell IN ('long-function','long-parameter-list','high-cognitive-complexity','excessive-dependencies','feature-envy','data-clump','cosmetic-extraction','duplicate-code')),
  verdict TEXT NOT NULL CHECK (verdict IN ('FAIL','WARN')),
  suppressed INTEGER NOT NULL CHECK (suppressed IN (0, 1)),
  start_line INTEGER NOT NULL CHECK (start_line > 0),

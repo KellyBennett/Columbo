@@ -102,7 +102,9 @@ func (t *testHarness) TestAllSevenDefaultFail() {
 	c.History = false
 	r := t.investigate(dir, c)
 	for _, smell := range smells {
-		t.verifyDefaultSmell(r, smell)
+		if c.Severity[smell] == "fail" {
+			t.verifyDefaultSmell(r, smell)
+		}
 	}
 	t.snapshotGoldens(r, filepath.Join("testdata", "all"))
 }

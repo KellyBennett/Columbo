@@ -86,6 +86,22 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
         self.assertNotIn("Dependency origins", finding["message"])
 
+    def test_duplicate_locations_are_projected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "duplicates.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                case_id = db.execute("SELECT id FROM cases WHERE ordinal=0").fetchone()[0]
+                db.execute("UPDATE cases SET smell='duplicate-code',verdict='WARN' WHERE id=?", (case_id,))
+                receipts = db.execute("SELECT id FROM source_receipts WHERE case_id=? ORDER BY ordinal LIMIT 2", (case_id,)).fetchall()
+                for receipt in receipts:
+                    db.execute("UPDATE source_receipts SET kind='duplicate-fragment' WHERE id=?", receipt)
+            annotations, _ = publisher.read_snapshot(path, 1)
+        finding = next(item for item in annotations if item["title"] == "Columbo: duplicate-code")
+        self.assertEqual("warning", finding["annotation_level"])
+        self.assertEqual(2, finding["message"].count("Duplicate fragment: all.go:"))
+        self.assertIn("(bytes ", finding["message"])
+
     def test_batches_do_not_drop_or_duplicate_findings(self):
         for count in (0, 1, 50, 51, 155):
             with self.subTest(count=count):

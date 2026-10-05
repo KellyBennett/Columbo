@@ -31,6 +31,8 @@ columbo ./...
 
 Columbo currently analyzes production Go code only. Files ending in `_test.go` are excluded from findings and from the references, interfaces, and suppressions used as evidence. Test-specific rules may be added later.
 
+Duplicate-code findings use the pinned `dupl` Go syntax detector. Matching ignores names and literal values; each finding groups the copies and lists every source range in the SQLite evidence, compact summary, and GitHub annotation message. The default is **warn** at 50 AST tokens. Configure `severity.duplicate-code: fail` to block CI, or `thresholds.duplicate-tokens` to adjust the minimum. Structural matches are leads to review shared policy, including ordinary boilerplate that may be clearer left separate.
+
 No configuration is required. To change thresholds or choose which smells fail, warn, or stay off, add [`.columbo.yml`](SPEC.md#configuration).
 
 ### In CI
