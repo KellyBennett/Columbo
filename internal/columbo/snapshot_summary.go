@@ -60,7 +60,7 @@ func (r *snapshotRenderer) cases() error {
 }
 func (r *snapshotRenderer) caseEntry(c summaryCase) error {
 	c.writeHeader(r)
-	for _, stage := range []func(string) error{r.suppressions, r.metrics, r.policyReviews} {
+	for _, stage := range []func(string) error{r.suppressions, r.metrics, r.duplicateFragments, r.policyReviews} {
 		if err := stage(c.ID); err != nil {
 			return err
 		}
@@ -162,4 +162,21 @@ func (r *snapshotRenderer) totals() error {
 	r.failed = totals.Failed
 	r.emit("Columbo: %d failed, %d warned, %d suppressed\n", totals.Failed, totals.Warned, totals.Suppressed)
 	return nil
+}
+
+func (r *snapshotRenderer) duplicateFragments(id string) error {
+	entries, err := r.queries.SummaryDuplicateFragments(context.Background(), snapshotdb.SummaryDuplicateFragmentsParams{CaseID: id})
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		summaryDuplicateFragment(entry).write(r)
+	}
+	return nil
+}
+
+type summaryDuplicateFragment snapshotdb.SummaryDuplicateFragmentsRow
+
+func (fragment summaryDuplicateFragment) write(r *snapshotRenderer) {
+	r.emit("  duplicate fragment %s:%d-%d (bytes %d-%d)\n", fragment.Path, fragment.StartLine, fragment.EndLine, fragment.StartOffset, fragment.EndOffset)
 }

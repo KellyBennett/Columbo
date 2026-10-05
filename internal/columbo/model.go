@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction"}
+var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code"}
 
 type Summary struct {
 	Failed     int `json:"failed"`

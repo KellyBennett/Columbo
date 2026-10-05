@@ -102,3 +102,9 @@ SELECT message FROM warnings ORDER BY ordinal;
 
 -- name: ReportIdentity :one
 SELECT COUNT(*) AS report_count,CAST(COALESCE(MAX(schema_version),0) AS INTEGER) AS schema_version FROM report;
+
+-- name: SummaryDuplicateFragments :many
+SELECT f.path, r.start_line, r.end_line, r.start_offset, r.end_offset
+FROM source_receipts r JOIN files f ON f.id = r.file_id
+WHERE r.case_id = sqlc.arg(case_id) AND r.kind = 'duplicate-fragment'
+ORDER BY f.path, r.start_offset, r.end_offset;

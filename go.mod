@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/mibk/dupl v1.1.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/sebdah/goldie/v2 v2.8.0
 	github.com/stretchr/testify v1.11.1

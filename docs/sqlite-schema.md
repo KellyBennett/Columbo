@@ -118,3 +118,15 @@ SQL
 `./scripts/test-sqlite-queries.sh report.sqlite` runs every published SQL statement with Python 3's SQLite in read-only/query-only mode, then checks metadata/integrity, summaries, scored dependency counts, contribution sums, expansion lengths, and case-history ownership. CI runs it against the all-seven-smells fixture and retains that database. Go writer/reader tests cover richer edge fixtures, constraints, empty lists, saved snapshots, and failure paths.
 
 Generated `.sqlite` files and transient sidecars are ignored. CI captures `columbo-*.sqlite` in `columbo-self-check-snapshot` even when the unchanged strict `./columbo ./...` command exits 1, and keeps the explicit fresh runner-temp fixture in `columbo-query-fixture-snapshot` for documented-query evidence. Upload only completed `.sqlite` files; do not make a failing enforcement step succeed merely to collect them.
+
+### Duplicate-code evidence
+
+The `duplicate-code` case smell uses the existing relational layout. One case groups all function-anchored matching fragments; `source_receipts.kind = 'duplicate-fragment'` records each physical range. `duplicate-tokens` and `duplicate-fragments` clues link to every fragment through `clue_receipts`. Default WARN is a review lead; summary counts count groups. The compact summary and GitHub finding message list all ranges. Inspect them directly:
+
+```sql
+SELECT c.id, f.path, r.start_line, r.end_line, r.start_offset, r.end_offset
+FROM cases c JOIN source_receipts r ON r.case_id = c.id
+JOIN files f ON f.id = r.file_id
+WHERE c.smell = 'duplicate-code' AND r.kind = 'duplicate-fragment'
+ORDER BY c.ordinal, f.path, r.start_offset;
+```

@@ -36,6 +36,7 @@ type Querier interface {
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
+	SummaryDuplicateFragments(ctx context.Context, arg SummaryDuplicateFragmentsParams) ([]SummaryDuplicateFragmentsRow, error)
 	SummaryMetrics(ctx context.Context, arg SummaryMetricsParams) ([]SummaryMetricsRow, error)
 	SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([]PolicyReview, error)
 	SummarySuppressions(ctx context.Context, arg SummarySuppressionsParams) ([]SummarySuppressionsRow, error)

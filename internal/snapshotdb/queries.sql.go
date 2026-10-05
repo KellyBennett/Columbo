@@ -619,6 +619,54 @@ func (q *Queries) SummaryCases(ctx context.Context) ([]SummaryCasesRow, error) {
 	return items, nil
 }
 
+const summaryDuplicateFragments = `-- name: SummaryDuplicateFragments :many
+SELECT f.path, r.start_line, r.end_line, r.start_offset, r.end_offset
+FROM source_receipts r JOIN files f ON f.id = r.file_id
+WHERE r.case_id = ?1 AND r.kind = 'duplicate-fragment'
+ORDER BY f.path, r.start_offset, r.end_offset
+`
+
+type SummaryDuplicateFragmentsParams struct {
+	CaseID string
+}
+
+type SummaryDuplicateFragmentsRow struct {
+	Path        string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+}
+
+func (q *Queries) SummaryDuplicateFragments(ctx context.Context, arg SummaryDuplicateFragmentsParams) ([]SummaryDuplicateFragmentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryDuplicateFragments, arg.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryDuplicateFragmentsRow
+	for rows.Next() {
+		var i SummaryDuplicateFragmentsRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const summaryMetrics = `-- name: SummaryMetrics :many
 SELECT kind,subject,numeric_value,limit_value,operator FROM clues
 WHERE case_id=? AND numeric_value IS NOT NULL ORDER BY ordinal

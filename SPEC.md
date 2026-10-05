@@ -278,6 +278,7 @@ severity:
   feature-envy: fail
   data-clump: fail
   cosmetic-extraction: fail
+  duplicate-code: warn
 thresholds:
   function-lines: 10
   parameters: 4
@@ -289,6 +290,7 @@ thresholds:
   data-clump-size: 3
   data-clump-occurrences: 3
   cosmetic-min-helpers: 2
+  duplicate-tokens: 50
   cosmetic-dependency-overlap: 0.75
   cosmetic-parameter-overlap: 0.75
 history:
@@ -563,3 +565,17 @@ Columbo does not replace the compiler, gofmt, go vet, Staticcheck, security scan
 v1 is done when the CLI, configuration, seven smell rules, virtual inlining, suppressions, SQLite snapshots and SQL-backed compact summaries, stable case identity, optional history evidence, exit semantics, and acceptance fixtures above are implemented and all tests pass.
 
 Dogfooding status defers policy evaluation, not implementation behavior. Public v1 additionally requires the Dogfooding policies release gate to pass. There are no implementation questions intentionally deferred by this specification. If an implementation detail is not externally observable and does not alter these requirements, the implementer may choose it.
+
+## Duplicate-code findings (dupl integration)
+
+This additive rule extends the original seven-rule baseline. Use `github.com/mibk/dupl v1.1.0` as an embedded dependency, with its Go parser, serialized syntax tree, suffix-tree matching and complete-syntax-unit filtering. Columbo supplies its already-selected included physical source files; do not crawl additional packages, excluded/generated files, dependency modules, inactive build-tag files, or tests outside the existing production-only universe. Detector parse failures are analysis failures (exit 2), never silently skipped files.
+
+Register `duplicate-code` severity (default `warn`, accepting `fail`, `warn`, `off`) and the positive integer threshold `duplicate-tokens` (default 50). The minimum is inclusive and counts serialized AST nodes, not Go lexer tokens or lines. Identifier/literal values are ignored. Matches establish structural resemblance, not semantic equivalence, duplicated intent, or a mandatory extraction. `off` skips detector work. The warning default reflects the calibration's mixture of shared policy and harmless syntax; existing seven severities remain default FAIL.
+
+Emit one case per structural clone group with at least two distinct function-anchored fragments. Coalesce the detector's repeated group emissions, deduplicate fragments by file/start offset, and sort physical ranges before choosing the primary anchor. Sort group hashes and existing report collections deterministically. Use the dupl structural hash as the case identity discriminator; absolute workspace paths never enter case identity or persisted evidence. Each fragment is anchored to its first overlapping physical function declaration; preserve the complete matched range even when it spans functions. Matches entirely outside function declarations are outside this initial report contract. A documented function suppression on the canonical primary anchor follows the existing suppression contract; a directive on a supporting copy does not suppress the group.
+
+Store `duplicate-tokens` (inclusive configured minimum) and `duplicate-fragments` (no threshold) clues, both explicitly linked to all `duplicate-fragment` source receipts. Each receipt includes module-relative file, start/end lines, exclusive byte offsets, the anchor's typed declaration, and AST token count. Keep all copies, including groups larger than two, without manufacturing pairwise findings. Summary WARN/FAIL counts count groups. Normal history, severity, suppression, source evidence, and identity handling apply.
+
+Extend the SQLite case smell constraint to accept `duplicate-code`; the relational layout and application/schema identity remain unchanged. Add a typed query for ordered duplicate source ranges and project them into the compact summary and the existing Checks API finding message, rather than introducing another artifact format. The annotation stays on the primary fragment and names every supporting range.
+
+Acceptance covers exact and renamed/literal-changed copies, groups of three, same-file copies, excluded/generated/unselected/test sources, inclusive threshold and severity, repeated analysis identity/evidence, source offsets and typed relationships, anchor suppression, SQLite clue-to-receipt links, summaries, and GitHub annotation messages. Approximate clones with edits may evade dupl and zero findings do not prove absence of duplication.
