@@ -42,6 +42,7 @@ type declaration struct {
 	deps                             map[string]bool
 	depTypePackages                  map[string]bool
 	depReceipts                      []Source
+	depUses                          *dependencyUses
 	lines, complexity                int
 	lineReceipts, complexityReceipts []Source
 	candidate                        bool

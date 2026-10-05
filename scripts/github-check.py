@@ -85,10 +85,24 @@ class Snapshot:
         guidance = [f'{item["kind"]}: {item["item"]}' for item in self.db.execute(
             "SELECT kind,item FROM case_guidance WHERE case_id=? ORDER BY kind,ordinal", (row["id"],))]
         message = "\n".join([f'CASE {row["id"]} {row["symbol"]}: {row["verdict"]}',
-                              row["why"], row["diagnosis"], *metrics, *policy, *guidance])
+                              row["why"], row["diagnosis"], *metrics, *self.dependency_uses(row["id"]), *policy, *guidance])
         return dict(path=row["path"], start_line=row["start_line"], end_line=row["end_line"],
                     annotation_level="failure" if row["verdict"] == "FAIL" else "warning",
                     title=limited("Columbo: " + row["smell"], 255), message=limited(message))
+
+    def dependency_uses(self, case_id):
+        labels = {"declared": "Declared or constructed types", "signature": "Callable signatures",
+                  "signature-only": "Signature only", "supplied": "Supplied arguments",
+                  "consumed": "Consumed results", "discarded": "Discarded results",
+                  "receiver": "Receivers", "value": "Selected values", "package": "Package references"}
+        groups = []
+        for clue in self.db.execute("SELECT id,kind FROM clues WHERE case_id=? AND kind LIKE 'dependency-use-%' ORDER BY ordinal", (case_id,)):
+            values = [item[0] for item in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
+            origin = clue["kind"].removeprefix("dependency-use-")
+            groups.append(labels.get(origin, origin) + ": " + ", ".join(values))
+        if not groups:
+            return []
+        return ["Dependency origins (lists overlap; each identity counts once):", *groups]
 
     def summary(self, exit_code):
         totals = tuple(self.db.execute("SELECT failed,warned,suppressed FROM summary").fetchone())
