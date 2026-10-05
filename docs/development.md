@@ -18,9 +18,10 @@ CGO_ENABLED=0 go vet ./...
 
 CI also builds Columbo from the checked-out revision and analyzes `./...` with default policy in a separate **Columbo self-check** job. This includes the application's tests and enforces the default FAIL severities and thresholds. Findings fail the job; the log contains the compact summary and the `columbo-self-check-snapshot` artifact captures the self-check SQLite snapshot and publication metadata with the full evidence and refactoring leads even on failure. A green acceptance-test job does not imply a green self-check; existing findings must be addressed for the full workflow to pass.
 
-The self-check publishes all stored findings through the repository-root composite action with job-scoped `checks: write`. The action reads SQLite independently of the Go application's private sqlc boundary, just like the published-query validation script. Python regression tests exercise the API adapter against the actual all-seven fixture snapshot and a fake API sink:
+The self-check uses the repository-root composite action to build, analyze, publish, retain evidence, and enforce the analysis exit status with job-scoped `checks: write`. The action reads SQLite independently of the Go application's private sqlc boundary, just like the published-query validation script. Python regression tests exercise the API adapter against the actual all-seven fixture snapshot and a fake API sink:
 
 ```sh
+python3 -m unittest discover -s scripts -p test_run_action.py -v
 COLUMBO_TEST_SNAPSHOT=report.sqlite python3 -m unittest discover -s scripts -p test_github_check.py -v
 ```
 
