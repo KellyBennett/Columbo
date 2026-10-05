@@ -166,13 +166,16 @@ func TestInterfaceDispatchNotCandidate(t *testing.T) {
 	(&testHarness{T: t}).TestInterfaceDispatchNotCandidate()
 }
 
-func (t *testHarness) TestHelperCallsFromTests() {
+func (t *testHarness) TestHelperCallsFromTestsDoNotAffectProduction() {
 	dir := t.fixture("package fixture\nfunc Parent(a,b int){one(a,b);two(a,b)}\n" + helpers)
+	before := t.investigate(dir, cosmeticConfig())
+	require.Len(t.T, before.Cases, 1)
 	t.write(dir, "source_test.go", "package fixture\nfunc Example(){one(1,2)}\n")
-	r := t.investigate(dir, cosmeticConfig())
-	t.require(len(r.Cases) == 0, "test caller did not disqualify helper", r)
+	require.Equal(t.T, before, t.investigate(dir, cosmeticConfig()))
 }
-func TestHelperCallsFromTests(t *testing.T) { (&testHarness{T: t}).TestHelperCallsFromTests() }
+func TestHelperCallsFromTestsDoNotAffectProduction(t *testing.T) {
+	(&testHarness{T: t}).TestHelperCallsFromTestsDoNotAffectProduction()
+}
 
 func (t *testHarness) TestExpansionChildCopies() {
 	f := t.expansionFixture(edgeSource3)
