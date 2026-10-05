@@ -90,19 +90,22 @@ func (s *privateReferences) typeName(id *ast.Ident) *types.TypeName {
 	if obj == nil {
 		return nil
 	}
-	named, _ := types.Unalias(obj.Type()).(*types.Named)
-	if named == nil {
-		return nil
-	}
-	return named.Obj()
+	return resolvedTypeName(obj.Type())
 }
 
 func (s *privateReferences) fieldReceiver(selector *ast.SelectorExpr) *types.TypeName {
-	selection := s.info.Selections[selector]
+	return fieldSelectionTypeName(s.info.Selections[selector])
+}
+
+func fieldSelectionTypeName(selection *types.Selection) *types.TypeName {
 	if selection == nil || selection.Kind() != types.FieldVal {
 		return nil
 	}
-	named, _ := stripPointer(selection.Recv()).(*types.Named)
+	return resolvedTypeName(selection.Recv())
+}
+
+func resolvedTypeName(t types.Type) *types.TypeName {
+	named, _ := stripPointer(types.Unalias(t)).(*types.Named)
 	if named == nil {
 		return nil
 	}
