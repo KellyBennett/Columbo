@@ -3,6 +3,8 @@ package columbo
 import (
 	"go/ast"
 	"go/types"
+
+	"golang.org/x/tools/go/types/typeutil"
 )
 
 // callGraph owns the reference universe and helper eligibility. Declaration calls
@@ -161,12 +163,12 @@ func interfaceHasMethod(iface *types.Interface, name string) bool {
 
 // Callee resolution is shared with helper clustering and forwarding receipts.
 func calleeBase(e ast.Expr) ast.Expr {
-	e = unparen(e)
+	e = ast.Unparen(e)
 	switch x := e.(type) {
 	case *ast.IndexExpr:
-		return unparen(x.X)
+		return ast.Unparen(x.X)
 	case *ast.IndexListExpr:
-		return unparen(x.X)
+		return ast.Unparen(x.X)
 	}
 	return e
 }
@@ -183,42 +185,19 @@ func calleeIdentifier(e ast.Expr) *ast.Ident {
 type callResolver struct{ info *types.Info }
 
 func callObject(info *types.Info, call *ast.CallExpr) *types.Func {
-	return (&callResolver{info}).resolve(calleeBase(call.Fun))
-}
-func (r *callResolver) resolve(e ast.Expr) *types.Func {
-	switch x := e.(type) {
-	case *ast.Ident:
-		return r.identifier(x)
-	case *ast.SelectorExpr:
-		return r.selector(x)
-	}
-	return nil
+	return typeutil.StaticCallee(info, call)
 }
 func (r *callResolver) identifier(id *ast.Ident) *types.Func {
 	fn, _ := r.info.Uses[id].(*types.Func)
 	return fn
 }
-func (r *callResolver) selector(expr *ast.SelectorExpr) *types.Func {
-	if interfaceSelection(r.info.Selections[expr]) {
-		return nil
-	}
-	return r.identifier(expr.Sel)
-}
-func interfaceSelection(sel *types.Selection) bool {
-	if sel == nil {
-		return false
-	}
-	_, yes := types.Unalias(stripPointer(sel.Recv())).Underlying().(*types.Interface)
-	return yes
-}
-
 func primitiveCall(info *types.Info, call *ast.CallExpr) bool {
 	r := &callResolver{info}
 	return r.isType(call.Fun) || r.builtin(call.Fun)
 }
 func (r *callResolver) isType(e ast.Expr) bool { return r.info.Types[e].IsType() }
 func (r *callResolver) builtin(e ast.Expr) bool {
-	id, ok := unparen(e).(*ast.Ident)
+	id, ok := ast.Unparen(e).(*ast.Ident)
 	if !ok {
 		return false
 	}
@@ -226,7 +205,7 @@ func (r *callResolver) builtin(e ast.Expr) bool {
 	return ok
 }
 func inputVariable(info *types.Info, e ast.Expr) *types.Var {
-	id, ok := unparen(e).(*ast.Ident)
+	id, ok := ast.Unparen(e).(*ast.Ident)
 	if !ok {
 		return nil
 	}
@@ -235,7 +214,7 @@ func inputVariable(info *types.Info, e ast.Expr) *types.Var {
 }
 
 func forwardedReceiver(info *types.Info, call *ast.CallExpr) ast.Expr {
-	return (&callResolver{info}).methodValueReceiver(unparen(call.Fun))
+	return (&callResolver{info}).methodValueReceiver(ast.Unparen(call.Fun))
 }
 func (r *callResolver) methodValueReceiver(e ast.Expr) ast.Expr {
 	expr, ok := e.(*ast.SelectorExpr)

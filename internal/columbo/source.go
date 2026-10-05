@@ -483,15 +483,6 @@ func appendSources(c *Case, ss []Source) {
 		c.Receipts = append(c.Receipts, s)
 	}
 }
-func unparen(e ast.Expr) ast.Expr {
-	for {
-		p, ok := e.(*ast.ParenExpr)
-		if !ok {
-			return e
-		}
-		e = p.X
-	}
-}
 func stripPointer(t types.Type) types.Type {
 	for {
 		t = types.Unalias(t)
