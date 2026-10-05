@@ -63,11 +63,9 @@ jobs:
           (cd internal/columbo/testdata/all && "$root/columbo" --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
           if [ "$status" -gt 1 ]; then exit "$status"; fi
           ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
+      - name: Test action runner exit status and evidence retention
+        run: python3 -m unittest discover -s scripts -p test_run_action.py -v
       - name: Test Checks API projection, batching and failure behavior
-        env:
-          COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
-        run: python3 -m unittest discover -s scripts -p 'test_*action*.py' -v
-      - name: Test publisher
         env:
           COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
         run: python3 -m unittest discover -s scripts -p test_github_check.py -v

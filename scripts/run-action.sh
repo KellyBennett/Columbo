@@ -20,6 +20,7 @@ if CGO_ENABLED=0 go -C "$GITHUB_ACTION_PATH" build -o "$evidence/columbo" ./cmd/
 else
   cat "$evidence/build.txt"
 fi
+rm -f "$evidence/columbo"
 printf '%s\n' "$status" > "$evidence/exit-status.txt"
 printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
 # Findings are reported after publishing and artifact upload finish.
