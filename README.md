@@ -61,6 +61,10 @@ jobs:
 
 For reproducible CI, replace `@latest` with the Columbo version or commit you want to use. Other CI systems can run the same install and analysis commands; keep Columbo's exit status so findings fail the build.
 
+In GitHub Actions, Columbo automatically adds file-and-line annotations to the check, including the PR's **Files changed** view where GitHub can display them. FAIL findings become errors, WARN findings become warnings, and suppressed cases stay in the summary and evidence file. Each annotation includes the case ID, symbol, stored metrics and comparisons, and any required policy review. These are check annotations, not posted review comments or approvals; the existing `contents: read` permission is sufficient.
+
+Use `--github-annotations` to enable annotations explicitly or `--github-annotations=false` to disable them. Local runs keep the ordinary summary by default. GitHub may limit how many annotations it displays; the full summary and SQLite artifact retain every finding.
+
 Exit `0` means no unsuppressed failing findings, `1` means findings need attention, and `2` means the run failed. Each completed analysis saves a fresh SQLite evidence file and prints its location. Keep that file even when findings fail CI; the [query guide](docs/sqlite-schema.md) explains how to investigate it.
 
 [Contributing and development](docs/development.md) · [Full specification](SPEC.md)

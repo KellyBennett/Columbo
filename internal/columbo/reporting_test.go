@@ -390,6 +390,102 @@ func (c Case) fixtureSuppression() Suppression {
 	return Suppression{Smell: c.Smell, Symbol: c.Symbol, File: c.File, Line: c.StartLine, Justification: "accepted policy fixture", Applied: true, CaseID: c.ID}
 }
 
+func TestGitHubAnnotationsUseStoredOutcomes(t *testing.T) {
+	(&testHarness{T: t}).checkGitHubStoredOutcomes()
+}
+func (t *testHarness) checkGitHubStoredOutcomes() {
+	report := savedSummaryFixture()
+	report.Summary = Summary{Failed: 999}
+	annotations := t.renderGitHubSnapshot(report)
+	t.equal(1, strings.Count(annotations, "::error "))
+	t.equal(2, strings.Count(annotations, "::warning "))
+	t.contains(annotations, "file=saved.go,line=1::CASE ")
+	t.contains(annotations, "parameters saved.F0: 1 (limit > 99)")
+	t.notContains(annotations, "saved.F2")
+	t.contains(annotations, "Columbo%3A history-unavailable")
+}
+
+// This saved-result fixture needs no source tree. Validate both presentations
+// against the same completed database before exposing its workflow commands.
+func (t *testHarness) renderGitHubSnapshot(report Report) string {
+	db := t.snapshot(report)
+	output, code, err := renderSnapshot(testDatabaseQueries(db), "saved.sqlite", true)
+	t.noError(err)
+	t.equal(1, code)
+	plain, _, err := RenderSnapshot(testDatabaseQueries(db), "saved.sqlite")
+	t.noError(err)
+	t.contains(string(output), string(plain))
+	return t.githubCommands(output)
+}
+
+// Only the escaped commands follow the resume marker. Ordinary summary text
+// stays inside the region shielded from workflow-command parsing.
+func (t *testHarness) githubCommands(output []byte) string {
+	line, remainder, found := strings.Cut(string(output), "\n")
+	t.require(found)
+	token := strings.TrimPrefix(line, "::stop-commands::")
+	t.require(token != line && len(token) == 26)
+	summary, commands, found := strings.Cut(remainder, "::"+token+"::\n")
+	t.require(found)
+	t.contains(summary, "Database: ")
+	return commands
+}
+
+func TestGitHubAnnotationsKeepPolicyReview(t *testing.T) {
+	(&testHarness{T: t}).checkGitHubPolicyReview()
+}
+func (t *testHarness) checkGitHubPolicyReview() {
+	report := savedSummaryFixture()
+	report.Cases[2].Suppressed = false
+	report.Suppressions = nil
+	commands := t.renderGitHubSnapshot(report)
+	t.contains(commands, "Columbo%3A cosmetic-extraction")
+	t.contains(commands, policy.Note)
+	t.contains(commands, policy.ReviewPrompt)
+}
+
+func TestGitHubAnnotationEscapingAndRanges(t *testing.T) {
+	(&testHarness{T: t}).checkGitHubEscaping()
+}
+func (t *testHarness) checkGitHubEscaping() {
+	renderer := &snapshotRenderer{annotations: true}
+	renderer.emit("::error::untrusted ordinary text\n")
+	renderer.emit("Database: saved.sqlite\n")
+	githubAnnotation{severity: "error", title: "Columbo: 50%, x", path: "a,b:c%.go", line: 3, endLine: 7, message: "first%\r\n::warning::second"}.write(renderer)
+	commands := t.githubCommands(renderer.output())
+	t.equal("::error title=Columbo%3A 50%25%2C x,file=a%2Cb%3Ac%25.go,line=3,endLine=7::first%25%0D%0A::warning::second\n", commands)
+}
+
+func TestCLIGitHubAnnotationSelection(t *testing.T) {
+	(&testHarness{T: t}).checkGitHubSelection()
+}
+func (t *testHarness) checkGitHubSelection() {
+	for _, automatic := range []bool{false, true} {
+		for _, flags := range [][]string{nil, {"--github-annotations"}, {"--github-annotations=false"}} {
+			t.checkGitHubInvocation(automatic, flags)
+		}
+	}
+}
+func (t *testHarness) checkGitHubInvocation(automatic bool, flags []string) {
+	var stdout, stderr bytes.Buffer
+	dir := t.fixture(cliFindingSource)
+	code := Run(append([]string{"--no-history"}, flags...), Invocation{Dir: dir, Stdout: &stdout, Stderr: &stderr, GitHubActions: automatic})
+	t.equal(1, code)
+	t.empty(stderr.String())
+	want := automatic
+	if len(flags) > 0 {
+		want = flags[0] == "--github-annotations"
+	}
+	t.equal(want, strings.Contains(stdout.String(), "::error "))
+}
+
+func TestGitHubActionsEnvironment(t *testing.T) {
+	for _, value := range []string{"", "false", "true"} {
+		t.Setenv("GITHUB_ACTIONS", value)
+		require.Equal(t, value == "true", processInvocation(".", "test").GitHubActions)
+	}
+}
+
 func TestSnapshotHistoryCaseSubsets(t *testing.T) {
 	(&testHarness{T: t}).checkSnapshotHistoryCaseSubsets()
 }

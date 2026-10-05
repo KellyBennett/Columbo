@@ -60,7 +60,7 @@ jobs:
         run: |
           root="$PWD"
           status=0
-          (cd internal/columbo/testdata/all && "$root/columbo" --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
+          (cd internal/columbo/testdata/all && "$root/columbo" --github-annotations=false --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
           if [ "$status" -gt 1 ]; then exit "$status"; fi
           ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
       - name: Retain query fixture snapshot
