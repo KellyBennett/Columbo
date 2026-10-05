@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          columbo --github-annotations=false --output "$RUNNER_TEMP/columbo.sqlite" ./... || status=$?
+          columbo --output "$RUNNER_TEMP/columbo.sqlite" ./... || status=$?
           printf 'exit-code=%s\n' "$status" >> "$GITHUB_OUTPUT"
           exit "$status"
       - name: Publish all findings
@@ -83,7 +83,7 @@ The publisher action reads the completed SQLite snapshot and creates a separate 
 
 This uses GitHub's Checks API rather than the ten-error-per-step workflow-command channel. Grant `checks: write` only to the publishing job. The default token is the workflow's `github.token`; no personal token is needed. The adapter requires Python 3 on GitHub.com runners. Fork PR tokens may lack write permission; use a trusted publishing workflow rather than giving untrusted PR code a stronger token. Check annotations appear in the check and, where GitHub can display them, beside code in **Files changed**. They are not posted review comments or approvals.
 
-The CLI's lightweight log annotations remain available: they enable automatically in GitHub Actions, or explicitly with `--github-annotations`. Disable them with `--github-annotations=false` when using the API publisher to avoid duplicate findings. Local runs otherwise keep the ordinary summary. The full log and SQLite artifact retain all evidence.
+The full log and SQLite artifact retain all evidence.
 
 Exit `0` means no unsuppressed failing findings, `1` means findings need attention, and `2` means the run failed. Each completed analysis saves a fresh SQLite evidence file and prints its location. Keep that file even when findings fail CI; the [query guide](docs/sqlite-schema.md) explains how to investigate it.
 
