@@ -62,7 +62,6 @@ type engine struct {
 	calls        map[*ast.CallExpr]*declaration
 	callOwner    map[*ast.CallExpr]*declaration
 	interfaces   []types.Type
-	private      map[*types.TypeName]bool
 	identities   map[string]string
 	report       Report
 }
@@ -584,8 +583,8 @@ func (p parameter) receipt(f *file, signature *types.Signature) Source {
 	return f.receipt("parameter", start, end, p.detail(signature))
 }
 
-func (a *engine) privateType(obj *types.TypeName, path string) bool {
-	return a.private[obj] && a.fset.PositionFor(obj.Pos(), false).Filename == path
+func privateType(obj *types.TypeName, packagePath string) bool {
+	return obj != nil && !obj.Exported() && obj.Pkg() != nil && obj.Pkg().Path() == packagePath
 }
 func (t lexToken) within(start, end token.Pos) bool { return t.pos > start && t.pos < end }
 func (t lexToken) countsAsCode() bool {
