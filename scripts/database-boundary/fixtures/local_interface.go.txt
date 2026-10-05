@@ -1,0 +1,25 @@
+package consumer
+import "context"
+type Local interface {
+    Exec(string)
+    Query(string)
+    QueryRow(string)
+    Prepare(string)
+    ExecContext(context.Context, string)
+    QueryContext(context.Context, string)
+    QueryRowContext(context.Context, string)
+    PrepareContext(context.Context, string)
+    Raw(func(any) error)
+}
+func Bad(q Local) {
+    ctx := context.Background()
+    q.Exec("SELECT 1")
+    q.Query("SELECT 1")
+    q.QueryRow("SELECT 1")
+    q.Prepare("SELECT 1")
+    q.ExecContext(ctx, "SELECT 1")
+    q.QueryContext(ctx, "SELECT 1")
+    q.QueryRowContext(ctx, "SELECT 1")
+    q.PrepareContext(ctx, "SELECT 1")
+    q.Raw(func(any) error { return nil })
+}

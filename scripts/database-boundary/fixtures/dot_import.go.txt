@@ -1,0 +1,3 @@
+package consumer
+import . "database/sql"
+func Bad() { _, _ = Open("sqlite", "unused") }

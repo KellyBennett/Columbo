@@ -1,15 +1,12 @@
 package columbo
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
-	_ "modernc.org/sqlite"
+	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
 // WriteSnapshot publishes a complete sibling database at a new output path.
@@ -111,20 +108,12 @@ func newSnapshotTemporary(directory string) (string, error) {
 
 // OpenSnapshot validates and opens an immutable, read-only Columbo snapshot.
 // Immutable readers do not create journals, WAL files, or shared-memory files.
-func OpenSnapshot(path string) (*sql.DB, error) {
+func OpenSnapshot(path string) (*snapshotdb.Snapshot, error) {
 	name, err := validateSnapshotPath(path)
 	if err != nil {
 		return nil, err
 	}
-	db, err := openSnapshotDatabase(name, true)
-	if err != nil {
-		return nil, err
-	}
-	if err = validateSnapshot(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
+	return snapshotdb.Open(name)
 }
 func validateSnapshotPath(path string) (string, error) {
 	name, err := snapshotPath(path)
@@ -193,231 +182,17 @@ func syncSnapshotDirectory(path string) error {
 	err = directory.Sync()
 	return errors.Join(err, directory.Close())
 }
-func snapshotDatabaseURI(path string, readonly bool) string {
-	uri := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
-	query := url.Values{"_pragma": {"foreign_keys(1)"}}
-	if readonly {
-		query.Set("mode", "ro")
-		query.Set("immutable", "1")
-		query.Add("_pragma", "query_only(1)")
-	}
-	uri.RawQuery = query.Encode()
-	return uri.String()
-}
-func openSnapshotDatabase(path string, readonly bool) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", snapshotDatabaseURI(path, readonly))
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err = db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
-}
 func buildSnapshot(path string, contents snapshotContents) error {
-	db, err := openSnapshotDatabase(path, false)
+	writer, err := snapshotdb.Create(path)
 	if err != nil {
 		return err
 	}
-	err = populateSnapshot(db, contents)
-	return errors.Join(err, db.Close())
+	err = contents.populate(writer)
+	return errors.Join(err, writer.Close())
 }
-func populateSnapshot(db *sql.DB, contents snapshotContents) error {
-	if _, err := db.Exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL"); err != nil {
-		return err
-	}
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err = writeSnapshotTransaction(tx, contents); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-func writeSnapshotTransaction(tx *sql.Tx, contents snapshotContents) error {
-	if err := createSnapshotSchema(tx); err != nil {
-		return err
-	}
-	if err := newSnapshotWriter(tx).write(contents.report, contents.version); err != nil {
+func (contents snapshotContents) populate(writer *snapshotdb.Writer) error {
+	if err := newSnapshotWriter(writer.Queries()).write(contents.report, contents.version); err != nil {
 		return fmt.Errorf("write snapshot: %w", err)
 	}
-	return validateSnapshotData(tx)
-}
-func createSnapshotSchema(db snapshotQuery) error {
-	_, err := db.Exec(sqliteSchema)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(fmt.Sprintf("PRAGMA application_id=%d; PRAGMA user_version=%d", SQLiteApplicationID, SchemaVersion))
-	return err
-}
-
-type snapshotQuery interface {
-	Exec(string, ...any) (sql.Result, error)
-	Query(string, ...any) (*sql.Rows, error)
-	QueryRow(string, ...any) *sql.Row
-}
-
-func validateSnapshot(db *sql.DB) error {
-	if err := validateSnapshotIdentity(db); err != nil {
-		return err
-	}
-	if err := validateSnapshotSchema(db); err != nil {
-		return err
-	}
-	return validateSnapshotData(db)
-}
-func validateSnapshotIdentity(db snapshotQuery) error {
-	var applicationID, userVersion int
-	if err := db.QueryRow("PRAGMA application_id").Scan(&applicationID); err != nil {
-		return err
-	}
-	if applicationID != SQLiteApplicationID {
-		return fmt.Errorf("not a Columbo SQLite snapshot")
-	}
-	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
-		return err
-	}
-	if userVersion != SchemaVersion {
-		return fmt.Errorf("unsupported snapshot schema version %d", userVersion)
-	}
-	return validateSnapshotReport(db)
-}
-func validateSnapshotReport(db snapshotQuery) error {
-	var count, schemaVersion int
-	if err := db.QueryRow("SELECT COUNT(*), COALESCE(MAX(schema_version),0) FROM report").Scan(&count, &schemaVersion); err != nil {
-		return err
-	}
-	if count != 1 || schemaVersion != SchemaVersion {
-		return fmt.Errorf("snapshot report identity does not match schema version")
-	}
-	return nil
-}
-func validateSnapshotData(db snapshotQuery) error {
-	check := snapshotValidation{db: db}
-	if err := check.integrity(); err != nil {
-		return err
-	}
-	return check.foreignKeys()
-}
-
-// Validation cursors own their individual PRAGMA contracts and always close
-// rows before another operation can reuse the single database connection.
-type snapshotValidation struct{ db snapshotQuery }
-
-func (v *snapshotValidation) integrity() error {
-	rows, err := v.db.Query("PRAGMA integrity_check")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	result := snapshotIntegrity{}
-	for rows.Next() {
-		result.accept(rows)
-	}
-	if err = rows.Err(); err != nil {
-		return err
-	}
-	return result.finish()
-}
-
-type snapshotIntegrity struct {
-	count int
-	err   error
-}
-
-func (v *snapshotIntegrity) accept(rows *sql.Rows) {
-	v.count++
-	var result string
-	if err := rows.Scan(&result); err != nil {
-		v.err = err
-		return
-	}
-	if result != "ok" {
-		v.err = fmt.Errorf("snapshot integrity validation failed: %s", result)
-	}
-}
-func (v *snapshotIntegrity) finish() error {
-	if v.err != nil {
-		return v.err
-	}
-	if v.count != 1 {
-		return fmt.Errorf("snapshot integrity validation did not return ok")
-	}
-	return nil
-}
-func (v *snapshotValidation) foreignKeys() error {
-	rows, err := v.db.Query("PRAGMA foreign_key_check")
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	if rows.Next() {
-		return fmt.Errorf("snapshot foreign key validation failed")
-	}
-	return rows.Err()
-}
-func expectedSnapshotSchema() (map[string]string, error) {
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	db.SetMaxOpenConns(1)
-	if err = createSnapshotSchema(db); err != nil {
-		return nil, err
-	}
-	return snapshotSchemaObjects(db)
-}
-func validateSnapshotSchema(db snapshotQuery) error {
-	want, err := expectedSnapshotSchema()
-	if err != nil {
-		return err
-	}
-	got, err := snapshotSchemaObjects(db)
-	if err != nil {
-		return err
-	}
-	return snapshotSchemaMatch(want, got)
-}
-func snapshotSchemaMatch(want, got map[string]string) error {
-	if len(want) != len(got) {
-		return fmt.Errorf("snapshot schema does not match supported schema")
-	}
-	for key, definition := range want {
-		if got[key] != definition {
-			return fmt.Errorf("snapshot schema object %s does not match supported schema", key)
-		}
-	}
-	return nil
-}
-func snapshotSchemaObjects(db snapshotQuery) (map[string]string, error) {
-	rows, err := db.Query("SELECT type,name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT GLOB 'sqlite_*' ORDER BY type,name")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	schema := snapshotSchemaReader{objects: map[string]string{}}
-	for rows.Next() {
-		schema.accept(rows)
-	}
-	return schema.objects, errors.Join(schema.err, rows.Err())
-}
-
-type snapshotSchemaReader struct {
-	objects map[string]string
-	err     error
-}
-
-func (s *snapshotSchemaReader) accept(rows *sql.Rows) {
-	var kind, name, definition string
-	if err := rows.Scan(&kind, &name, &definition); err != nil {
-		s.err = err
-		return
-	}
-	s.objects[kind+":"+name] = strings.Join(strings.Fields(definition), " ")
+	return writer.Complete()
 }

@@ -1,0 +1,4 @@
+package consumer
+import "C"
+import "database/sql"
+func Bad() { _, _ = sql.Open("sqlite", "unused") }

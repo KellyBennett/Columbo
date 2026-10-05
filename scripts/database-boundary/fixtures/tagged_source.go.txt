@@ -1,0 +1,5 @@
+//go:build future_sql
+
+package consumer
+import "database/sql"
+func Bad() { _, _ = sql.Open("sqlite", "unused") }

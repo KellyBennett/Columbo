@@ -1,12 +1,14 @@
 package columbo
 
 import (
+	"context"
 	"crypto/rand"
-	"database/sql"
 	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
+
+	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
 const usage = `Usage: columbo [flags] [packages...]
@@ -143,19 +145,19 @@ func (c *command) publish(report Report) int {
 	if e := WriteSnapshot(path, report, c.invocation.buildVersion()); e != nil {
 		return c.fatal(e)
 	}
-	db, e := OpenSnapshot(path)
+	snapshot, e := OpenSnapshot(path)
 	if e != nil {
 		return c.fatal(e)
 	}
-	defer db.Close()
-	return c.output(db, path)
+	defer snapshot.Close()
+	return c.output(snapshot.Queries(), path)
 }
-func (c *command) output(db *sql.DB, path string) int {
-	b, code, e := RenderSnapshot(db, path)
+func (c *command) output(queries snapshotdb.Querier, path string) int {
+	b, code, e := RenderSnapshot(queries, path)
 	if e != nil {
 		return c.fatal(e)
 	}
-	if e := c.warnings(db); e != nil {
+	if e := c.warnings(queries); e != nil {
 		return c.fatal(e)
 	}
 	return c.deliverSummary(b, code)
@@ -166,8 +168,8 @@ func (c *command) deliverSummary(b []byte, code int) int {
 	}
 	return code
 }
-func (c *command) warnings(db *sql.DB) error {
-	messages, e := snapshotWarningMessages(db)
+func (c *command) warnings(queries snapshotdb.Querier) error {
+	messages, e := queries.WarningMessages(context.Background())
 	if e != nil {
 		return e
 	}

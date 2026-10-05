@@ -1,0 +1,3 @@
+package consumer
+import "github.com/KellyBennett/Columbo/internal/snapshotdb"
+func Bad() { db := snapshotdb.RawForFixture(); _, _ = db.Query("SELECT 1") }

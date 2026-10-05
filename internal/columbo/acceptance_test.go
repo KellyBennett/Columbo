@@ -134,7 +134,7 @@ func (t *testHarness) snapshotGoldens(r Report, base string) {
 	t.Helper()
 	db := t.snapshot(r)
 	t.goldenBytes(base+"-rows.golden", t.logicalRows(db))
-	summary, exitCode, err := RenderSnapshot(db, "report.sqlite")
+	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), "report.sqlite")
 	t.require(err == nil, err)
 	t.require(exitCode == failureExit(r.Summary.Failed), "stored outcome exit", exitCode, r.Summary)
 	t.require(t.sqlCount(db, `SELECT failed FROM summary`) == r.Summary.Failed, "stored failure count", r.Summary)
@@ -145,7 +145,7 @@ func (t *testHarness) snapshot(r Report) *sql.DB {
 	path := filepath.Join(t.TempDir(), "report.sqlite")
 	err := WriteSnapshot(path, r, "test")
 	t.require(err == nil, err)
-	db, err := OpenSnapshot(path)
+	db, err := openTestSnapshot(path)
 	t.require(err == nil, err)
 	t.Cleanup(func() { t.check(db.Close() == nil, "close snapshot") })
 	return db
@@ -368,10 +368,10 @@ func (t *testHarness) severityExit(dir, severity string) {
 	t.requireSeveritySnapshot(path, out.Bytes(), want)
 }
 func (t *testHarness) requireSeveritySnapshot(path string, stdout []byte, want int) {
-	db, err := OpenSnapshot(path)
+	db, err := openTestSnapshot(path)
 	t.noError(err)
 	defer db.Close()
-	summary, exitCode, err := RenderSnapshot(db, path)
+	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), path)
 	t.noError(err)
 	t.equal(want, exitCode, "exit did not follow stored outcomes")
 	t.equal(summary, stdout, "CLI summary disagrees with snapshot")
