@@ -178,24 +178,31 @@ func (t *testHarness) requirePrivateDependencyExemptions() {
 	}
 }
 
-func (t *testHarness) TestPrivateTypeDispersion() {
-	t.Helper()
+func (t *testHarness) TestPrivateTypeDispersionIgnoresTests() {
 	dir := t.fixture("package fixture\ntype private struct{ N int }\nfunc F(p private){_=p.N}\n")
 	t.write(dir, "one.go", "package fixture\nfunc One(p private){_=p.N}\n")
 	t.write(dir, "two.go", "package fixture\nfunc Two(p private){_=p.N}\n")
 	t.write(dir, "private_test.go", "package fixture\nfunc testOnly(p private){_=p.N}\n")
-	config := quiet()
-	report := t.investigate(dir, config)
+	report := t.investigate(dir, quiet())
 	t.require(len(report.Warnings) == 0, report)
+}
+func TestPrivateTypeDispersionIgnoresTests(t *testing.T) {
+	(&testHarness{T: t}).TestPrivateTypeDispersionIgnoresTests()
+}
+
+func (t *testHarness) TestPrivateTypeDispersionWarning() {
+	dir := t.fixture("package fixture\ntype private struct{ N int }\nfunc F(p private){_=p.N}\n")
+	t.write(dir, "one.go", "package fixture\nfunc One(p private){_=p.N}\n")
+	t.write(dir, "two.go", "package fixture\nfunc Two(p private){_=p.N}\n")
 	t.write(dir, "three.go", "package fixture\nfunc Three(p private){_=p}\n")
-	report = t.investigate(dir, config)
-	t.require(len(report.Warnings) == 1, report)
-	warning := report.Warnings[0]
+	warning := t.investigate(dir, quiet()).Warnings[0]
 	t.require(warning.Code == "private-type-dispersion", warning)
 	t.require(strings.Contains(warning.Message, "spans 4 production files (limit: 3)"), warning)
 	t.require(strings.Contains(warning.Message, "2 cross-file direct field accesses"), warning)
 }
-func TestPrivateTypeDispersion(t *testing.T) { (&testHarness{T: t}).TestPrivateTypeDispersion() }
+func TestPrivateTypeDispersionWarning(t *testing.T) {
+	(&testHarness{T: t}).TestPrivateTypeDispersionWarning()
+}
 
 // evaluatedType constructs Go type fixtures using the standard type checker.
 func evaluatedType(expression string) (types.Type, error) {
