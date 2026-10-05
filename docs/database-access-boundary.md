@@ -146,3 +146,34 @@ in their relevant variants before the intended guard failure is asserted. A
 fixture counts as
 success only when its expected guard rejects it, never merely because the
 fixture does not compile.
+
+### Mutation-tested coverage
+
+The regression suite also checks the production entrypoint, not just its
+components. A typed-Querier control must pass the complete shell gate. Separate
+manifest-only, inventory-only, lint-only, and generated-output-only failures must
+return a nonzero status while every unrelated component remains clean. The suite
+pins the CI job's reviewed direct commands, job/step fields, and execution
+conditions; it does not attempt to validate arbitrary YAML formats.
+
+Forbidigo assertions match the actual rejected identifier rather than words in
+the explanation. Each of the four generated files is independently edited with
+its genuine header retained. Every runtime counterpart of a reviewed test
+exception is rejected. An otherwise-exempt test importing a hidden corpus helper
+proves that package inventory must include test-only dependencies. Standalone
+import, generator-version, missing-file/header, source-symlink, and active-cgo
+cases exercise overlapping controls independently.
+
+The initial audit at `5bc598e` tried 53 hand-selected production mutations: 29
+were caught and 24 survived. The focused follow-up adds coverage for those gaps
+and includes seven additional CI mutations suggested by independent review.
+The resulting 60-case audit catches all 60 mutations. Vendor-import coverage
+uses a compiled external stub whose package path ends in `vendor`, which Go
+permits. A descendant such as `vendor/helper` is rejected by Go itself and would
+not establish that the depguard rule works; compiler rejection is never counted
+as a linter kill.
+
+These results establish the tested regressions, not exhaustive mutation coverage
+or a formal proof against arbitrary rewrites of the trusted lifecycle boundary.
+The coverage follow-up changes tests and documentation only; production guards,
+generated bindings, dependencies, schema, and strict Columbo rules are unchanged.

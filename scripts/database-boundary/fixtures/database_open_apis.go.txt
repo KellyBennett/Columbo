@@ -1,0 +1,4 @@
+package consumer
+import alias "database/sql"
+var _ = alias.OpenDB
+var _ = alias.Register
