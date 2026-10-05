@@ -1,0 +1,6 @@
+package hiddenraw
+import "database/sql"
+func Do(query string) {
+    var db *sql.DB
+    _, _ = db.Exec(query)
+}

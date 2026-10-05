@@ -5,6 +5,37 @@ on:
 permissions:
   contents: read
 jobs:
+  database-boundary:
+    name: SQL access boundary
+    runs-on: ubuntu-24.04
+    env:
+      GOTOOLCHAIN: local
+      GOTELEMETRY: 'off'
+      GOWORK: 'off'
+      GOFLAGS: '-buildvcs=false'
+      CGO_ENABLED: '0'
+      BOUNDARY_REPORT_DIR: ${{ github.workspace }}/.tools/database-boundary-report
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache: true
+      - name: Install official pinned database guard tools
+        run: ./scripts/install-database-tools.sh
+      - name: Verify DB imports, API references, exact file manifest and sqlc output
+        run: ./scripts/check-database-boundary.sh
+      - name: Prove the access guards reject regressions
+        if: always()
+        run: python3 scripts/database-boundary/test-guards.py
+      - name: Retain every boundary diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: columbo-database-boundary-diagnostics
+          path: .tools/database-boundary-report
+          if-no-files-found: warn
+
   acceptance:
     runs-on: ubuntu-24.04
     env:

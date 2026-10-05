@@ -1,0 +1,3 @@
+package consumer
+import alias "github.com/KellyBennett/Columbo/internal/snapshotdb"
+func Bad(db alias.DBTX) *alias.Queries { return alias.New(db) }

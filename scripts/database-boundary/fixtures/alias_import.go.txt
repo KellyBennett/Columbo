@@ -1,0 +1,3 @@
+package consumer
+import alternate "database/sql"
+func Bad(db *alternate.DB) { _, _ = db.Exec("SELECT 1") }

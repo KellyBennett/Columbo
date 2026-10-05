@@ -1,0 +1,8 @@
+package consumer
+import (
+    "context"
+    "github.com/KellyBennett/Columbo/internal/snapshotdb"
+)
+func Good(q snapshotdb.Querier) ([]snapshotdb.Entry, error) {
+    return q.Values(context.Background())
+}

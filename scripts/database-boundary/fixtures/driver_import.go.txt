@@ -1,0 +1,3 @@
+package consumer
+import "database/sql/driver"
+var Handle driver.Conn

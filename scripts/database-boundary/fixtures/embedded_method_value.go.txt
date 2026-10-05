@@ -1,0 +1,7 @@
+package consumer
+type Local interface { Query(string) }
+type Embedded struct { Local }
+func Bad(q Embedded) {
+    query := q.Query
+    query("SELECT 1")
+}
