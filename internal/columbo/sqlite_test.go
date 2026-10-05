@@ -110,12 +110,15 @@ func TestSQLiteUserTableWithSQLitePrefixPreserved(t *testing.T) {
 	h.mutation("CREATE TABLE sqliteX (value TEXT); INSERT INTO sqliteX VALUES ('unrelated user data')")
 	h.invalidSnapshot()
 	h.preserved(Report{})
+	h.requireUserTablePreserved()
+}
+func (h *sqliteHarness) requireUserTablePreserved() {
 	db := h.mutable()
 	var value string
-	require.NoError(t, db.QueryRow("SELECT value FROM sqliteX").Scan(&value))
-	require.Equal(t, "unrelated user data", value)
-	rows := (&testHarness{t}).logicalRows(h.mutable())
-	require.Contains(t, string(rows), "[sqliteX] value\n\"unrelated user data\"")
+	require.NoError(h.T, db.QueryRow("SELECT value FROM sqliteX").Scan(&value))
+	require.Equal(h.T, "unrelated user data", value)
+	rows := (&testHarness{h.T}).logicalRows(h.mutable())
+	require.Contains(h.T, string(rows), "[sqliteX] value\n\"unrelated user data\"")
 }
 func (h *sqliteHarness) invalidSnapshot() {
 	db, err := OpenSnapshot(h.path)
