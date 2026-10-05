@@ -183,7 +183,7 @@ func (t *testHarness) TestPrivateTypeDispersion() {
 	dir := t.fixture("package fixture\ntype private struct{ N int }\nfunc F(p private){_=p.N}\n")
 	t.write(dir, "one.go", "package fixture\nfunc One(p private){_=p.N}\n")
 	t.write(dir, "two.go", "package fixture\nfunc Two(p private){_=p.N}\n")
-	t.write(dir, "private_test.go", "package fixture\nfunc TestOnly(p private){_=p.N}\n")
+	t.write(dir, "private_test.go", "package fixture\nfunc testOnly(p private){_=p.N}\n")
 	config := quiet()
 	report := t.investigate(dir, config)
 	t.require(len(report.Warnings) == 0, report)
