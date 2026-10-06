@@ -144,3 +144,26 @@ INSERT INTO role_candidate_case_links (candidate_id,case_id) VALUES (?,?);
 SELECT id,canonical_interface,confidence,classification FROM role_candidates ORDER BY id;
 -- name: SummaryRoleInterfaces :many
 SELECT identity,relationship FROM role_candidate_interfaces WHERE candidate_id=sqlc.arg(candidate_id) ORDER BY relationship,identity;
+
+-- name: InsertCorrelation :exec
+INSERT INTO correlations (id,kind,confidence,variant_domain,diagnosis,policy_id,policy_status,policy_note,review_prompt) VALUES (?,?,?,?,?,?,?,?,?);
+-- name: LinkCorrelationCase :exec
+INSERT INTO correlation_cases (correlation_id,case_id) VALUES (?,?);
+-- name: LinkCorrelationRole :exec
+INSERT INTO correlation_role_candidates (correlation_id,candidate_id) VALUES (?,?);
+-- name: LinkCorrelationEvidence :exec
+INSERT INTO correlation_evidence (correlation_id,case_id,receipt_id) VALUES (?,?,?);
+-- name: InsertCorrelationGuidance :exec
+INSERT INTO correlation_guidance (correlation_id,kind,ordinal,text) VALUES (?,?,?,?);
+-- name: SummaryCorrelations :many
+SELECT * FROM correlations ORDER BY id;
+-- name: SummaryCorrelationCases :many
+SELECT c.id,c.suppressed,c.verdict FROM correlation_cases cc JOIN cases c ON c.id=cc.case_id WHERE cc.correlation_id=sqlc.arg(correlation_id) ORDER BY c.id;
+-- name: SummaryCorrelationRoles :many
+SELECT r.id,r.canonical_interface FROM correlation_role_candidates cr JOIN role_candidates r ON r.id=cr.candidate_id WHERE cr.correlation_id=sqlc.arg(correlation_id) ORDER BY r.id;
+-- name: SummaryCorrelationPlayers :many
+SELECT DISTINCT p.identity FROM correlation_role_candidates cr JOIN role_candidate_implementations p ON p.candidate_id=cr.candidate_id WHERE cr.correlation_id=sqlc.arg(correlation_id) ORDER BY p.identity;
+-- name: SummaryCorrelationMappings :many
+SELECT DISTINCT r.subject AS variant,r.spelling AS implementation FROM correlation_evidence ce JOIN source_receipts r ON r.id=ce.receipt_id AND r.case_id=ce.case_id WHERE ce.correlation_id=sqlc.arg(correlation_id) AND r.kind='selection-variant-mapping' ORDER BY r.subject,r.spelling;
+-- name: SummaryCorrelationGuidance :many
+SELECT kind,text FROM correlation_guidance WHERE correlation_id=sqlc.arg(correlation_id) ORDER BY kind,ordinal;

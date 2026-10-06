@@ -41,6 +41,7 @@ func (w *snapshotWriter) write(report Report, version string) error {
 		w.writeCase(c, ordinal)
 	}
 	report.writeRoles(w)
+	report.writeCorrelations(w)
 	w.writeSuppressions(report.Suppressions)
 	w.writeWarnings(report.Warnings)
 	return w.err

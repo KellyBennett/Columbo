@@ -16,6 +16,8 @@ type Querier interface {
 	InsertCluster(ctx context.Context, arg InsertClusterParams) (int64, error)
 	InsertClusterMember(ctx context.Context, arg InsertClusterMemberParams) (int64, error)
 	InsertCommit(ctx context.Context, arg InsertCommitParams) error
+	InsertCorrelation(ctx context.Context, arg InsertCorrelationParams) error
+	InsertCorrelationGuidance(ctx context.Context, arg InsertCorrelationGuidanceParams) error
 	InsertDeclaration(ctx context.Context, arg InsertDeclarationParams) (int64, error)
 	InsertDeclarationDependency(ctx context.Context, arg InsertDeclarationDependencyParams) error
 	InsertDependency(ctx context.Context, arg InsertDependencyParams) (int64, error)
@@ -38,11 +40,20 @@ type Querier interface {
 	InsertWarning(ctx context.Context, arg InsertWarningParams) error
 	LinkCaseDeclaration(ctx context.Context, arg LinkCaseDeclarationParams) error
 	LinkClueReceipt(ctx context.Context, arg LinkClueReceiptParams) error
+	LinkCorrelationCase(ctx context.Context, arg LinkCorrelationCaseParams) error
+	LinkCorrelationEvidence(ctx context.Context, arg LinkCorrelationEvidenceParams) error
+	LinkCorrelationRole(ctx context.Context, arg LinkCorrelationRoleParams) error
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
 	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
+	SummaryCorrelationCases(ctx context.Context, arg SummaryCorrelationCasesParams) ([]SummaryCorrelationCasesRow, error)
+	SummaryCorrelationGuidance(ctx context.Context, arg SummaryCorrelationGuidanceParams) ([]SummaryCorrelationGuidanceRow, error)
+	SummaryCorrelationMappings(ctx context.Context, arg SummaryCorrelationMappingsParams) ([]SummaryCorrelationMappingsRow, error)
+	SummaryCorrelationPlayers(ctx context.Context, arg SummaryCorrelationPlayersParams) ([]string, error)
+	SummaryCorrelationRoles(ctx context.Context, arg SummaryCorrelationRolesParams) ([]SummaryCorrelationRolesRow, error)
+	SummaryCorrelations(ctx context.Context) ([]Correlation, error)
 	SummaryDuplicateFragments(ctx context.Context, arg SummaryDuplicateFragmentsParams) ([]SummaryDuplicateFragmentsRow, error)
 	SummaryMetrics(ctx context.Context, arg SummaryMetricsParams) ([]SummaryMetricsRow, error)
 	SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([]PolicyReview, error)

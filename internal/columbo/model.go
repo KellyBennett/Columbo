@@ -45,6 +45,8 @@ type MemberRef struct {
 }
 
 type Report struct {
+	Correlations []Correlation         `json:"correlations,omitempty"`
+	Selections   []SelectionContext    `json:"-"`
 	Roles        []RoleCandidate       `json:"role_candidates,omitempty"`
 	Version      int                   `json:"version"`
 	Summary      Summary               `json:"summary"`

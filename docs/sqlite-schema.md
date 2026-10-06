@@ -14,7 +14,7 @@ The writer builds a temporary sibling file in a transaction, validates integrity
 
 ## Identity and discovery
 
-Schema version 2 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
+Schema version 3 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
 
 The authoritative DDL is [internal/columbo/sqlite_schema.go](../internal/columbo/sqlite_schema.go). SQLite introspection discovers tables, columns, declared foreign keys, indexes, and views without Columbo or Go:
 
@@ -144,6 +144,15 @@ WHERE c.smell='repeated-variant-decision'
 ORDER BY c.ordinal,f.path,r.start_offset,r.kind;
 ```
 
-## Schema version 2: common-role evidence
+## Schema version 3: common-role evidence
 
 Version 2 adds the six `role_candidate*` relations documented in [Common-Role Inference](common-role-inference.md). They do not participate in verdicts or summary totals. Use [role-evidence.sql](sqlite/role-evidence.sql) to inspect both linked and unlinked candidates. Regenerate version-1 snapshots or use their matching reader; existing files are not migrated in place.
+
+### Cross-case correlations
+
+`correlations` contains diagnosis, categorical confidence, canonical variant
+domain, and provisional MPR-001 review metadata. `correlation_cases` and
+`correlation_role_candidates` link existing records. `correlation_evidence`
+references case-owned source receipts with a compound ownership foreign key.
+`correlation_guidance` stores ordered lead/avoid text. These tables never enter
+`summary`; suppression status is read from the original member cases.

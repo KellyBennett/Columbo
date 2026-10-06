@@ -29,7 +29,7 @@ func (r *snapshotRenderer) emit(format string, args ...any) {
 	fmt.Fprintf(&r.buffer, format, args...)
 }
 func (r *snapshotRenderer) render(path string) error {
-	for _, stage := range []func() error{r.cases, r.roles, r.warnings, r.totals} {
+	for _, stage := range []func() error{r.cases, r.roles, r.correlations, r.warnings, r.totals} {
 		if err := stage(); err != nil {
 			return err
 		}

@@ -376,6 +376,26 @@
 
 [commits] hash | committed_at
 
+[correlation_cases] correlation_id | case_id
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "C-b06ec7d1d9"
+
+[correlation_evidence] correlation_id | case_id | receipt_id
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "C-b06ec7d1d9" | 123
+
+[correlation_guidance] correlation_id | kind | ordinal | text
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "avoid" | 0 | "Do not introduce an interface while leaving repeated concrete selection in every caller."
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "avoid" | 1 | "Do not extract each switch into a differently named helper."
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "avoid" | 2 | "Do not create one facade per concrete implementation while preserving the variant taxonomy in callers."
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "avoid" | 3 | "Do not suppress all member cases merely because the correlation identifies a likely abstraction."
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "avoid" | 4 | "Do not treat creation of a named interface as proof that coupling improved."
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "lead" | 0 | "Review the linked selection sites, observed messages, and variant mappings before choosing a role or centralizing selection."
+
+[correlation_role_candidates] correlation_id | candidate_id
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2"
+
+[correlations] id | kind | confidence | variant_domain | diagnosis | policy_id | policy_status | policy_note | review_prompt
+"MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb" | "missing-polymorphic-role" | "partial" | "" | "Concrete implementations are selected and then used through a common observed behavioral surface. The collaboration may be expressible as a role even though repeated variant knowledge has not been established." | "MPR-001" | "provisional" | "This diagnosis is derived by correlating independently enforced evidence. The correlation itself does not add a CI failure." | "Review whether the linked cases genuinely point to one role and one selection boundary. Pay particular attention to the variant-to-implementation mapping and inferred message surface."
+
 [declaration_dependencies] declaration_id | dependency_id | scored
 1 | 1 | 1
 6 | 2 | 0
@@ -545,7 +565,7 @@
 117 | 0 | 1 | 841 | 9
 
 [report] id | schema_version | columbo_version
-1 | 2 | "test"
+1 | 3 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2" | "C-b06ec7d1d9"

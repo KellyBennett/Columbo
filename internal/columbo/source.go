@@ -523,6 +523,7 @@ func (a *engine) Analyze() (Report, error) {
 	}
 	a.report.finish()
 	a.report.finishRoles()
+	a.report.correlate()
 	a.collectDeclarationEvidence()
 	return a.report, nil
 }

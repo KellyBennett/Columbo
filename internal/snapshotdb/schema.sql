@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 2),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 3),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -301,4 +301,42 @@ CREATE TABLE role_candidate_case_links (
  candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
  case_id TEXT NOT NULL REFERENCES cases(id),
  PRIMARY KEY (candidate_id,case_id)
+) STRICT;
+
+-- Correlations explain existing evidence and never contribute to verdict totals.
+CREATE TABLE correlations (
+ id TEXT PRIMARY KEY,
+ kind TEXT NOT NULL CHECK(kind = 'missing-polymorphic-role'),
+ confidence TEXT NOT NULL CHECK(confidence IN ('strong','partial')),
+ variant_domain TEXT NOT NULL,
+ diagnosis TEXT NOT NULL,
+ policy_id TEXT NOT NULL,
+ policy_status TEXT NOT NULL CHECK(policy_status = 'provisional'),
+ policy_note TEXT NOT NULL,
+ review_prompt TEXT NOT NULL
+) STRICT;
+CREATE TABLE correlation_cases (
+ correlation_id TEXT NOT NULL REFERENCES correlations(id),
+ case_id TEXT NOT NULL REFERENCES cases(id),
+ PRIMARY KEY(correlation_id,case_id)
+) STRICT;
+CREATE TABLE correlation_role_candidates (
+ correlation_id TEXT NOT NULL REFERENCES correlations(id),
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ PRIMARY KEY(correlation_id,candidate_id)
+) STRICT;
+CREATE TABLE correlation_evidence (
+ correlation_id TEXT NOT NULL,
+ case_id TEXT NOT NULL,
+ receipt_id INTEGER NOT NULL,
+ FOREIGN KEY(correlation_id,case_id) REFERENCES correlation_cases(correlation_id,case_id),
+ FOREIGN KEY(receipt_id,case_id) REFERENCES source_receipts(id,case_id),
+ PRIMARY KEY(correlation_id,case_id,receipt_id)
+) STRICT;
+CREATE TABLE correlation_guidance (
+ correlation_id TEXT NOT NULL REFERENCES correlations(id),
+ kind TEXT NOT NULL CHECK(kind IN ('lead','avoid')),
+ ordinal INTEGER NOT NULL CHECK(ordinal>=0),
+ text TEXT NOT NULL,
+ PRIMARY KEY(correlation_id,kind,ordinal)
 ) STRICT;

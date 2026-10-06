@@ -103,6 +103,41 @@ type Commit struct {
 	CommittedAt int64
 }
 
+type Correlation struct {
+	ID            string
+	Kind          string
+	Confidence    string
+	VariantDomain string
+	Diagnosis     string
+	PolicyID      string
+	PolicyStatus  string
+	PolicyNote    string
+	ReviewPrompt  string
+}
+
+type CorrelationCase struct {
+	CorrelationID string
+	CaseID        string
+}
+
+type CorrelationEvidence struct {
+	CorrelationID string
+	CaseID        string
+	ReceiptID     int64
+}
+
+type CorrelationGuidance struct {
+	CorrelationID string
+	Kind          string
+	Ordinal       int64
+	Text          string
+}
+
+type CorrelationRoleCandidate struct {
+	CorrelationID string
+	CandidateID   string
+}
+
 type Declaration struct {
 	ID          int64
 	FileID      int64

@@ -72,9 +72,7 @@ func (a *engine) reportSelection(d *declaration, role string, sites []*selection
 	c := caseFromSource(selectionSmell, a.config.Severity[selectionSmell], d.declReceipt())
 	c.ID = id
 	selectionEvidence(c, sites, a.config.Counts["selection-use-implementations"])
-	for _, site := range sites {
-		a.selectionRole(c, site)
-	}
+	a.selectionContexts(c, sites)
 	a.report.Cases = append(a.report.Cases, *c)
 	return nil
 }
@@ -148,3 +146,10 @@ func (site *selectionSite) implementations() []string {
 	return (selectedValue{origins: site.origins}).implementations()
 }
 func (site *selectionSite) useCount() int { return len(site.messages) }
+
+func (a *engine) selectionContexts(c *Case, sites []*selectionSite) {
+	for _, site := range sites {
+		a.selectionRole(c, site)
+		a.report.Selections = append(a.report.Selections, site.correlationContext(c))
+	}
+}
