@@ -1,6 +1,6 @@
 # RVD-001 initial dogfood evidence
 
-The default production `./...` self-check has 2 FAIL cases from the new rule, 4 duplicate-code WARN cases, and no suppressions. Other default FAIL smells are green. The rule and its 2-site / 2-variant minima remain enabled. These are review leads under RVD-001; no automatic refactor or new suppression was applied to the typed interpreter decisions.
+The initial production `./...` self-check had 2 FAIL cases from the new rule, 4 duplicate-code WARN cases, and no suppressions. Other default FAIL smells were green. The rule and its 2-site / 2-variant minima remain enabled. The following sections preserve the original evidence and subsequent refactoring results.
 
 ## type:go/ast.Expr
 
@@ -59,3 +59,19 @@ Current case identity remains `C-499393d3e6`. All other default FAIL smells rema
 | `internal/columbo/value_paths.go:47` (byte 1454) | `github.com/KellyBennett/Columbo/internal/columbo.(*valuePathResolver).resolve` | `type:go/ast.Expr=*go/ast.Ident`, `type:go/ast.Expr=*go/ast.SelectorExpr` |
 
 Regression tests pin strict versus Feature Envy normalization, shadowed roots, distinct field chains, immutable path extension, and variant exclusion of address/dereference chains. Existing logical-row/summary goldens pass without changes.
+
+## Type visitor exploration
+
+Interface discovery and dependency collection now implement a three-message `typeVisitor`: `named`, `iface`, and `components`. `visitType` owns alias normalization and the single named/interface/structural classification. Each visitor continues to own its recursion and results; discovery also retains its seen set.
+
+| Message | Interface discovery | Dependency collection |
+| --- | --- | --- |
+| named | Discover named interfaces; traverse the underlying type | Record the named identity; traverse generic type arguments |
+| iface | Record the interface; traverse method signatures | Record the interface identity |
+| components | Traverse structural components | Traverse structural components |
+
+This small protocol gives semantic type classification one owner without making either analysis depend on the other. A factory and per-type wrappers would add objects without further behavior to own, so the implementation uses direct visitor dispatch. The cost is an extra interface call and navigation step between traversal and its policy methods. The benefit is a common classification boundary with explicitly different traversal policies; this is a modest improvement, not evidence that all repeated switches need visitors.
+
+The `type:go/types.Type` case `C-44ed8eaf6c` clears because only one qualifying decision remains. Default self-check now reports **1 FAIL, 4 WARN, 0 suppressed**. The remaining `ast.Expr` case retains identity `C-499393d3e6`, three supporting sites, Ident support 2, and SelectorExpr support 3. No thresholds, severity settings, or suppressions changed. Its dependency-scanning site has moved to `metrics.go:308` (byte 9733).
+
+A regression fixture combines an alias, an instantiated generic recursive type, an interface-valued field, and nested method-signature interfaces. It confirms that discovery reaches underlying fields and method signatures without looping or duplicating results, while dependency collection preserves named boundaries and follows type arguments. Full Go tests, vet, existing evidence goldens, and the SQL boundary/sqlc checks pass.

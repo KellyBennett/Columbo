@@ -183,18 +183,10 @@ type dependencyCollector struct {
 }
 
 func (c *dependencyCollector) walk(t types.Type) {
-	if t == nil {
-		return
-	}
-	t = types.Unalias(t)
-	switch t := t.(type) {
-	case *types.Named:
-		c.named(t)
-	case *types.Interface:
-		c.identities["interface:"+canonicalType(t, c.signature)] = true
-	default:
-		c.components(t)
-	}
+	visitType(t, c)
+}
+func (c *dependencyCollector) iface(t *types.Interface) {
+	c.identities["interface:"+canonicalType(t, c.signature)] = true
 }
 func (c *dependencyCollector) components(t types.Type) {
 	for _, part := range typeComponents(t) {
