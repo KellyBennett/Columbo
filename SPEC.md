@@ -281,6 +281,10 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 - **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
 - **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
 
+## Experimental choice-set evidence
+
+The opt-in `--choice-sets-output PATH` collector records repeated typed collection-construction recipes in a separate, versioned JSON evidence file. This is an experimental evidence channel, not a replacement report format or SQLite projection. It leaves all existing case, snapshot, annotation, severity, and exit-verdict semantics unchanged; evidence publication errors exit 2. It is disabled by default. Its bounded recognition contract, non-atomic two-file publication, source receipts and limitations are specified in [choice-set evidence](docs/choice-set-evidence.md).
+
 ## CLI and exit codes
 
 ```bash
