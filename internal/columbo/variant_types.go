@@ -24,6 +24,3 @@ func nilVariantType(t types.Type) bool {
 	basic, ok := t.(*types.Basic)
 	return ok && basic.Kind() == types.UntypedNil
 }
-func fieldVariantSelection(selection *types.Selection) bool {
-	return selection != nil && selection.Kind() == types.FieldVal
-}

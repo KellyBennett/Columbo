@@ -37,3 +37,25 @@ Case: `C-44ed8eaf6c`.
 Both domains describe Go syntax/type interpretation. Some decisions perform distinct structural traversals and may be reasonable despite sharing the taxonomy. Review the complete sets and operations before deciding whether common roles, one dispatch boundary, or data representation would help. RVD-001 intentionally keeps these cases failing while this architectural choice remains unresolved.
 
 Validation: Go suite and vet; SQL access guard and its negative regression fixtures; pinned sqlc generation; published SQLite queries; action runner tests; GitHub annotation tests, including all variant evidence and policy metadata.
+
+## Shared resolved value path follow-up
+
+Feature Envy and Repeated Variant Decision now use one resolved value path: a root variable plus resolved field objects. It owns identity, equality and display-key rendering. Caller-specific normalization remains separate: Feature Envy accepts address-taking/dereferencing at each step, while variant chains accept parentheses only. Calls, indexes, package selections, constants and method selections remain outside path resolution.
+
+The useful abstraction removes one decision site from the group, but the architectural case remains:
+
+| Metric | Initial implementation | Shared value path |
+| --- | ---: | ---: |
+| Supporting ast.Expr sites | 4 | 3 |
+| Ident variant support | 3 | 2 |
+| SelectorExpr variant support | 4 | 3 |
+
+Current case identity remains `C-499393d3e6`. All other default FAIL smells remain green; the default self-check still reports 2 FAIL, 4 WARN and no suppressions. The types.Type traversal has not been changed.
+
+| Current decision location | Enclosing declaration | Complete site variant set |
+| --- | --- | --- |
+| `internal/columbo/calls.go:176` (byte 4883) | `github.com/KellyBennett/Columbo/internal/columbo.calleeIdentifier` | `type:go/ast.Expr=*go/ast.Ident`, `type:go/ast.Expr=*go/ast.SelectorExpr` |
+| `internal/columbo/metrics.go:316` (byte 9818) | `github.com/KellyBennett/Columbo/internal/columbo.(*dependencyScan).expression` | `type:go/ast.Expr=*go/ast.CompositeLit`, `type:go/ast.Expr=*go/ast.SelectorExpr`, `type:go/ast.Expr=*go/ast.TypeAssertExpr` |
+| `internal/columbo/value_paths.go:47` (byte 1454) | `github.com/KellyBennett/Columbo/internal/columbo.(*valuePathResolver).resolve` | `type:go/ast.Expr=*go/ast.Ident`, `type:go/ast.Expr=*go/ast.SelectorExpr` |
+
+Regression tests pin strict versus Feature Envy normalization, shadowed roots, distinct field chains, immutable path extension, and variant exclusion of address/dereference chains. Existing logical-row/summary goldens pass without changes.
