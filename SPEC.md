@@ -599,3 +599,11 @@ of Repeated Variant Decision, Duplicate Code, and Excessive Dependencies.
 ## Common-role inference
 
 [Common-role inference](docs/common-role-inference.md) supplies deterministic, minimal observed-role evidence in selection/use and repeated-variant contexts. It is not a smell and cannot independently change verdicts. Schema version 2 persists role candidates, players, messages, interface matches, source receipts and links to existing cases.
+
+## Cross-case correlation: missing polymorphic role
+
+The non-enforcing correlation contract is specified in
+[docs/missing-polymorphic-role.md](docs/missing-polymorphic-role.md).
+Correlations join independently justified cases and common-role evidence. They
+never create an additional verdict, change a member case ID or suppression, or
+publish an additional GitHub error annotation. MPR-001 is provisional.

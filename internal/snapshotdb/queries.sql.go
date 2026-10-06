@@ -183,6 +183,58 @@ func (q *Queries) InsertCommit(ctx context.Context, arg InsertCommitParams) erro
 	return err
 }
 
+const insertCorrelation = `-- name: InsertCorrelation :exec
+INSERT INTO correlations (id,kind,confidence,variant_domain,diagnosis,policy_id,policy_status,policy_note,review_prompt) VALUES (?,?,?,?,?,?,?,?,?)
+`
+
+type InsertCorrelationParams struct {
+	ID            string
+	Kind          string
+	Confidence    string
+	VariantDomain string
+	Diagnosis     string
+	PolicyID      string
+	PolicyStatus  string
+	PolicyNote    string
+	ReviewPrompt  string
+}
+
+func (q *Queries) InsertCorrelation(ctx context.Context, arg InsertCorrelationParams) error {
+	_, err := q.db.ExecContext(ctx, insertCorrelation,
+		arg.ID,
+		arg.Kind,
+		arg.Confidence,
+		arg.VariantDomain,
+		arg.Diagnosis,
+		arg.PolicyID,
+		arg.PolicyStatus,
+		arg.PolicyNote,
+		arg.ReviewPrompt,
+	)
+	return err
+}
+
+const insertCorrelationGuidance = `-- name: InsertCorrelationGuidance :exec
+INSERT INTO correlation_guidance (correlation_id,kind,ordinal,text) VALUES (?,?,?,?)
+`
+
+type InsertCorrelationGuidanceParams struct {
+	CorrelationID string
+	Kind          string
+	Ordinal       int64
+	Text          string
+}
+
+func (q *Queries) InsertCorrelationGuidance(ctx context.Context, arg InsertCorrelationGuidanceParams) error {
+	_, err := q.db.ExecContext(ctx, insertCorrelationGuidance,
+		arg.CorrelationID,
+		arg.Kind,
+		arg.Ordinal,
+		arg.Text,
+	)
+	return err
+}
+
 const insertDeclaration = `-- name: InsertDeclaration :execlastid
 INSERT INTO declarations(file_id,symbol,start_line,end_line,start_offset,end_offset) VALUES (?,?,?,?,?,?)
 `
@@ -638,6 +690,49 @@ func (q *Queries) LinkClueReceipt(ctx context.Context, arg LinkClueReceiptParams
 	return err
 }
 
+const linkCorrelationCase = `-- name: LinkCorrelationCase :exec
+INSERT INTO correlation_cases (correlation_id,case_id) VALUES (?,?)
+`
+
+type LinkCorrelationCaseParams struct {
+	CorrelationID string
+	CaseID        string
+}
+
+func (q *Queries) LinkCorrelationCase(ctx context.Context, arg LinkCorrelationCaseParams) error {
+	_, err := q.db.ExecContext(ctx, linkCorrelationCase, arg.CorrelationID, arg.CaseID)
+	return err
+}
+
+const linkCorrelationEvidence = `-- name: LinkCorrelationEvidence :exec
+INSERT INTO correlation_evidence (correlation_id,case_id,receipt_id) VALUES (?,?,?)
+`
+
+type LinkCorrelationEvidenceParams struct {
+	CorrelationID string
+	CaseID        string
+	ReceiptID     int64
+}
+
+func (q *Queries) LinkCorrelationEvidence(ctx context.Context, arg LinkCorrelationEvidenceParams) error {
+	_, err := q.db.ExecContext(ctx, linkCorrelationEvidence, arg.CorrelationID, arg.CaseID, arg.ReceiptID)
+	return err
+}
+
+const linkCorrelationRole = `-- name: LinkCorrelationRole :exec
+INSERT INTO correlation_role_candidates (correlation_id,candidate_id) VALUES (?,?)
+`
+
+type LinkCorrelationRoleParams struct {
+	CorrelationID string
+	CandidateID   string
+}
+
+func (q *Queries) LinkCorrelationRole(ctx context.Context, arg LinkCorrelationRoleParams) error {
+	_, err := q.db.ExecContext(ctx, linkCorrelationRole, arg.CorrelationID, arg.CandidateID)
+	return err
+}
+
 const linkPolicy = `-- name: LinkPolicy :exec
 INSERT INTO case_policy_reviews(case_id,ordinal,policy_id) VALUES (?,?,?)
 `
@@ -766,6 +861,219 @@ func (q *Queries) SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams
 			&i.Value,
 			&i.Ordinal,
 			&i.ClueOrdinal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelationCases = `-- name: SummaryCorrelationCases :many
+SELECT c.id,c.suppressed,c.verdict FROM correlation_cases cc JOIN cases c ON c.id=cc.case_id WHERE cc.correlation_id=?1 ORDER BY c.id
+`
+
+type SummaryCorrelationCasesParams struct {
+	CorrelationID string
+}
+
+type SummaryCorrelationCasesRow struct {
+	ID         string
+	Suppressed int64
+	Verdict    string
+}
+
+func (q *Queries) SummaryCorrelationCases(ctx context.Context, arg SummaryCorrelationCasesParams) ([]SummaryCorrelationCasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelationCases, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryCorrelationCasesRow
+	for rows.Next() {
+		var i SummaryCorrelationCasesRow
+		if err := rows.Scan(&i.ID, &i.Suppressed, &i.Verdict); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelationGuidance = `-- name: SummaryCorrelationGuidance :many
+SELECT kind,text FROM correlation_guidance WHERE correlation_id=?1 ORDER BY kind,ordinal
+`
+
+type SummaryCorrelationGuidanceParams struct {
+	CorrelationID string
+}
+
+type SummaryCorrelationGuidanceRow struct {
+	Kind string
+	Text string
+}
+
+func (q *Queries) SummaryCorrelationGuidance(ctx context.Context, arg SummaryCorrelationGuidanceParams) ([]SummaryCorrelationGuidanceRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelationGuidance, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryCorrelationGuidanceRow
+	for rows.Next() {
+		var i SummaryCorrelationGuidanceRow
+		if err := rows.Scan(&i.Kind, &i.Text); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelationMappings = `-- name: SummaryCorrelationMappings :many
+SELECT DISTINCT r.subject AS variant,r.spelling AS implementation FROM correlation_evidence ce JOIN source_receipts r ON r.id=ce.receipt_id AND r.case_id=ce.case_id WHERE ce.correlation_id=?1 AND r.kind='selection-variant-mapping' ORDER BY r.subject,r.spelling
+`
+
+type SummaryCorrelationMappingsParams struct {
+	CorrelationID string
+}
+
+type SummaryCorrelationMappingsRow struct {
+	Variant        string
+	Implementation string
+}
+
+func (q *Queries) SummaryCorrelationMappings(ctx context.Context, arg SummaryCorrelationMappingsParams) ([]SummaryCorrelationMappingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelationMappings, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryCorrelationMappingsRow
+	for rows.Next() {
+		var i SummaryCorrelationMappingsRow
+		if err := rows.Scan(&i.Variant, &i.Implementation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelationPlayers = `-- name: SummaryCorrelationPlayers :many
+SELECT DISTINCT p.identity FROM correlation_role_candidates cr JOIN role_candidate_implementations p ON p.candidate_id=cr.candidate_id WHERE cr.correlation_id=?1 ORDER BY p.identity
+`
+
+type SummaryCorrelationPlayersParams struct {
+	CorrelationID string
+}
+
+func (q *Queries) SummaryCorrelationPlayers(ctx context.Context, arg SummaryCorrelationPlayersParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelationPlayers, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var identity string
+		if err := rows.Scan(&identity); err != nil {
+			return nil, err
+		}
+		items = append(items, identity)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelationRoles = `-- name: SummaryCorrelationRoles :many
+SELECT r.id,r.canonical_interface FROM correlation_role_candidates cr JOIN role_candidates r ON r.id=cr.candidate_id WHERE cr.correlation_id=?1 ORDER BY r.id
+`
+
+type SummaryCorrelationRolesParams struct {
+	CorrelationID string
+}
+
+type SummaryCorrelationRolesRow struct {
+	ID                 string
+	CanonicalInterface string
+}
+
+func (q *Queries) SummaryCorrelationRoles(ctx context.Context, arg SummaryCorrelationRolesParams) ([]SummaryCorrelationRolesRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelationRoles, arg.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryCorrelationRolesRow
+	for rows.Next() {
+		var i SummaryCorrelationRolesRow
+		if err := rows.Scan(&i.ID, &i.CanonicalInterface); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryCorrelations = `-- name: SummaryCorrelations :many
+SELECT id, kind, confidence, variant_domain, diagnosis, policy_id, policy_status, policy_note, review_prompt FROM correlations ORDER BY id
+`
+
+func (q *Queries) SummaryCorrelations(ctx context.Context) ([]Correlation, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCorrelations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Correlation
+	for rows.Next() {
+		var i Correlation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Confidence,
+			&i.VariantDomain,
+			&i.Diagnosis,
+			&i.PolicyID,
+			&i.PolicyStatus,
+			&i.PolicyNote,
+			&i.ReviewPrompt,
 		); err != nil {
 			return nil, err
 		}

@@ -48,6 +48,18 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("Review:", cosmetic["message"])
         self.assertIn("lead:", cosmetic["message"])
 
+    def test_correlations_add_no_annotations_or_verdicts(self):
+        before = publisher.read_snapshot(self.snapshot, 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "without-correlations.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                self.assertGreater(db.execute("SELECT COUNT(*) FROM correlations").fetchone()[0], 0)
+                for table in ("correlation_evidence", "correlation_guidance", "correlation_role_candidates", "correlation_cases", "correlations"):
+                    db.execute(f"DELETE FROM {table}")
+            after = publisher.read_snapshot(path, 1)
+        self.assertEqual(before, after)
+
     def test_selection_flow_and_policy_are_projected(self):
         annotations, _ = publisher.read_snapshot(self.snapshot, 1)
         finding = next(item for item in annotations if item["title"] == "Columbo: selection-use-coupling")

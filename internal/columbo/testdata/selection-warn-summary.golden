@@ -18,5 +18,20 @@ CASE C-92ebcdd20a fixture.Send source.go:16-16
 Role evidence R-13c7183a8f36ed220d942e71d72b3d4c70ae26913b36591c2ecf7a54fc1bac91 (strong, existing role): interface { Close() error; Send(string) error }
   exact interface: fixture.Sender
   used interface: fixture.Sender
+CORRELATION MPR-0df65ed7302238e74113521cb44c47d7f0d8e32b20197cbc14b4c6b971887de8
+  Missing Polymorphic Role — partial
+  Concrete implementations are selected and then used through a common observed behavioral surface. The collaboration may be expressible as a role even though repeated variant knowledge has not been established.
+  Connects: C-92ebcdd20a [WARN]
+  Observed role R-13c7183a8f36ed220d942e71d72b3d4c70ae26913b36591c2ecf7a54fc1bac91: interface { Close() error; Send(string) error }
+  Player: *fixture.Email
+  Player: *fixture.SMS
+  avoid: Do not introduce an interface while leaving repeated concrete selection in every caller.
+  avoid: Do not extract each switch into a differently named helper.
+  avoid: Do not create one facade per concrete implementation while preserving the variant taxonomy in callers.
+  avoid: Do not suppress all member cases merely because the correlation identifies a likely abstraction.
+  avoid: Do not treat creation of a named interface as proof that coupling improved.
+  lead: Review the linked selection sites, observed messages, and variant mappings before choosing a role or centralizing selection.
+  Policy MPR-001 (provisional): This diagnosis is derived by correlating independently enforced evidence. The correlation itself does not add a CI failure.
+  Review: Review whether the linked cases genuinely point to one role and one selection boundary. Pay particular attention to the variant-to-implementation mapping and inferred message surface.
 Columbo: 0 failed, 1 warned, 0 suppressed
 Database: report.sqlite
