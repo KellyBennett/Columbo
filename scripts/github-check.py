@@ -85,7 +85,7 @@ class Snapshot:
         guidance = [f'{item["kind"]}: {item["item"]}' for item in self.db.execute(
             "SELECT kind,item FROM case_guidance WHERE case_id=? ORDER BY kind,ordinal", (row["id"],))]
         message = "\n".join([f'CASE {row["id"]} {row["symbol"]}: {row["verdict"]}',
-                              row["why"], row["diagnosis"], *metrics, *self.dependency_uses(row["id"]), *self.duplicate_fragments(row["id"]), *policy, *guidance])
+                              row["why"], row["diagnosis"], *metrics, *self.dependency_uses(row["id"]), *self.duplicate_fragments(row["id"]), *self.variant_evidence(row["id"]), *policy, *guidance])
         return dict(path=row["path"], start_line=row["start_line"], end_line=row["end_line"],
                     annotation_level="failure" if row["verdict"] == "FAIL" else "warning",
                     title=limited("Columbo: " + row["smell"], 255), message=limited(message))
@@ -98,6 +98,20 @@ class Snapshot:
                     WHERE r.case_id=? AND r.kind='duplicate-fragment'
                     ORDER BY f.path,r.start_offset,r.end_offset
                 """, (case_id,))]
+
+    def variant_evidence(self, case_id):
+        evidence = []
+        for clue in self.db.execute("SELECT id,kind,subject FROM clues WHERE case_id=? AND kind IN ('variant-set','repeated-variant-set') ORDER BY ordinal", (case_id,)):
+            values = [row[0] for row in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
+            evidence.append(f'{clue["kind"]} {clue["subject"]}: ' + ", ".join(values))
+        for row in self.db.execute("""
+            SELECT f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,d.symbol
+            FROM source_receipts r JOIN files f ON f.id=r.file_id
+            JOIN declarations d ON d.id=r.source_declaration_id
+            WHERE r.case_id=? AND r.kind='variant-decision' ORDER BY f.path,r.start_offset
+        """, (case_id,)):
+            evidence.append(f'Variant decision: {row["path"]}:{row["start_line"]}-{row["end_line"]} (bytes {row["start_offset"]}-{row["end_offset"]}) in {row["symbol"]}')
+        return evidence
 
     def dependency_uses(self, case_id):
         labels = {"declared": "Declared or constructed types", "signature": "Callable signatures",

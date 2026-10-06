@@ -259,7 +259,7 @@ func (s Source) snapshotSource(caseID string, ordinal int, fileID int64) (snapsh
 	if err != nil {
 		return snapshotdb.InsertSourceReceiptParams{}, err
 	}
-	return snapshotdb.InsertSourceReceiptParams{CaseID: caseID, Ordinal: int64(ordinal), Kind: s.Kind, FileID: fileID, StartLine: int64(s.StartLine), EndLine: int64(s.EndLine), StartOffset: int64(s.StartOffset), EndOffset: int64(s.EndOffset), Subject: s.Detail.Subject, ValueType: snapshotOptionalText(numeric.kind), Value: numeric.value, Nesting: nesting}, nil
+	return snapshotdb.InsertSourceReceiptParams{CaseID: caseID, Ordinal: int64(ordinal), Kind: s.Kind, FileID: fileID, StartLine: int64(s.StartLine), EndLine: int64(s.EndLine), StartOffset: int64(s.StartOffset), EndOffset: int64(s.EndOffset), Subject: s.Detail.Subject, Spelling: s.Spelling, ValueType: snapshotOptionalText(numeric.kind), Value: numeric.value, Nesting: nesting}, nil
 }
 func (w *snapshotWriter) sourceRelations(key snapshotReceiptKey, id int64, source Source) {
 	if key.key != "" {

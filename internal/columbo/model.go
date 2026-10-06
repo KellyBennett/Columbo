@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code"}
+var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision"}
 
 type Summary struct {
 	Failed     int `json:"failed"`
@@ -110,6 +110,7 @@ type Detail struct {
 	ExpansionDeclarations []DeclarationRef `json:"-"`
 }
 type Source struct {
+	Spelling               string          `json:"spelling,omitempty"`
 	Kind                   string          `json:"kind"`
 	File                   string          `json:"file"`
 	StartLine              int             `json:"start_line"`
@@ -205,6 +206,9 @@ func (c *Case) sortClues() {
 func (q Clue) before(other Clue) bool {
 	if q.Kind != other.Kind {
 		return q.Kind < other.Kind
+	}
+	if q.Kind == "variant-set" && q.Subject != other.Subject {
+		return variantSiteSubjectLess(q.Subject, other.Subject)
 	}
 	if q.Subject != other.Subject {
 		return q.Subject < other.Subject
@@ -339,6 +343,9 @@ func caseFromSource(smell, severity string, source Source) *Case {
 	return c
 }
 func (c *Case) addPolicyReview() {
+	if c.Smell == variantSmell {
+		c.PolicyReviews = append(c.PolicyReviews, variantPolicy)
+	}
 	if c.Smell == "cosmetic-extraction" && policyStatus == "provisional" {
 		c.PolicyReviews = append(c.PolicyReviews, policy)
 	}

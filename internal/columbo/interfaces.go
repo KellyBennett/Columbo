@@ -45,18 +45,11 @@ func (d *interfaceDiscovery) walk(t types.Type) {
 		return
 	}
 	d.seen[t] = true
-	d.components(t)
+	visitType(t, d)
 }
 func (d *interfaceDiscovery) components(t types.Type) {
-	switch t := t.(type) {
-	case *types.Named:
-		d.named(t)
-	case *types.Interface:
-		d.iface(t)
-	default:
-		for _, part := range typeComponents(t) {
-			d.walk(part)
-		}
+	for _, part := range typeComponents(t) {
+		d.walk(part)
 	}
 }
 func (d *interfaceDiscovery) named(t *types.Named) {

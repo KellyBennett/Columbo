@@ -68,6 +68,7 @@ var canonicalAllCases = []string{
 	"C-4063b2b57c|feature-envy|fixture.(Own).Envy",
 	"C-47c5c497d6|data-clump|fixture.ClumpA",
 	"C-5522b4859c|cosmetic-extraction|fixture.Parent",
+	"C-82bc134f4f|repeated-variant-decision|fixture.Fetch",
 }
 
 func TestSnapshotLogicalDeterminism(t *testing.T) {

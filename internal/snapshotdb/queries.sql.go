@@ -416,7 +416,7 @@ func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) erro
 }
 
 const insertSourceReceipt = `-- name: InsertSourceReceipt :execlastid
-INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id,spelling) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 `
 
 type InsertSourceReceiptParams struct {
@@ -433,6 +433,7 @@ type InsertSourceReceiptParams struct {
 	Value               interface{}
 	Nesting             *int64
 	SourceDeclarationID *int64
+	Spelling            string
 }
 
 func (q *Queries) InsertSourceReceipt(ctx context.Context, arg InsertSourceReceiptParams) (int64, error) {
@@ -450,6 +451,7 @@ func (q *Queries) InsertSourceReceipt(ctx context.Context, arg InsertSourceRecei
 		arg.Value,
 		arg.Nesting,
 		arg.SourceDeclarationID,
+		arg.Spelling,
 	)
 	if err != nil {
 		return 0, err
@@ -798,6 +800,105 @@ func (q *Queries) SummaryTotals(ctx context.Context) (SummaryTotalsRow, error) {
 	var i SummaryTotalsRow
 	err := row.Scan(&i.Failed, &i.Warned, &i.Suppressed)
 	return i, err
+}
+
+const summaryVariantDecisions = `-- name: SummaryVariantDecisions :many
+SELECT f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,d.symbol
+FROM source_receipts r JOIN files f ON f.id=r.file_id
+JOIN declarations d ON d.id=r.source_declaration_id
+WHERE r.case_id=?1 AND r.kind='variant-decision'
+ORDER BY f.path,r.start_offset
+`
+
+type SummaryVariantDecisionsParams struct {
+	CaseID string
+}
+
+type SummaryVariantDecisionsRow struct {
+	Path        string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Symbol      string
+}
+
+func (q *Queries) SummaryVariantDecisions(ctx context.Context, arg SummaryVariantDecisionsParams) ([]SummaryVariantDecisionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryVariantDecisions, arg.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryVariantDecisionsRow
+	for rows.Next() {
+		var i SummaryVariantDecisionsRow
+		if err := rows.Scan(
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Symbol,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryVariantSets = `-- name: SummaryVariantSets :many
+SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
+FROM clues c JOIN clue_values v ON v.clue_id=c.id
+WHERE c.case_id=?1 AND c.kind IN ('variant-set','repeated-variant-set')
+ORDER BY c.ordinal,v.ordinal
+`
+
+type SummaryVariantSetsParams struct {
+	CaseID string
+}
+
+type SummaryVariantSetsRow struct {
+	Kind        string
+	Subject     string
+	Value       string
+	Ordinal     int64
+	ClueOrdinal int64
+}
+
+func (q *Queries) SummaryVariantSets(ctx context.Context, arg SummaryVariantSetsParams) ([]SummaryVariantSetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryVariantSets, arg.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryVariantSetsRow
+	for rows.Next() {
+		var i SummaryVariantSetsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Subject,
+			&i.Value,
+			&i.Ordinal,
+			&i.ClueOrdinal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const summaryWarnings = `-- name: SummaryWarnings :many

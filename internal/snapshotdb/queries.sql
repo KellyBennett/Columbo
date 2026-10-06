@@ -29,7 +29,7 @@ INSERT INTO clusters(case_id,cluster_key,owner_declaration_id,file_id,ordinal) V
 INSERT INTO cluster_members(cluster_id,case_id,helper_declaration_id,ordinal,call_offset) VALUES (?,?,?,?,?);
 
 -- name: InsertSourceReceipt :execlastid
-INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id,spelling) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
 
 -- name: InsertDependencyReceipt :exec
 INSERT INTO dependency_receipts(declaration_id,dependency_id,receipt_id,case_id) VALUES (?,?,?,?);
@@ -108,3 +108,16 @@ SELECT f.path, r.start_line, r.end_line, r.start_offset, r.end_offset
 FROM source_receipts r JOIN files f ON f.id = r.file_id
 WHERE r.case_id = sqlc.arg(case_id) AND r.kind = 'duplicate-fragment'
 ORDER BY f.path, r.start_offset, r.end_offset;
+
+-- name: SummaryVariantSets :many
+SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
+FROM clues c JOIN clue_values v ON v.clue_id=c.id
+WHERE c.case_id=sqlc.arg(case_id) AND c.kind IN ('variant-set','repeated-variant-set')
+ORDER BY c.ordinal,v.ordinal;
+
+-- name: SummaryVariantDecisions :many
+SELECT f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,d.symbol
+FROM source_receipts r JOIN files f ON f.id=r.file_id
+JOIN declarations d ON d.id=r.source_declaration_id
+WHERE r.case_id=sqlc.arg(case_id) AND r.kind='variant-decision'
+ORDER BY f.path,r.start_offset;

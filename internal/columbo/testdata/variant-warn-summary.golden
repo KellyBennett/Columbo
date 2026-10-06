@@ -1,0 +1,28 @@
+CASE C-6e85826d00 fixture.First source.go:5-5
+  repeated-variant-decision: WARN
+  repeated-variant-count value:fixture.Kind: 2 (limit >= 2)
+  variant-decision-sites value:fixture.Kind: 2 (limit >= 2)
+  variant-support value:fixture.Kind="a": 2 (limit >= 2)
+  variant-support value:fixture.Kind="b": 2 (limit >= 2)
+  repeated-variant-set value:fixture.Kind: value:fixture.Kind="a", value:fixture.Kind="b"
+  variant-set source.go:160: value:fixture.Kind="a", value:fixture.Kind="b", value:fixture.Kind="c"
+  variant-set zsecond.go:37: value:fixture.Kind="a", value:fixture.Kind="b"
+  variant decision source.go:5-5 (bytes 160-193) in fixture.First
+  variant decision zsecond.go:2-2 (bytes 37-63) in fixture.Second
+  Policy RVD-001: This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate.
+CASE C-e8720c9979 fixture.FirstPayment source.go:12-12
+  repeated-variant-decision: WARN
+  repeated-variant-count type:fixture.Payment: 2 (limit >= 2)
+  variant-decision-sites type:fixture.Payment: 2 (limit >= 2)
+  variant-support type:fixture.Payment=*fixture.Cash: 2 (limit >= 2)
+  variant-support type:fixture.Payment=fixture.Card: 2 (limit >= 2)
+  repeated-variant-set type:fixture.Payment: type:fixture.Payment=*fixture.Cash, type:fixture.Payment=fixture.Card
+  variant-set source.go:357: type:fixture.Payment=*fixture.Cash, type:fixture.Payment=fixture.Card
+  variant-set source.go:422: type:fixture.Payment=*fixture.Cash, type:fixture.Payment=fixture.Card
+  variant decision source.go:12-12 (bytes 357-390) in fixture.FirstPayment
+  variant decision source.go:13-13 (bytes 422-455) in fixture.SecondPayment
+  Policy RVD-001: This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate.
+Columbo: 0 failed, 2 warned, 0 suppressed
+Database: report.sqlite

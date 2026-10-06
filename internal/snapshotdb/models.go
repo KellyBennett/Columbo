@@ -178,6 +178,7 @@ type SourceReceipt struct {
 	Value               interface{}
 	Nesting             *int64
 	SourceDeclarationID *int64
+	Spelling            string
 }
 
 type Summary struct {

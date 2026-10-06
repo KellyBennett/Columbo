@@ -36,5 +36,18 @@ CASE C-5522b4859c fixture.Parent all.go:50-53
   parameter-overlap all.go:826:member:fixture.stepTwo: 1.000000
   Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
   Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
-Columbo: 8 failed, 0 warned, 0 suppressed
+CASE C-82bc134f4f fixture.Fetch variants.go:10-17
+  repeated-variant-decision: FAIL
+  repeated-variant-count value:fixture.SourceKind: 2 (limit >= 2)
+  variant-decision-sites value:fixture.SourceKind: 2 (limit >= 2)
+  variant-support value:fixture.SourceKind="reuters": 2 (limit >= 2)
+  variant-support value:fixture.SourceKind="rss": 2 (limit >= 2)
+  repeated-variant-set value:fixture.SourceKind: value:fixture.SourceKind="reuters", value:fixture.SourceKind="rss"
+  variant-set variants.go:143: value:fixture.SourceKind="reuters", value:fixture.SourceKind="rss"
+  variant-set variants.go:269: value:fixture.SourceKind="reuters", value:fixture.SourceKind="rss"
+  variant decision variants.go:11-16 (bytes 143-235) in fixture.Fetch
+  variant decision variants.go:19-23 (bytes 269-366) in fixture.Check
+  Policy RVD-001: This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate.
+Columbo: 9 failed, 0 warned, 0 suppressed
 Database: report.sqlite

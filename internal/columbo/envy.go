@@ -13,16 +13,14 @@ type accessGroup struct {
 	first    int
 }
 
-// A stable value is a variable plus a field path. Calls, indexes, package
-// selectors and method expressions never acquire a stable variable identity.
-type valueResolver struct {
-	declaration *declaration
-	info        *types.Info
-}
-
+// Feature Envy's normalization also treats address-taking and dereferencing
+// as access to the same stable value; the shared path resolver owns fields.
 func stableValue(d *declaration, expr ast.Expr) (*types.Var, string, bool) {
-	resolver := &valueResolver{d, d.file.typeInfo()}
-	return resolver.resolve(expr)
+	path := resolveValuePath(d.file.typeInfo(), expr, valueBase)
+	if !path.valid() {
+		return nil, "", false
+	}
+	return path.root, path.key(d.variable(path.root)), true
 }
 func valueBase(expr ast.Expr) ast.Expr {
 	expr = ast.Unparen(expr)
@@ -35,33 +33,6 @@ func valueBase(expr ast.Expr) ast.Expr {
 		}
 	}
 	return expr
-}
-func (r *valueResolver) resolve(expr ast.Expr) (*types.Var, string, bool) {
-	switch node := valueBase(expr).(type) {
-	case *ast.Ident:
-		return r.identifier(node)
-	case *ast.SelectorExpr:
-		return r.field(node)
-	}
-	return nil, "", false
-}
-func (r *valueResolver) identifier(id *ast.Ident) (*types.Var, string, bool) {
-	variable, ok := r.info.Uses[id].(*types.Var)
-	if !ok {
-		return nil, "", false
-	}
-	return variable, r.declaration.variable(variable), true
-}
-func (r *valueResolver) fieldSelection(expr *ast.SelectorExpr) bool {
-	selection := r.info.Selections[expr]
-	return selection != nil && selection.Kind() == types.FieldVal
-}
-func (r *valueResolver) field(expr *ast.SelectorExpr) (*types.Var, string, bool) {
-	if !r.fieldSelection(expr) {
-		return nil, "", false
-	}
-	variable, key, ok := r.resolve(expr.X)
-	return variable, key + "." + expr.Sel.Name, ok
 }
 
 // valueAccess binds a selected member to the stable value that owns it.
