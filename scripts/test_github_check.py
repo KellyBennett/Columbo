@@ -106,7 +106,7 @@ class PublisherTests(unittest.TestCase):
         annotations, _ = publisher.read_snapshot(self.snapshot, 1)
         finding = next(item for item in annotations if item["title"] == "Columbo: repeated-variant-decision")
         self.assertEqual("failure", finding["annotation_level"])
-        for text in ("value:fixture.SourceKind", "repeated-variant-set", "variant-support", "variant-set", "Policy RVD-001", "in fixture.Fetch", "in fixture.Check"):
+        for text in ("value:fixture.SourceKind", "repeated-variant-set", "variant-support", "variant-set", "Policy RVD-001", "in fixture.Fetch", "in fixture.Check", "factory", "visitor/adapter", "lead: If independent operations", "avoid: Adding wrapper objects"):
             self.assertIn(text, finding["message"])
         self.assertEqual(2, finding["message"].count("Variant decision: variants.go:"))
 

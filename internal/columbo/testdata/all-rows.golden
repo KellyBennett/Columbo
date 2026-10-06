@@ -41,14 +41,16 @@
 "C-5522b4859c" | "avoid" | 2 | "Suppressing the case without documented justification."
 "C-5522b4859c" | "lead" | 0 | "Review the qualifying helpers with their shared inputs and dependencies."
 "C-5522b4859c" | "lead" | 1 | "Establish cohesive boundaries with distinct ownership and collaboration."
-"C-82bc134f4f" | "avoid" | 0 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
-"C-82bc134f4f" | "avoid" | 1 | "Replacing switches with equivalent if/else chains."
-"C-82bc134f4f" | "avoid" | 2 | "Introducing an interface while callers still select concrete implementations repeatedly."
-"C-82bc134f4f" | "avoid" | 3 | "Renaming constants, aliases, variables, or files solely to evade correlation."
+"C-82bc134f4f" | "avoid" | 0 | "Adding wrapper objects, broad visitor protocols, or no-op methods solely to clear the finding without improving cohesion or reducing coupling."
+"C-82bc134f4f" | "avoid" | 1 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
+"C-82bc134f4f" | "avoid" | 2 | "Replacing switches with equivalent if/else chains."
+"C-82bc134f4f" | "avoid" | 3 | "Introducing an interface while callers still select concrete implementations repeatedly."
+"C-82bc134f4f" | "avoid" | 4 | "Renaming constants, aliases, variables, or files solely to evade correlation."
 "C-82bc134f4f" | "lead" | 0 | "Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves."
-"C-82bc134f4f" | "lead" | 1 | "If the variants select implementations, consider centralizing selection in one factory or construction boundary."
-"C-82bc134f4f" | "lead" | 2 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
-"C-82bc134f4f" | "lead" | 3 | "Move behavior toward the object or role that has the knowledge required to perform it."
+"C-82bc134f4f" | "lead" | 1 | "If the variants select implementations, use a factory or construction boundary to select once and return a common behavioral role; callers then send messages through that role."
+"C-82bc134f4f" | "lead" | 2 | "If independent operations inspect the same variants, evaluate a visitor or adapter with one dispatch boundary; keep operation-specific behavior, traversal policy, and results with each operation."
+"C-82bc134f4f" | "lead" | 3 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
+"C-82bc134f4f" | "lead" | 4 | "Move behavior toward the object or role that has the knowledge required to perform it."
 "C-ad03ea5957" | "avoid" | 0 | "Bundling unrelated inputs into an opaque bag solely to reduce the count."
 "C-ad03ea5957" | "lead" | 0 | "Examine whether inputs form a cohesive domain object."
 "C-ad03ea5957" | "lead" | 1 | "Separate responsibilities that require different inputs."
@@ -441,7 +443,7 @@
 
 [policy_reviews] id | note | review_prompt
 "CE-001" | "This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression."
-"RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Discuss whether the repeated knowledge should be centralized, represented as data, or moved behind a behavioral role before changing code or requesting suppression."
+"RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate."
 
 [receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
 72 | 0 | 9 | "fixture.Parent"

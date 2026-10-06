@@ -5,22 +5,26 @@
 "C-e8720c9979" | 3 | "evidence"
 
 [case_guidance] case_id | kind | ordinal | item
-"C-6e85826d00" | "avoid" | 0 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
-"C-6e85826d00" | "avoid" | 1 | "Replacing switches with equivalent if/else chains."
-"C-6e85826d00" | "avoid" | 2 | "Introducing an interface while callers still select concrete implementations repeatedly."
-"C-6e85826d00" | "avoid" | 3 | "Renaming constants, aliases, variables, or files solely to evade correlation."
+"C-6e85826d00" | "avoid" | 0 | "Adding wrapper objects, broad visitor protocols, or no-op methods solely to clear the finding without improving cohesion or reducing coupling."
+"C-6e85826d00" | "avoid" | 1 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
+"C-6e85826d00" | "avoid" | 2 | "Replacing switches with equivalent if/else chains."
+"C-6e85826d00" | "avoid" | 3 | "Introducing an interface while callers still select concrete implementations repeatedly."
+"C-6e85826d00" | "avoid" | 4 | "Renaming constants, aliases, variables, or files solely to evade correlation."
 "C-6e85826d00" | "lead" | 0 | "Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves."
-"C-6e85826d00" | "lead" | 1 | "If the variants select implementations, consider centralizing selection in one factory or construction boundary."
-"C-6e85826d00" | "lead" | 2 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
-"C-6e85826d00" | "lead" | 3 | "Move behavior toward the object or role that has the knowledge required to perform it."
-"C-e8720c9979" | "avoid" | 0 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
-"C-e8720c9979" | "avoid" | 1 | "Replacing switches with equivalent if/else chains."
-"C-e8720c9979" | "avoid" | 2 | "Introducing an interface while callers still select concrete implementations repeatedly."
-"C-e8720c9979" | "avoid" | 3 | "Renaming constants, aliases, variables, or files solely to evade correlation."
+"C-6e85826d00" | "lead" | 1 | "If the variants select implementations, use a factory or construction boundary to select once and return a common behavioral role; callers then send messages through that role."
+"C-6e85826d00" | "lead" | 2 | "If independent operations inspect the same variants, evaluate a visitor or adapter with one dispatch boundary; keep operation-specific behavior, traversal policy, and results with each operation."
+"C-6e85826d00" | "lead" | 3 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
+"C-6e85826d00" | "lead" | 4 | "Move behavior toward the object or role that has the knowledge required to perform it."
+"C-e8720c9979" | "avoid" | 0 | "Adding wrapper objects, broad visitor protocols, or no-op methods solely to clear the finding without improving cohesion or reducing coupling."
+"C-e8720c9979" | "avoid" | 1 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
+"C-e8720c9979" | "avoid" | 2 | "Replacing switches with equivalent if/else chains."
+"C-e8720c9979" | "avoid" | 3 | "Introducing an interface while callers still select concrete implementations repeatedly."
+"C-e8720c9979" | "avoid" | 4 | "Renaming constants, aliases, variables, or files solely to evade correlation."
 "C-e8720c9979" | "lead" | 0 | "Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves."
-"C-e8720c9979" | "lead" | 1 | "If the variants select implementations, consider centralizing selection in one factory or construction boundary."
-"C-e8720c9979" | "lead" | 2 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
-"C-e8720c9979" | "lead" | 3 | "Move behavior toward the object or role that has the knowledge required to perform it."
+"C-e8720c9979" | "lead" | 1 | "If the variants select implementations, use a factory or construction boundary to select once and return a common behavioral role; callers then send messages through that role."
+"C-e8720c9979" | "lead" | 2 | "If independent operations inspect the same variants, evaluate a visitor or adapter with one dispatch boundary; keep operation-specific behavior, traversal policy, and results with each operation."
+"C-e8720c9979" | "lead" | 3 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
+"C-e8720c9979" | "lead" | 4 | "Move behavior toward the object or role that has the knowledge required to perform it."
 
 [case_history] case_id | ordinal | commit_hash | kind
 "C-6e85826d00" | 0 | "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | "history"
@@ -132,7 +136,7 @@
 2 | "zsecond.go"
 
 [policy_reviews] id | note | review_prompt
-"RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Discuss whether the repeated knowledge should be centralized, represented as data, or moved behind a behavioral role before changing code or requesting suppression."
+"RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate."
 
 [receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
 

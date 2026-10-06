@@ -210,7 +210,7 @@ func TestVariantEvidence(t *testing.T) {
 	text, exit, err := RenderSnapshot(testDatabaseQueries(db), "report.sqlite")
 	require.NoError(t, err)
 	require.Equal(t, 1, exit)
-	for _, snippet := range []string{"value:fixture.Kind", "variant decision source.go:", "variant-support", "repeated-variant-set", "RVD-001", "in fixture.Second"} {
+	for _, snippet := range []string{"value:fixture.Kind", "variant decision source.go:", "variant-support", "repeated-variant-set", "RVD-001", "in fixture.Second", "factory", "visitor/adapter", "cohesion and coupling"} {
 		require.Contains(t, string(text), snippet)
 	}
 	require.Equal(t, 2, strings.Count(string(text), "variant decision "))
