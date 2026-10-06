@@ -2,7 +2,7 @@
 
 **Agent-first static analysis for Go. Strict on purpose.**
 
-Columbo helps you get out of the code review loop. Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
+**Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
 
 ## Why Columbo?
 
@@ -21,15 +21,6 @@ An agent can argue that a finding would make the design worse. The human driving
 Columbo is one piece of a development workflow that lets you delegate implementation without personally policing the design of every change.
 
 ## Use it
-
-Install with Go 1.25.1 and run from your Go module:
-
-```sh
-CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@latest
-columbo ./...
-```
-
-No configuration is required. Columbo currently analyzes production Go code; test files are excluded.
 
 To run it in GitHub Actions:
 
@@ -53,5 +44,16 @@ jobs:
 ```
 
 The action publishes findings as check annotations and retains the full evidence as an artifact. Failing findings block CI. Pin the action to a commit for reproducible runs.
+
+You can also run Columbo locally to investigate findings before pushing:
+
+Install with Go 1.25.1 and run from your Go module:
+
+```sh
+CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@latest
+columbo ./...
+```
+
+No configuration is required. Columbo currently analyzes production Go code; test files are excluded.
 
 [Configuration and rules](SPEC.md) · [Evidence query guide](docs/sqlite-schema.md) · [Development](docs/development.md)
