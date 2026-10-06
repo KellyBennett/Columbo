@@ -35,9 +35,9 @@ class PublisherTests(unittest.TestCase):
     def test_real_snapshot_preserves_findings_and_policy(self):
         before = self.snapshot.read_bytes()
         annotations, summary = publisher.read_snapshot(self.snapshot, 1)
-        self.assertEqual(9, len(annotations))
+        self.assertEqual(10, len(annotations))
         self.assertEqual(before, self.snapshot.read_bytes())
-        self.assertIn("9 failed, 0 warned, 0 suppressed", summary)
+        self.assertIn("10 failed, 0 warned, 0 suppressed", summary)
         first = annotations[0]
         self.assertEqual(("all.go", 13, 25, "failure"),
                          (first["path"], first["start_line"], first["end_line"], first["annotation_level"]))
@@ -47,6 +47,13 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("Policy CE-001", cosmetic["message"])
         self.assertIn("Review:", cosmetic["message"])
         self.assertIn("lead:", cosmetic["message"])
+
+    def test_selection_flow_and_policy_are_projected(self):
+        annotations, _ = publisher.read_snapshot(self.snapshot, 1)
+        finding = next(item for item in annotations if item["title"] == "Columbo: selection-use-coupling")
+        for text in ("fixture.Sender", "fixture.Email", "fixture.SMS", "selection-decision selection.go:", "selection-origin selection.go:", "selection-flow selection.go:", "selected-message selection.go:", "Send(string) error", "Close() error", "Policy SUC-001", "limit >= 2"):
+            self.assertIn(text, finding["message"])
+        self.assertEqual("failure", finding["annotation_level"])
 
     def test_dependency_origins_are_projected(self):
         annotations, _ = publisher.read_snapshot(self.snapshot, 1)
@@ -65,9 +72,9 @@ class PublisherTests(unittest.TestCase):
                 db.execute("UPDATE cases SET verdict='WARN' WHERE ordinal=0")
                 db.execute("UPDATE cases SET suppressed=1 WHERE ordinal=1")
             annotations, summary = publisher.read_snapshot(path, 1)
-        self.assertEqual(8, len(annotations))
+        self.assertEqual(9, len(annotations))
         self.assertEqual("warning", annotations[0]["annotation_level"])
-        self.assertIn("7 failed, 1 warned, 1 suppressed", summary)
+        self.assertIn("8 failed, 1 warned, 1 suppressed", summary)
         self.assertFalse(any("C-ad03ea5957" in item["message"] for item in annotations))
 
     def test_snapshot_without_dependency_origins_is_readable(self):
@@ -80,8 +87,8 @@ class PublisherTests(unittest.TestCase):
                 db.execute(f"DELETE FROM clue_values WHERE clue_id IN ({ids})")
                 db.execute(f"DELETE FROM clues WHERE id IN ({ids})")
             annotations, summary = publisher.read_snapshot(path, 1)
-        self.assertEqual(9, len(annotations))
-        self.assertIn("9 failed, 0 warned, 0 suppressed", summary)
+        self.assertEqual(10, len(annotations))
+        self.assertIn("10 failed, 0 warned, 0 suppressed", summary)
         finding = next(item for item in annotations if "excessive-dependencies" in item["title"])
         self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
         self.assertNotIn("Dependency origins", finding["message"])

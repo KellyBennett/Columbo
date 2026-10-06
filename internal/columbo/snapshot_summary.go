@@ -60,7 +60,7 @@ func (r *snapshotRenderer) cases() error {
 }
 func (r *snapshotRenderer) caseEntry(c summaryCase) error {
 	c.writeHeader(r)
-	for _, stage := range []func(string) error{r.suppressions, r.metrics, r.duplicateFragments, r.variantSets, r.variantDecisions, r.policyReviews} {
+	for _, stage := range []func(string) error{r.suppressions, r.metrics, r.duplicateFragments, r.clueSets, r.variantDecisions, r.selectionReceipts, r.policyReviews} {
 		if err := stage(c.ID); err != nil {
 			return err
 		}

@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-func (r *snapshotRenderer) variantSets(id string) error {
-	rows, err := r.queries.SummaryVariantSets(context.Background(), snapshotdb.SummaryVariantSetsParams{CaseID: id})
+func (r *snapshotRenderer) clueSets(id string) error {
+	rows, err := r.queries.SummaryClueSets(context.Background(), snapshotdb.SummaryClueSetsParams{CaseID: id})
 	if err != nil {
 		return err
 	}
-	sets := summaryVariantSets{rows: rows}
+	sets := summaryClueSets{rows: rows}
 	for sets.more() {
 		sets.next().write(r)
 	}
@@ -20,26 +20,26 @@ func (r *snapshotRenderer) variantSets(id string) error {
 }
 
 // The cursor owns grouping the ordered relational values into one displayed set.
-type summaryVariantSets struct {
-	rows     []snapshotdb.SummaryVariantSetsRow
+type summaryClueSets struct {
+	rows     []snapshotdb.SummaryClueSetsRow
 	position int
 }
-type summaryVariantSet struct {
+type summaryClueSet struct {
 	kind, subject string
 	values        []string
 }
 
-func (s *summaryVariantSets) more() bool { return s.position < len(s.rows) }
-func (s *summaryVariantSets) next() summaryVariantSet {
+func (s *summaryClueSets) more() bool { return s.position < len(s.rows) }
+func (s *summaryClueSets) next() summaryClueSet {
 	first := s.rows[s.position]
-	set := summaryVariantSet{kind: first.Kind, subject: first.Subject}
+	set := summaryClueSet{kind: first.Kind, subject: first.Subject}
 	for s.more() && s.rows[s.position].ClueOrdinal == first.ClueOrdinal {
 		set.values = append(set.values, s.rows[s.position].Value)
 		s.position++
 	}
 	return set
 }
-func (s summaryVariantSet) write(r *snapshotRenderer) {
+func (s summaryClueSet) write(r *snapshotRenderer) {
 	r.emit("  %s %s: %s\n", s.kind, s.subject, strings.Join(s.values, ", "))
 }
 func (r *snapshotRenderer) variantDecisions(id string) error {

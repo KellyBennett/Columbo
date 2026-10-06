@@ -513,7 +513,7 @@ func (a *engine) target(obj *types.Func) *declaration {
 }
 
 func (a *engine) Analyze() (Report, error) {
-	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.suppressions} {
+	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.selectionUses, a.suppressions} {
 		if e := stage(); e != nil {
 			return Report{}, e
 		}

@@ -13,9 +13,10 @@
 "C-5522b4859c" | 10 | "helper"
 "C-5522b4859c" | 11 | "expansion"
 "C-5522b4859c" | 11 | "helper"
-"C-82bc134f4f" | 12 | "evidence"
-"C-82bc134f4f" | 13 | "primary"
+"C-82bc134f4f" | 13 | "evidence"
+"C-82bc134f4f" | 14 | "primary"
 "C-ad03ea5957" | 8 | "primary"
+"C-b06ec7d1d9" | 12 | "primary"
 "C-b10bccb46b" | 7 | "primary"
 "C-cf8ec1ee12" | 6 | "primary"
 
@@ -54,6 +55,13 @@
 "C-ad03ea5957" | "avoid" | 0 | "Bundling unrelated inputs into an opaque bag solely to reduce the count."
 "C-ad03ea5957" | "lead" | 0 | "Examine whether inputs form a cohesive domain object."
 "C-ad03ea5957" | "lead" | 1 | "Separate responsibilities that require different inputs."
+"C-b06ec7d1d9" | "avoid" | 0 | "Moving only the switch into a helper that still exposes concrete implementation details to the caller."
+"C-b06ec7d1d9" | "avoid" | 1 | "Wrapping the concrete implementations in another facade solely to reduce the finding."
+"C-b06ec7d1d9" | "avoid" | 2 | "Renaming constructors, variables, or implementations."
+"C-b06ec7d1d9" | "avoid" | 3 | "Extracting branch bodies while leaving selection and collaboration in the same function."
+"C-b06ec7d1d9" | "lead" | 0 | "Consider moving implementation selection into a factory or composition boundary that returns the role."
+"C-b06ec7d1d9" | "lead" | 1 | "Consider accepting the role as a dependency instead of deciding which concrete player to use here."
+"C-b06ec7d1d9" | "lead" | 2 | "Keep collaboration expressed in terms of the role while centralizing knowledge of concrete implementations."
 "C-b10bccb46b" | "avoid" | 0 | "Extracting arbitrary helpers solely to reduce the line count."
 "C-b10bccb46b" | "avoid" | 1 | "Moving the same procedure into another file."
 "C-b10bccb46b" | "lead" | 0 | "Look for cohesive responsibilities with different reasons to change."
@@ -69,6 +77,7 @@
 [case_policy_reviews] case_id | ordinal | policy_id
 "C-5522b4859c" | 0 | "CE-001"
 "C-82bc134f4f" | 0 | "RVD-001"
+"C-b06ec7d1d9" | 0 | "SUC-001"
 
 [cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
 "C-3d6d2adfd3" | 2 | 5 | "high-cognitive-complexity" | "FAIL" | 0 | 27 | 37 | "Deep or repeated decision structures make behavior harder to follow." | "fixture.Complex exceeds the configured cognitive-complexity limit; its decision structure may need simplification."
@@ -76,8 +85,9 @@
 "C-47c5c497d6" | 6 | 2 | "data-clump" | "FAIL" | 0 | 47 | 47 | "Repeated groups of parameter types can indicate a missing shared concept." | "The parameter multiset anchored at fixture.ClumpA recurs at the configured support and size; it may represent a missing domain object."
 "C-4fb5041cb7" | 3 | 6 | "excessive-dependencies" | "FAIL" | 0 | 38 | 39 | "A broad dependency set is a lead to inspect where knowledge and decisions belong; the count alone does not establish mixed responsibilities." | "fixture.Dependencies exceeds the configured dependency limit. Inspect its evidence for repeated policy, exposed implementation details, implicit contracts, and cohesive collaboration."
 "C-5522b4859c" | 7 | 9 | "cosmetic-extraction" | "FAIL" | 0 | 50 | 53 | "Single-use helper sequences can retain the original procedure's coupling while hiding its metrics." | "fixture.Parent has helper clusters meeting the configured overlap conditions, and candidate expansion exceeds a configured metric limit; this may be cosmetic decomposition even if the helper names sound meaningful."
-"C-82bc134f4f" | 8 | 13 | "repeated-variant-decision" | "FAIL" | 0 | 10 | 17 | "Repeated decisions over the same variant domain distribute knowledge of that taxonomy. Adding or changing a variant may require coordinated edits across otherwise unrelated code." | "Multiple decision sites repeatedly distinguish variants of the same typed domain. This may indicate distributed variant knowledge, a missing behavioral role, or a decision that should be centralized."
+"C-82bc134f4f" | 9 | 14 | "repeated-variant-decision" | "FAIL" | 0 | 10 | 17 | "Repeated decisions over the same variant domain distribute knowledge of that taxonomy. Adding or changing a variant may require coordinated edits across otherwise unrelated code." | "Multiple decision sites repeatedly distinguish variants of the same typed domain. This may indicate distributed variant knowledge, a missing behavioral role, or a decision that should be centralized."
 "C-ad03ea5957" | 1 | 8 | "long-parameter-list" | "FAIL" | 0 | 26 | 26 | "Many parameters can obscure which inputs belong together." | "fixture.Parameters exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
+"C-b06ec7d1d9" | 8 | 12 | "selection-use-coupling" | "FAIL" | 0 | 16 | 27 | "Selecting a concrete implementation and collaborating with the resulting role in the same function couples construction policy to behavioral use. Changes to implementation selection can therefore affect code whose primary job is collaboration." | "fixture.Deliver selects among multiple concrete implementations of the same role and subsequently sends messages to the selected collaborator. This may indicate that implementation selection belongs at a separate construction or factory boundary."
 "C-b10bccb46b" | 0 | 7 | "long-function" | "FAIL" | 0 | 13 | 25 | "Long functions can obscure responsibility boundaries and ownership." | "fixture.LongFunction exceeds the configured source-line limit; this may indicate responsibilities that deserve separate boundaries."
 "C-cf8ec1ee12" | 4 | 6 | "long-parameter-list" | "FAIL" | 0 | 38 | 39 | "Many parameters can obscure which inputs belong together." | "fixture.Dependencies exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
 
@@ -215,23 +225,40 @@
 "C-5522b4859c" | 27 | 69
 "C-5522b4859c" | 27 | 70
 "C-5522b4859c" | 28 | 62
-"C-82bc134f4f" | 29 | 121
-"C-82bc134f4f" | 29 | 125
-"C-82bc134f4f" | 30 | 121
-"C-82bc134f4f" | 30 | 125
-"C-82bc134f4f" | 31 | 121
-"C-82bc134f4f" | 31 | 125
-"C-82bc134f4f" | 32 | 121
-"C-82bc134f4f" | 33 | 125
-"C-82bc134f4f" | 34 | 123
-"C-82bc134f4f" | 34 | 126
-"C-82bc134f4f" | 35 | 122
-"C-82bc134f4f" | 35 | 124
+"C-82bc134f4f" | 35 | 129
+"C-82bc134f4f" | 35 | 133
+"C-82bc134f4f" | 36 | 129
+"C-82bc134f4f" | 36 | 133
+"C-82bc134f4f" | 37 | 129
+"C-82bc134f4f" | 37 | 133
+"C-82bc134f4f" | 38 | 129
+"C-82bc134f4f" | 39 | 133
+"C-82bc134f4f" | 40 | 131
+"C-82bc134f4f" | 40 | 134
+"C-82bc134f4f" | 41 | 130
+"C-82bc134f4f" | 41 | 132
 "C-ad03ea5957" | 2 | 14
 "C-ad03ea5957" | 2 | 15
 "C-ad03ea5957" | 2 | 16
 "C-ad03ea5957" | 2 | 17
 "C-ad03ea5957" | 2 | 18
+"C-b06ec7d1d9" | 29 | 122
+"C-b06ec7d1d9" | 29 | 123
+"C-b06ec7d1d9" | 29 | 124
+"C-b06ec7d1d9" | 29 | 125
+"C-b06ec7d1d9" | 29 | 126
+"C-b06ec7d1d9" | 29 | 127
+"C-b06ec7d1d9" | 29 | 128
+"C-b06ec7d1d9" | 30 | 123
+"C-b06ec7d1d9" | 30 | 124
+"C-b06ec7d1d9" | 31 | 125
+"C-b06ec7d1d9" | 31 | 126
+"C-b06ec7d1d9" | 31 | 127
+"C-b06ec7d1d9" | 31 | 128
+"C-b06ec7d1d9" | 32 | 122
+"C-b06ec7d1d9" | 33 | 127
+"C-b06ec7d1d9" | 33 | 128
+"C-b06ec7d1d9" | 34 | 122
 "C-b10bccb46b" | 1 | 2
 "C-b10bccb46b" | 1 | 3
 "C-b10bccb46b" | 1 | 4
@@ -274,12 +301,17 @@
 22 | 1 | "fixture.Parent:b@816"
 28 | 0 | "fixture.Parent:a@813"
 28 | 1 | "fixture.Parent:b@816"
-30 | 0 | "value:fixture.SourceKind=\"reuters\""
-30 | 1 | "value:fixture.SourceKind=\"rss\""
-32 | 0 | "value:fixture.SourceKind=\"reuters\""
-32 | 1 | "value:fixture.SourceKind=\"rss\""
-33 | 0 | "value:fixture.SourceKind=\"reuters\""
-33 | 1 | "value:fixture.SourceKind=\"rss\""
+30 | 0 | "fixture.Email"
+30 | 1 | "fixture.SMS"
+31 | 0 | "Close() error"
+31 | 1 | "Send(string) error"
+32 | 0 | "fixture.Sender"
+36 | 0 | "value:fixture.SourceKind=\"reuters\""
+36 | 1 | "value:fixture.SourceKind=\"rss\""
+38 | 0 | "value:fixture.SourceKind=\"reuters\""
+38 | 1 | "value:fixture.SourceKind=\"rss\""
+39 | 0 | "value:fixture.SourceKind=\"reuters\""
+39 | 1 | "value:fixture.SourceKind=\"rss\""
 
 [clues] id | case_id | ordinal | kind | subject | value_type | numeric_value | limit_type | limit_value | operator | declaration_id | cluster_id | member_id | pair_left_member_id | pair_right_member_id
 1 | "C-b10bccb46b" | 0 | "function-lines" | "fixture.LongFunction" | "integer" | 11 | "integer" | 10 | ">" | 7 | NULL | NULL | NULL | NULL
@@ -310,13 +342,19 @@
 26 | "C-5522b4859c" | 12 | "parameter-overlap" | "all.go:826:member:fixture.stepOne" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | 1 | NULL | NULL
 27 | "C-5522b4859c" | 13 | "parameter-overlap" | "all.go:826:member:fixture.stepTwo" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | 2 | NULL | NULL
 28 | "C-5522b4859c" | 14 | "parent-input-set" | "all.go:826" | "list" | NULL | NULL | NULL | NULL | 9 | 1 | NULL | NULL | NULL
-29 | "C-82bc134f4f" | 0 | "repeated-variant-count" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
-30 | "C-82bc134f4f" | 1 | "repeated-variant-set" | "value:fixture.SourceKind" | "list" | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL
-31 | "C-82bc134f4f" | 2 | "variant-decision-sites" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
-32 | "C-82bc134f4f" | 3 | "variant-set" | "variants.go:143" | "list" | NULL | NULL | NULL | NULL | 13 | NULL | NULL | NULL | NULL
-33 | "C-82bc134f4f" | 4 | "variant-set" | "variants.go:269" | "list" | NULL | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
-34 | "C-82bc134f4f" | 5 | "variant-support" | "value:fixture.SourceKind=\"reuters\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
-35 | "C-82bc134f4f" | 6 | "variant-support" | "value:fixture.SourceKind=\"rss\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+29 | "C-b06ec7d1d9" | 0 | "selected-implementation-count" | "selection.go:358" | "integer" | 2 | "integer" | 2 | ">=" | 12 | NULL | NULL | NULL | NULL
+30 | "C-b06ec7d1d9" | 1 | "selected-implementation-set" | "selection.go:358" | "list" | NULL | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+31 | "C-b06ec7d1d9" | 2 | "selected-message-set" | "selection.go:358" | "list" | NULL | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+32 | "C-b06ec7d1d9" | 3 | "selected-role" | "fixture.Deliver" | "list" | NULL | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+33 | "C-b06ec7d1d9" | 4 | "selected-use-count" | "selection.go:358" | "integer" | 2 | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+34 | "C-b06ec7d1d9" | 5 | "selection-use-sites" | "fixture.Deliver:fixture.Sender" | "integer" | 1 | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+35 | "C-82bc134f4f" | 0 | "repeated-variant-count" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+36 | "C-82bc134f4f" | 1 | "repeated-variant-set" | "value:fixture.SourceKind" | "list" | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL
+37 | "C-82bc134f4f" | 2 | "variant-decision-sites" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+38 | "C-82bc134f4f" | 3 | "variant-set" | "variants.go:143" | "list" | NULL | NULL | NULL | NULL | 14 | NULL | NULL | NULL | NULL
+39 | "C-82bc134f4f" | 4 | "variant-set" | "variants.go:269" | "list" | NULL | NULL | NULL | NULL | 13 | NULL | NULL | NULL | NULL
+40 | "C-82bc134f4f" | 5 | "variant-support" | "value:fixture.SourceKind=\"reuters\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+41 | "C-82bc134f4f" | 6 | "variant-support" | "value:fixture.SourceKind=\"rss\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
 
 [cluster_members] id | cluster_id | case_id | helper_declaration_id | ordinal | call_offset
 1 | 1 | "C-5522b4859c" | 10 | 0 | 826
@@ -350,8 +388,12 @@
 11 | 14 | 0
 11 | 15 | 1
 11 | 16 | 0
+12 | 16 | 0
 12 | 17 | 1
-13 | 17 | 1
+12 | 18 | 1
+12 | 19 | 1
+13 | 20 | 1
+14 | 20 | 1
 
 [declarations] id | file_id | symbol | start_line | end_line | start_offset | end_offset
 1 | 1 | "fixture.(Own).Envy" | 44 | 46 | 608 | 680
@@ -365,8 +407,9 @@
 9 | 1 | "fixture.Parent" | 50 | 53 | 801 | 856
 10 | 1 | "fixture.stepOne" | 54 | 61 | 857 | 979
 11 | 1 | "fixture.stepTwo" | 62 | 69 | 980 | 1102
-12 | 2 | "fixture.Check" | 18 | 24 | 238 | 368
-13 | 2 | "fixture.Fetch" | 10 | 17 | 112 | 237
+12 | 2 | "fixture.Deliver" | 16 | 27 | 305 | 505
+13 | 3 | "fixture.Check" | 18 | 24 | 238 | 368
+14 | 3 | "fixture.Fetch" | 10 | 17 | 112 | 237
 
 [dependencies] id | identity
 1 | "type:fixture.Foreign"
@@ -385,7 +428,10 @@
 14 | "interface:interface{}"
 15 | "package:fmt"
 16 | "type:error"
-17 | "type:fixture.SourceKind"
+17 | "type:fixture.Email"
+18 | "type:fixture.SMS"
+19 | "type:fixture.Sender"
+20 | "type:fixture.SourceKind"
 
 [dependency_receipts] declaration_id | dependency_id | receipt_id | case_id
 6 | 2 | 25 | "C-4fb5041cb7"
@@ -439,11 +485,13 @@
 
 [files] id | path
 1 | "all.go"
-2 | "variants.go"
+2 | "selection.go"
+3 | "variants.go"
 
 [policy_reviews] id | note | review_prompt
 "CE-001" | "This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression."
 "RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate."
+"SUC-001" | "This rule deliberately treats local concrete-player selection followed by role collaboration as architectural pressure. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the selected role, concrete origins, controlling decision, value-flow evidence, and downstream messages. Discuss whether this function should own both implementation selection and collaboration before changing code or requesting suppression."
 
 [receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
 72 | 0 | 9 | "fixture.Parent"
@@ -609,15 +657,23 @@
 118 | "C-5522b4859c" | 56 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
 119 | "C-5522b4859c" | 57 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "type:error" | NULL | NULL | NULL | 11 | ""
 120 | "C-5522b4859c" | 58 | "dependency" | 1 | 68 | 68 | 1090 | 1097 | "package:fmt" | NULL | NULL | NULL | 11 | ""
-121 | "C-82bc134f4f" | 0 | "variant-decision" | 2 | 11 | 16 | 143 | 235 | "value:fixture.SourceKind" | NULL | NULL | NULL | 13 | ""
-122 | "C-82bc134f4f" | 1 | "variant-arm" | 2 | 12 | 12 | 163 | 166 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 13 | "RSS"
-123 | "C-82bc134f4f" | 2 | "variant-arm" | 2 | 14 | 14 | 197 | 204 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 13 | "Reuters"
-124 | "C-82bc134f4f" | 3 | "variant-arm" | 2 | 19 | 19 | 280 | 283 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 12 | "RSS"
-125 | "C-82bc134f4f" | 4 | "variant-decision" | 2 | 19 | 23 | 269 | 366 | "value:fixture.SourceKind" | NULL | NULL | NULL | 12 | ""
-126 | "C-82bc134f4f" | 5 | "variant-arm" | 2 | 21 | 21 | 329 | 336 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 12 | "Reuters"
+121 | "C-b06ec7d1d9" | 0 | "declaration" | 2 | 16 | 27 | 305 | 505 | "fixture.Deliver" | NULL | NULL | NULL | 12 | ""
+122 | "C-b06ec7d1d9" | 1 | "selection-decision" | 2 | 18 | 22 | 358 | 418 | "fixture.Sender" | NULL | NULL | NULL | 12 | ""
+123 | "C-b06ec7d1d9" | 2 | "selection-origin" | 2 | 19 | 19 | 380 | 387 | "fixture.Email" | NULL | NULL | NULL | 12 | ""
+124 | "C-b06ec7d1d9" | 3 | "selection-origin" | 2 | 21 | 21 | 409 | 415 | "fixture.SMS" | NULL | NULL | NULL | 12 | ""
+125 | "C-b06ec7d1d9" | 4 | "selection-flow" | 2 | 23 | 23 | 420 | 438 | "fixture.Sender" | NULL | NULL | NULL | 12 | ""
+126 | "C-b06ec7d1d9" | 5 | "selection-flow" | 2 | 24 | 24 | 440 | 458 | "fixture.Sender" | NULL | NULL | NULL | 12 | ""
+127 | "C-b06ec7d1d9" | 6 | "selected-message" | 2 | 25 | 25 | 460 | 480 | "Send(string) error" | NULL | NULL | NULL | 12 | ""
+128 | "C-b06ec7d1d9" | 7 | "selected-message" | 2 | 26 | 26 | 489 | 503 | "Close() error" | NULL | NULL | NULL | 12 | ""
+129 | "C-82bc134f4f" | 0 | "variant-decision" | 3 | 11 | 16 | 143 | 235 | "value:fixture.SourceKind" | NULL | NULL | NULL | 14 | ""
+130 | "C-82bc134f4f" | 1 | "variant-arm" | 3 | 12 | 12 | 163 | 166 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 14 | "RSS"
+131 | "C-82bc134f4f" | 2 | "variant-arm" | 3 | 14 | 14 | 197 | 204 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 14 | "Reuters"
+132 | "C-82bc134f4f" | 3 | "variant-arm" | 3 | 19 | 19 | 280 | 283 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 13 | "RSS"
+133 | "C-82bc134f4f" | 4 | "variant-decision" | 3 | 19 | 23 | 269 | 366 | "value:fixture.SourceKind" | NULL | NULL | NULL | 13 | ""
+134 | "C-82bc134f4f" | 5 | "variant-arm" | 3 | 21 | 21 | 329 | 336 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 13 | "Reuters"
 
 [summary] failed | warned | suppressed
-9 | 0 | 0
+10 | 0 | 0
 
 [suppressions] id | ordinal | smell | symbol | file_id | line | justification | applied | case_id
 

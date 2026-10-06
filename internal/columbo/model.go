@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision"}
+var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision", selectionSmell}
 
 type Summary struct {
 	Failed     int `json:"failed"`
@@ -343,6 +343,9 @@ func caseFromSource(smell, severity string, source Source) *Case {
 	return c
 }
 func (c *Case) addPolicyReview() {
+	if c.Smell == selectionSmell {
+		c.PolicyReviews = append(c.PolicyReviews, selectionPolicy)
+	}
 	if c.Smell == variantSmell {
 		c.PolicyReviews = append(c.PolicyReviews, variantPolicy)
 	}
