@@ -1,0 +1,51 @@
+[case_declarations] case_id | declaration_id | role
+
+[case_guidance] case_id | kind | ordinal | item
+
+[case_history] case_id | ordinal | commit_hash | kind
+
+[case_history_files] case_id | history_ordinal | ordinal | file_id
+
+[case_policy_reviews] case_id | ordinal | policy_id
+
+[cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
+
+[clue_receipts] case_id | clue_id | receipt_id
+
+[clue_values] clue_id | ordinal | value
+
+[clues] id | case_id | ordinal | kind | subject | value_type | numeric_value | limit_type | limit_value | operator | declaration_id | cluster_id | member_id | pair_left_member_id | pair_right_member_id
+
+[cluster_members] id | cluster_id | case_id | helper_declaration_id | ordinal | call_offset
+
+[clusters] id | case_id | cluster_key | owner_declaration_id | file_id | ordinal
+
+[commits] hash | committed_at
+
+[declaration_dependencies] declaration_id | dependency_id | scored
+
+[declarations] id | file_id | symbol | start_line | end_line | start_offset | end_offset
+
+[dependencies] id | identity
+
+[dependency_receipts] declaration_id | dependency_id | receipt_id | case_id
+
+[files] id | path
+
+[policy_reviews] id | note | review_prompt
+
+[receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
+
+[receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
+
+[report] id | schema_version | columbo_version
+1 | 1 | "test"
+
+[source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id | spelling
+
+[summary] failed | warned | suppressed
+0 | 0 | 0
+
+[suppressions] id | ordinal | smell | symbol | file_id | line | justification | applied | case_id
+
+[warnings] id | ordinal | code | file_id | line | message

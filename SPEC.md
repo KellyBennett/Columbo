@@ -586,3 +586,12 @@ Acceptance covers exact and renamed/literal-changed copies, groups of three, sam
 ## Repeated Variant Decision amendment
 
 The accepted [Repeated Variant Decision specification](docs/repeated-variant-decision.md) adds `repeated-variant-decision` at default FAIL with two inclusive structural minima. Its domain-only case identity overrides the ordinary primary-declaration identity rule. RVD-001 is provisional and applies to every emitted case. Source receipt spelling is stored explicitly. This amendment adds an eighth default FAIL smell; duplicate-code remains independent and defaults to WARN.
+
+## Selection + Use Coupling (SUC-001)
+
+The [Selection + Use Coupling specification](docs/selection-use-coupling.md)
+extends this specification with `selection-use-coupling` (default FAIL), the
+`selection-use-implementations` threshold (default 2, minimum 2), local reaching
+origins, construction/runtime exemptions, stable declaration-plus-role identity,
+and the selected-role/implementation/message evidence contract. It is independent
+of Repeated Variant Decision, Duplicate Code, and Excessive Dependencies.

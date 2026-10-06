@@ -1,0 +1,19 @@
+CASE C-92ebcdd20a fixture.Send source.go:16-16
+  selection-use-coupling: FAIL
+  selected-implementation-count source.go:592: 2 (limit >= 2)
+  selected-use-count source.go:592: 2
+  selection-use-sites fixture.Send:fixture.Sender: 1
+  selected-implementation-set source.go:592: fixture.Email, fixture.SMS
+  selected-message-set source.go:592: Close() error, Send(string) error
+  selected-role fixture.Send: fixture.Sender
+  selection decision source.go:16-16 (bytes 592-647): fixture.Sender
+  selection origin source.go:16-16 (bytes 612-620): fixture.Email
+  selection origin source.go:16-16 (bytes 639-645): fixture.SMS
+  selection flow source.go:16-16 (bytes 648-664): fixture.Sender
+  selection flow source.go:16-16 (bytes 665-681): fixture.Sender
+  selected message source.go:16-16 (bytes 682-698): Send(string) error
+  selected message source.go:16-16 (bytes 705-719): Close() error
+  Policy SUC-001: This rule deliberately treats local concrete-player selection followed by role collaboration as architectural pressure. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the selected role, concrete origins, controlling decision, value-flow evidence, and downstream messages. Discuss whether this function should own both implementation selection and collaboration before changing code or requesting suppression.
+Columbo: 1 failed, 0 warned, 0 suppressed
+Database: report.sqlite

@@ -36,6 +36,23 @@ CASE C-5522b4859c fixture.Parent all.go:50-53
   parameter-overlap all.go:826:member:fixture.stepTwo: 1.000000
   Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
   Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+CASE C-b06ec7d1d9 fixture.Deliver selection.go:16-27
+  selection-use-coupling: FAIL
+  selected-implementation-count selection.go:358: 2 (limit >= 2)
+  selected-use-count selection.go:358: 2
+  selection-use-sites fixture.Deliver:fixture.Sender: 1
+  selected-implementation-set selection.go:358: fixture.Email, fixture.SMS
+  selected-message-set selection.go:358: Close() error, Send(string) error
+  selected-role fixture.Deliver: fixture.Sender
+  selection decision selection.go:18-22 (bytes 358-418): fixture.Sender
+  selection origin selection.go:19-19 (bytes 380-387): fixture.Email
+  selection origin selection.go:21-21 (bytes 409-415): fixture.SMS
+  selection flow selection.go:23-23 (bytes 420-438): fixture.Sender
+  selection flow selection.go:24-24 (bytes 440-458): fixture.Sender
+  selected message selection.go:25-25 (bytes 460-480): Send(string) error
+  selected message selection.go:26-26 (bytes 489-503): Close() error
+  Policy SUC-001: This rule deliberately treats local concrete-player selection followed by role collaboration as architectural pressure. This is a provisional dogfooding policy; its review note does not change the case verdict.
+  Review: Show the human the selected role, concrete origins, controlling decision, value-flow evidence, and downstream messages. Discuss whether this function should own both implementation selection and collaboration before changing code or requesting suppression.
 CASE C-82bc134f4f fixture.Fetch variants.go:10-17
   repeated-variant-decision: FAIL
   repeated-variant-count value:fixture.SourceKind: 2 (limit >= 2)
@@ -49,5 +66,5 @@ CASE C-82bc134f4f fixture.Fetch variants.go:10-17
   variant decision variants.go:19-23 (bytes 269-366) in fixture.Check
   Policy RVD-001: This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict.
   Review: Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Evaluate a factory that selects role implementations once, or a visitor/adapter that centralizes variant dispatch while each operation owns its behavior and traversal. Also consider a shared data mapping. Compare cohesion and coupling before changing code or requesting suppression; the finding does not prove that a pattern is appropriate.
-Columbo: 9 failed, 0 warned, 0 suppressed
+Columbo: 10 failed, 0 warned, 0 suppressed
 Database: report.sqlite

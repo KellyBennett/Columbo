@@ -36,13 +36,14 @@ type Querier interface {
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
+	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
 	SummaryDuplicateFragments(ctx context.Context, arg SummaryDuplicateFragmentsParams) ([]SummaryDuplicateFragmentsRow, error)
 	SummaryMetrics(ctx context.Context, arg SummaryMetricsParams) ([]SummaryMetricsRow, error)
 	SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([]PolicyReview, error)
+	SummarySelectionReceipts(ctx context.Context, arg SummarySelectionReceiptsParams) ([]SummarySelectionReceiptsRow, error)
 	SummarySuppressions(ctx context.Context, arg SummarySuppressionsParams) ([]SummarySuppressionsRow, error)
 	SummaryTotals(ctx context.Context) (SummaryTotalsRow, error)
 	SummaryVariantDecisions(ctx context.Context, arg SummaryVariantDecisionsParams) ([]SummaryVariantDecisionsRow, error)
-	SummaryVariantSets(ctx context.Context, arg SummaryVariantSetsParams) ([]SummaryVariantSetsRow, error)
 	SummaryWarnings(ctx context.Context) ([]SummaryWarningsRow, error)
 	WarningMessages(ctx context.Context) ([]string, error)
 }

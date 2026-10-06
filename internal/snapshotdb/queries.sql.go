@@ -621,6 +621,54 @@ func (q *Queries) SummaryCases(ctx context.Context) ([]SummaryCasesRow, error) {
 	return items, nil
 }
 
+const summaryClueSets = `-- name: SummaryClueSets :many
+SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
+FROM clues c JOIN clue_values v ON v.clue_id=c.id
+WHERE c.case_id=?1 AND c.kind IN ('variant-set','repeated-variant-set','selected-role','selected-implementation-set','selected-message-set')
+ORDER BY c.ordinal,v.ordinal
+`
+
+type SummaryClueSetsParams struct {
+	CaseID string
+}
+
+type SummaryClueSetsRow struct {
+	Kind        string
+	Subject     string
+	Value       string
+	Ordinal     int64
+	ClueOrdinal int64
+}
+
+func (q *Queries) SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryClueSets, arg.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryClueSetsRow
+	for rows.Next() {
+		var i SummaryClueSetsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Subject,
+			&i.Value,
+			&i.Ordinal,
+			&i.ClueOrdinal,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const summaryDuplicateFragments = `-- name: SummaryDuplicateFragments :many
 SELECT f.path, r.start_line, r.end_line, r.start_offset, r.end_offset
 FROM source_receipts r JOIN files f ON f.id = r.file_id
@@ -747,6 +795,58 @@ func (q *Queries) SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([
 	return items, nil
 }
 
+const summarySelectionReceipts = `-- name: SummarySelectionReceipts :many
+SELECT r.kind,r.subject,f.path,r.start_line,r.end_line,r.start_offset,r.end_offset
+FROM source_receipts r JOIN files f ON f.id=r.file_id
+WHERE r.case_id=?1 AND r.kind IN ('selection-decision','selection-origin','selection-flow','selected-message')
+ORDER BY f.path,r.start_offset,r.kind
+`
+
+type SummarySelectionReceiptsParams struct {
+	CaseID string
+}
+
+type SummarySelectionReceiptsRow struct {
+	Kind        string
+	Subject     string
+	Path        string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+}
+
+func (q *Queries) SummarySelectionReceipts(ctx context.Context, arg SummarySelectionReceiptsParams) ([]SummarySelectionReceiptsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summarySelectionReceipts, arg.CaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummarySelectionReceiptsRow
+	for rows.Next() {
+		var i SummarySelectionReceiptsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Subject,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const summarySuppressions = `-- name: SummarySuppressions :many
 SELECT f.path,s.line,s.justification FROM suppressions s
 JOIN files f ON f.id=s.file_id WHERE s.case_id=? ORDER BY s.ordinal
@@ -839,54 +939,6 @@ func (q *Queries) SummaryVariantDecisions(ctx context.Context, arg SummaryVarian
 			&i.StartOffset,
 			&i.EndOffset,
 			&i.Symbol,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const summaryVariantSets = `-- name: SummaryVariantSets :many
-SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
-FROM clues c JOIN clue_values v ON v.clue_id=c.id
-WHERE c.case_id=?1 AND c.kind IN ('variant-set','repeated-variant-set')
-ORDER BY c.ordinal,v.ordinal
-`
-
-type SummaryVariantSetsParams struct {
-	CaseID string
-}
-
-type SummaryVariantSetsRow struct {
-	Kind        string
-	Subject     string
-	Value       string
-	Ordinal     int64
-	ClueOrdinal int64
-}
-
-func (q *Queries) SummaryVariantSets(ctx context.Context, arg SummaryVariantSetsParams) ([]SummaryVariantSetsRow, error) {
-	rows, err := q.db.QueryContext(ctx, summaryVariantSets, arg.CaseID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SummaryVariantSetsRow
-	for rows.Next() {
-		var i SummaryVariantSetsRow
-		if err := rows.Scan(
-			&i.Kind,
-			&i.Subject,
-			&i.Value,
-			&i.Ordinal,
-			&i.ClueOrdinal,
 		); err != nil {
 			return nil, err
 		}
