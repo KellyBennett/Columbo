@@ -12,7 +12,7 @@ Columbo supplies your agents with evidence and leads for investigating each find
 
 When your agents write code that couples unrelated responsibilities, tangles dependencies, or makes the codebase harder to change and maintain over time, Columbo finds it.
 
-Each finding gives the agent concrete evidence about what triggered the check and where to investigate next. Instead of spending tokens rediscovering the shape of the problem from scratch, the agent gets a focused starting point for understanding the design issue, changing the code, and running the check again.
+Each finding tells the agent what coupling risk Columbo detected, shows the concrete evidence behind it, identifies the code involved, and points to where to investigate next. Instead of spending tokens rediscovering the shape of the problem from scratch, the agent gets a focused starting point for understanding the design issue, changing the code, and running the check again.
 
 That creates a tight feedback loop:
 
