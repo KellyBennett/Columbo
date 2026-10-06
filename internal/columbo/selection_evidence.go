@@ -14,6 +14,7 @@ func (a *engine) selectionUses() error {
 	}
 	for _, d := range a.declarations {
 		if !selectionBoundary(d) {
+			a.branchRoles(d)
 			if err := a.selectionDeclaration(d); err != nil {
 				return err
 			}
@@ -58,6 +59,7 @@ func coalesceSelectionSites(sites []*selectionSite) []*selectionSite {
 	return result
 }
 func (site *selectionSite) include(other *selectionSite) {
+	site.observations = append(site.observations, other.observations...)
 	maps.Copy(site.origins, other.origins)
 	maps.Copy(site.messages, other.messages)
 	maps.Copy(site.flows, other.flows)
@@ -70,6 +72,9 @@ func (a *engine) reportSelection(d *declaration, role string, sites []*selection
 	c := caseFromSource(selectionSmell, a.config.Severity[selectionSmell], d.declReceipt())
 	c.ID = id
 	selectionEvidence(c, sites, a.config.Counts["selection-use-implementations"])
+	for _, site := range sites {
+		a.selectionRole(c, site)
+	}
 	a.report.Cases = append(a.report.Cases, *c)
 	return nil
 }

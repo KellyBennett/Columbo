@@ -252,6 +252,8 @@ func (site *selectionSite) use(use selectedUse, minimum int) {
 		site.usedOrigins[origin] = name
 	}
 	site.messages[use.call] = use.message
+	use.value.origins = origins
+	site.observations = append(site.observations, use)
 	for _, node := range use.flow {
 		site.flows[node] = true
 	}

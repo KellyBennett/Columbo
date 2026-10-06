@@ -127,3 +127,20 @@ SELECT r.kind,r.subject,f.path,r.start_line,r.end_line,r.start_offset,r.end_offs
 FROM source_receipts r JOIN files f ON f.id=r.file_id
 WHERE r.case_id=sqlc.arg(case_id) AND r.kind IN ('selection-decision','selection-origin','selection-flow','selected-message')
 ORDER BY f.path,r.start_offset,r.kind;
+
+-- name: InsertRoleCandidate :exec
+INSERT INTO role_candidates (id,canonical_interface,confidence,classification) VALUES (?,?,?,?);
+-- name: InsertRoleImplementation :exec
+INSERT INTO role_candidate_implementations (candidate_id,identity) VALUES (?,?);
+-- name: InsertRoleMessage :exec
+INSERT INTO role_candidate_messages (candidate_id,identity) VALUES (?,?);
+-- name: InsertRoleInterface :exec
+INSERT INTO role_candidate_interfaces (candidate_id,identity,relationship) VALUES (?,?,?);
+-- name: InsertRoleReceipt :exec
+INSERT INTO role_candidate_receipts (candidate_id,ordinal,declaration_id,kind,subject,message,start_line,end_line,start_offset,end_offset) VALUES (?,?,?,?,?,?,?,?,?,?);
+-- name: LinkRoleCase :exec
+INSERT INTO role_candidate_case_links (candidate_id,case_id) VALUES (?,?);
+-- name: SummaryRoles :many
+SELECT id,canonical_interface,confidence,classification FROM role_candidates ORDER BY id;
+-- name: SummaryRoleInterfaces :many
+SELECT identity,relationship FROM role_candidate_interfaces WHERE candidate_id=sqlc.arg(candidate_id) ORDER BY relationship,identity;

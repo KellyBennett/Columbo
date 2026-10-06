@@ -28,18 +28,26 @@ type Querier interface {
 	InsertHistoryFile(ctx context.Context, arg InsertHistoryFileParams) error
 	InsertPolicy(ctx context.Context, arg InsertPolicyParams) error
 	InsertReport(ctx context.Context, arg InsertReportParams) error
+	InsertRoleCandidate(ctx context.Context, arg InsertRoleCandidateParams) error
+	InsertRoleImplementation(ctx context.Context, arg InsertRoleImplementationParams) error
+	InsertRoleInterface(ctx context.Context, arg InsertRoleInterfaceParams) error
+	InsertRoleMessage(ctx context.Context, arg InsertRoleMessageParams) error
+	InsertRoleReceipt(ctx context.Context, arg InsertRoleReceiptParams) error
 	InsertSourceReceipt(ctx context.Context, arg InsertSourceReceiptParams) (int64, error)
 	InsertSuppression(ctx context.Context, arg InsertSuppressionParams) error
 	InsertWarning(ctx context.Context, arg InsertWarningParams) error
 	LinkCaseDeclaration(ctx context.Context, arg LinkCaseDeclarationParams) error
 	LinkClueReceipt(ctx context.Context, arg LinkClueReceiptParams) error
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
+	LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
 	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
 	SummaryDuplicateFragments(ctx context.Context, arg SummaryDuplicateFragmentsParams) ([]SummaryDuplicateFragmentsRow, error)
 	SummaryMetrics(ctx context.Context, arg SummaryMetricsParams) ([]SummaryMetricsRow, error)
 	SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([]PolicyReview, error)
+	SummaryRoleInterfaces(ctx context.Context, arg SummaryRoleInterfacesParams) ([]SummaryRoleInterfacesRow, error)
+	SummaryRoles(ctx context.Context) ([]RoleCandidate, error)
 	SummarySelectionReceipts(ctx context.Context, arg SummarySelectionReceiptsParams) ([]SummarySelectionReceiptsRow, error)
 	SummarySuppressions(ctx context.Context, arg SummarySuppressionsParams) ([]SummarySuppressionsRow, error)
 	SummaryTotals(ctx context.Context) (SummaryTotalsRow, error)

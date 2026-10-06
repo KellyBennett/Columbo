@@ -39,6 +39,7 @@ Dependency scoring counts named types and packages not already represented by a 
 ## Reference
 
 - [Configuration, analysis rules, and CLI contract](../SPEC.md)
+- [Common-role inference evidence](common-role-inference.md)
 - [SQLite schema, report handling, and query guide](sqlite-schema.md)
 - [Accepted SQLite implementation specification](sqlite-implementation-spec.md)
 - [SQLite cutover validation](sqlite-validation.md)

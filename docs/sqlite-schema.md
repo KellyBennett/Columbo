@@ -14,7 +14,7 @@ The writer builds a temporary sibling file in a transaction, validates integrity
 
 ## Identity and discovery
 
-Schema version 1 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
+Schema version 2 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
 
 The authoritative DDL is [internal/columbo/sqlite_schema.go](../internal/columbo/sqlite_schema.go). SQLite introspection discovers tables, columns, declared foreign keys, indexes, and views without Columbo or Go:
 
@@ -133,7 +133,7 @@ ORDER BY c.ordinal, f.path, r.start_offset;
 
 ## Repeated variant evidence
 
-`repeated-variant-decision` groups decisions by canonical typed domain, independent of branch bodies and duplicate-code. `variant-decision-sites`, `repeated-variant-count`, and `variant-support` are numeric clues; `repeated-variant-set` and `variant-set` use ordered `clue_values`. Source receipts use `variant-decision` and `variant-arm`, with explicit `source_declaration_id` ownership. The additive `source_receipts.spelling` column retains arm text (including aliases); its default is an empty string for other receipts. Existing schema/application identity stays at v1. See [the rule specification](repeated-variant-decision.md).
+`repeated-variant-decision` groups decisions by canonical typed domain, independent of branch bodies and duplicate-code. `variant-decision-sites`, `repeated-variant-count`, and `variant-support` are numeric clues; `repeated-variant-set` and `variant-set` use ordered `clue_values`. Source receipts use `variant-decision` and `variant-arm`, with explicit `source_declaration_id` ownership. The additive `source_receipts.spelling` column retains arm text (including aliases); its default is an empty string for other receipts. See [the rule specification](repeated-variant-decision.md).
 
 ```sql
 SELECT c.id,r.subject,f.path,r.start_line,r.start_offset,d.symbol,r.spelling
@@ -143,3 +143,7 @@ JOIN declarations d ON d.id=r.source_declaration_id
 WHERE c.smell='repeated-variant-decision'
 ORDER BY c.ordinal,f.path,r.start_offset,r.kind;
 ```
+
+## Schema version 2: common-role evidence
+
+Version 2 adds the six `role_candidate*` relations documented in [Common-Role Inference](common-role-inference.md). They do not participate in verdicts or summary totals. Use [role-evidence.sql](sqlite/role-evidence.sql) to inspect both linked and unlinked candidates. Regenerate version-1 snapshots or use their matching reader; existing files are not migrated in place.

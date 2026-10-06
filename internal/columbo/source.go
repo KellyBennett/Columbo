@@ -522,6 +522,7 @@ func (a *engine) Analyze() (Report, error) {
 		a.history()
 	}
 	a.report.finish()
+	a.report.finishRoles()
 	a.collectDeclarationEvidence()
 	return a.report, nil
 }
@@ -666,6 +667,7 @@ func (a *engine) collectDeclarationEvidence() {
 	for _, c := range a.report.Cases {
 		selection.addCase(c)
 	}
+	selection.addRoles(a.report.Roles)
 	a.report.Declarations = selection.declarations(a.declarations)
 }
 func (selection evidenceSelection) addCase(c Case) {

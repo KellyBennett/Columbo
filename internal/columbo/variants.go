@@ -12,6 +12,7 @@ const variantSmell = "repeated-variant-decision"
 // A site owns its physical evidence. Correlation uses only typed domain and
 // variant identities; branch bodies never participate.
 type variantSite struct {
+	node     ast.Node
 	domain   string
 	owner    *declaration
 	info     *types.Info
@@ -94,6 +95,7 @@ func (scanner *variantScanner) visit(node ast.Node) bool {
 	return true
 }
 func (scanner *variantScanner) record(site variantSite, node ast.Node) {
+	site.node = node
 	site.decision = scanner.owner.source("variant-decision", node.Pos(), node.End(), Detail{Subject: site.domain})
 	scanner.sites = append(scanner.sites, site)
 }
@@ -302,6 +304,7 @@ func (a *engine) reportVariants(domain string, group variantGroup) error {
 	c.ID = id
 	c.Receipts = []any{}
 	group.evidence(c, domain, a.config)
+	a.variantRoles(c, group)
 	a.report.Cases = append(a.report.Cases, *c)
 	return nil
 }

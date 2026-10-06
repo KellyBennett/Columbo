@@ -15,7 +15,7 @@ import (
 )
 
 // SchemaVersion and SQLiteApplicationID identify the only supported snapshot.
-const SchemaVersion = 1
+const SchemaVersion = 2
 const SQLiteApplicationID = 0x434c4d42
 
 // The embedded file is also sqlc's schema input. Do not maintain a second DDL.

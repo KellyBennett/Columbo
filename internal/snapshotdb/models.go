@@ -163,6 +163,47 @@ type Report struct {
 	ColumboVersion string
 }
 
+type RoleCandidate struct {
+	ID                 string
+	CanonicalInterface string
+	Confidence         string
+	Classification     string
+}
+
+type RoleCandidateCaseLink struct {
+	CandidateID string
+	CaseID      string
+}
+
+type RoleCandidateImplementation struct {
+	CandidateID string
+	Identity    string
+}
+
+type RoleCandidateInterface struct {
+	CandidateID  string
+	Identity     string
+	Relationship string
+}
+
+type RoleCandidateMessage struct {
+	CandidateID string
+	Identity    string
+}
+
+type RoleCandidateReceipt struct {
+	CandidateID   string
+	Ordinal       int64
+	DeclarationID int64
+	Kind          string
+	Subject       string
+	Message       string
+	StartLine     int64
+	EndLine       int64
+	StartOffset   int64
+	EndOffset     int64
+}
+
 type SourceReceipt struct {
 	ID                  int64
 	CaseID              string

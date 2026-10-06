@@ -44,10 +44,10 @@ class Snapshot:
     def validate(self):
         if self.db.execute("PRAGMA application_id").fetchone()[0] != 0x434C4D42:
             raise ValueError("not a Columbo snapshot")
-        if self.db.execute("PRAGMA user_version").fetchone()[0] != 1:
+        if self.db.execute("PRAGMA user_version").fetchone()[0] != 2:
             raise ValueError("unsupported Columbo snapshot schema")
         reports = self.db.execute("SELECT id,schema_version FROM report").fetchall()
-        if [tuple(row) for row in reports] != [(1, 1)]:
+        if [tuple(row) for row in reports] != [(1, 2)]:
             raise ValueError("invalid Columbo report metadata")
         if [tuple(row) for row in self.db.execute("PRAGMA integrity_check")] != [("ok",)]:
             raise ValueError("snapshot integrity check failed")
