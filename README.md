@@ -6,6 +6,8 @@
 
 **Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
 
+Columbo supplies your agents with evidence and leads for investigating each finding, so they can understand what triggered it, where to look next, and how to improve the design.
+
 ## Why Columbo?
 
 A normal linter on a human-run project usually stays out of your way. Columbo deliberately gets in the way. Humans will hate working in your codebase. Your agents can handle it.
@@ -16,7 +18,7 @@ Writing more rules in `CLAUDE.md` won't reliably make an agent get the design ri
 2. Columbo catches structural problems and fails CI.
 3. The agent investigates the evidence, improves the design, and runs it again.
 
-Columbo gives agents little leeway. It flags suspicious code even when that code might be defensible, and supplies evidence and leads for investigating it. Its checks run without an LLM.
+Columbo gives agents little leeway. It flags suspicious code even when that code might be defensible. Its checks run without an LLM.
 
 An agent can argue that a finding would make the design worse. The human driving it decides whether to grant an exception. Exceptions should stay exceptional.
 
