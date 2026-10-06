@@ -279,6 +279,7 @@ severity:
   data-clump: fail
   cosmetic-extraction: fail
   duplicate-code: warn
+  repeated-variant-decision: fail
 thresholds:
   function-lines: 10
   parameters: 4
@@ -291,6 +292,8 @@ thresholds:
   data-clump-occurrences: 3
   cosmetic-min-helpers: 2
   duplicate-tokens: 50
+  repeated-variant-sites: 2
+  repeated-variant-variants: 2
   cosmetic-dependency-overlap: 0.75
   cosmetic-parameter-overlap: 0.75
 history:
@@ -579,3 +582,7 @@ Store `duplicate-tokens` (inclusive configured minimum) and `duplicate-fragments
 Extend the SQLite case smell constraint to accept `duplicate-code`; the relational layout and application/schema identity remain unchanged. Add a typed query for ordered duplicate source ranges and project them into the compact summary and the existing Checks API finding message, rather than introducing another artifact format. The annotation stays on the primary fragment and names every supporting range.
 
 Acceptance covers exact and renamed/literal-changed copies, groups of three, same-file copies, excluded/generated/unselected/test sources, inclusive threshold and severity, repeated analysis identity/evidence, source offsets and typed relationships, anchor suppression, SQLite clue-to-receipt links, summaries, and GitHub annotation messages. Approximate clones with edits may evade dupl and zero findings do not prove absence of duplication.
+
+## Repeated Variant Decision amendment
+
+The accepted [Repeated Variant Decision specification](docs/repeated-variant-decision.md) adds `repeated-variant-decision` at default FAIL with two inclusive structural minima. Its domain-only case identity overrides the ordinary primary-declaration identity rule. RVD-001 is provisional and applies to every emitted case. Source receipt spelling is stored explicitly. This amendment adds an eighth default FAIL smell; duplicate-code remains independent and defaults to WARN.

@@ -13,6 +13,8 @@
 "C-5522b4859c" | 10 | "helper"
 "C-5522b4859c" | 11 | "expansion"
 "C-5522b4859c" | 11 | "helper"
+"C-82bc134f4f" | 12 | "evidence"
+"C-82bc134f4f" | 13 | "primary"
 "C-ad03ea5957" | 8 | "primary"
 "C-b10bccb46b" | 7 | "primary"
 "C-cf8ec1ee12" | 6 | "primary"
@@ -39,6 +41,14 @@
 "C-5522b4859c" | "avoid" | 2 | "Suppressing the case without documented justification."
 "C-5522b4859c" | "lead" | 0 | "Review the qualifying helpers with their shared inputs and dependencies."
 "C-5522b4859c" | "lead" | 1 | "Establish cohesive boundaries with distinct ownership and collaboration."
+"C-82bc134f4f" | "avoid" | 0 | "Moving each decision into a differently named helper while retaining the repeated variant knowledge."
+"C-82bc134f4f" | "avoid" | 1 | "Replacing switches with equivalent if/else chains."
+"C-82bc134f4f" | "avoid" | 2 | "Introducing an interface while callers still select concrete implementations repeatedly."
+"C-82bc134f4f" | "avoid" | 3 | "Renaming constants, aliases, variables, or files solely to evade correlation."
+"C-82bc134f4f" | "lead" | 0 | "Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves."
+"C-82bc134f4f" | "lead" | 1 | "If the variants select implementations, consider centralizing selection in one factory or construction boundary."
+"C-82bc134f4f" | "lead" | 2 | "If branches merely map variants to data, consider a data-driven representation owned near the variant definition."
+"C-82bc134f4f" | "lead" | 3 | "Move behavior toward the object or role that has the knowledge required to perform it."
 "C-ad03ea5957" | "avoid" | 0 | "Bundling unrelated inputs into an opaque bag solely to reduce the count."
 "C-ad03ea5957" | "lead" | 0 | "Examine whether inputs form a cohesive domain object."
 "C-ad03ea5957" | "lead" | 1 | "Separate responsibilities that require different inputs."
@@ -56,6 +66,7 @@
 
 [case_policy_reviews] case_id | ordinal | policy_id
 "C-5522b4859c" | 0 | "CE-001"
+"C-82bc134f4f" | 0 | "RVD-001"
 
 [cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
 "C-3d6d2adfd3" | 2 | 5 | "high-cognitive-complexity" | "FAIL" | 0 | 27 | 37 | "Deep or repeated decision structures make behavior harder to follow." | "fixture.Complex exceeds the configured cognitive-complexity limit; its decision structure may need simplification."
@@ -63,6 +74,7 @@
 "C-47c5c497d6" | 6 | 2 | "data-clump" | "FAIL" | 0 | 47 | 47 | "Repeated groups of parameter types can indicate a missing shared concept." | "The parameter multiset anchored at fixture.ClumpA recurs at the configured support and size; it may represent a missing domain object."
 "C-4fb5041cb7" | 3 | 6 | "excessive-dependencies" | "FAIL" | 0 | 38 | 39 | "A broad dependency set is a lead to inspect where knowledge and decisions belong; the count alone does not establish mixed responsibilities." | "fixture.Dependencies exceeds the configured dependency limit. Inspect its evidence for repeated policy, exposed implementation details, implicit contracts, and cohesive collaboration."
 "C-5522b4859c" | 7 | 9 | "cosmetic-extraction" | "FAIL" | 0 | 50 | 53 | "Single-use helper sequences can retain the original procedure's coupling while hiding its metrics." | "fixture.Parent has helper clusters meeting the configured overlap conditions, and candidate expansion exceeds a configured metric limit; this may be cosmetic decomposition even if the helper names sound meaningful."
+"C-82bc134f4f" | 8 | 13 | "repeated-variant-decision" | "FAIL" | 0 | 10 | 17 | "Repeated decisions over the same variant domain distribute knowledge of that taxonomy. Adding or changing a variant may require coordinated edits across otherwise unrelated code." | "Multiple decision sites repeatedly distinguish variants of the same typed domain. This may indicate distributed variant knowledge, a missing behavioral role, or a decision that should be centralized."
 "C-ad03ea5957" | 1 | 8 | "long-parameter-list" | "FAIL" | 0 | 26 | 26 | "Many parameters can obscure which inputs belong together." | "fixture.Parameters exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
 "C-b10bccb46b" | 0 | 7 | "long-function" | "FAIL" | 0 | 13 | 25 | "Long functions can obscure responsibility boundaries and ownership." | "fixture.LongFunction exceeds the configured source-line limit; this may indicate responsibilities that deserve separate boundaries."
 "C-cf8ec1ee12" | 4 | 6 | "long-parameter-list" | "FAIL" | 0 | 38 | 39 | "Many parameters can obscure which inputs belong together." | "fixture.Dependencies exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
@@ -201,6 +213,18 @@
 "C-5522b4859c" | 27 | 69
 "C-5522b4859c" | 27 | 70
 "C-5522b4859c" | 28 | 62
+"C-82bc134f4f" | 29 | 121
+"C-82bc134f4f" | 29 | 125
+"C-82bc134f4f" | 30 | 121
+"C-82bc134f4f" | 30 | 125
+"C-82bc134f4f" | 31 | 121
+"C-82bc134f4f" | 31 | 125
+"C-82bc134f4f" | 32 | 121
+"C-82bc134f4f" | 33 | 125
+"C-82bc134f4f" | 34 | 123
+"C-82bc134f4f" | 34 | 126
+"C-82bc134f4f" | 35 | 122
+"C-82bc134f4f" | 35 | 124
 "C-ad03ea5957" | 2 | 14
 "C-ad03ea5957" | 2 | 15
 "C-ad03ea5957" | 2 | 16
@@ -248,6 +272,12 @@
 22 | 1 | "fixture.Parent:b@816"
 28 | 0 | "fixture.Parent:a@813"
 28 | 1 | "fixture.Parent:b@816"
+30 | 0 | "value:fixture.SourceKind=\"reuters\""
+30 | 1 | "value:fixture.SourceKind=\"rss\""
+32 | 0 | "value:fixture.SourceKind=\"reuters\""
+32 | 1 | "value:fixture.SourceKind=\"rss\""
+33 | 0 | "value:fixture.SourceKind=\"reuters\""
+33 | 1 | "value:fixture.SourceKind=\"rss\""
 
 [clues] id | case_id | ordinal | kind | subject | value_type | numeric_value | limit_type | limit_value | operator | declaration_id | cluster_id | member_id | pair_left_member_id | pair_right_member_id
 1 | "C-b10bccb46b" | 0 | "function-lines" | "fixture.LongFunction" | "integer" | 11 | "integer" | 10 | ">" | 7 | NULL | NULL | NULL | NULL
@@ -278,6 +308,13 @@
 26 | "C-5522b4859c" | 12 | "parameter-overlap" | "all.go:826:member:fixture.stepOne" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | 1 | NULL | NULL
 27 | "C-5522b4859c" | 13 | "parameter-overlap" | "all.go:826:member:fixture.stepTwo" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | 2 | NULL | NULL
 28 | "C-5522b4859c" | 14 | "parent-input-set" | "all.go:826" | "list" | NULL | NULL | NULL | NULL | 9 | 1 | NULL | NULL | NULL
+29 | "C-82bc134f4f" | 0 | "repeated-variant-count" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+30 | "C-82bc134f4f" | 1 | "repeated-variant-set" | "value:fixture.SourceKind" | "list" | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL | NULL
+31 | "C-82bc134f4f" | 2 | "variant-decision-sites" | "value:fixture.SourceKind" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+32 | "C-82bc134f4f" | 3 | "variant-set" | "variants.go:143" | "list" | NULL | NULL | NULL | NULL | 13 | NULL | NULL | NULL | NULL
+33 | "C-82bc134f4f" | 4 | "variant-set" | "variants.go:269" | "list" | NULL | NULL | NULL | NULL | 12 | NULL | NULL | NULL | NULL
+34 | "C-82bc134f4f" | 5 | "variant-support" | "value:fixture.SourceKind=\"reuters\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
+35 | "C-82bc134f4f" | 6 | "variant-support" | "value:fixture.SourceKind=\"rss\"" | "integer" | 2 | "integer" | 2 | ">=" | NULL | NULL | NULL | NULL | NULL
 
 [cluster_members] id | cluster_id | case_id | helper_declaration_id | ordinal | call_offset
 1 | 1 | "C-5522b4859c" | 10 | 0 | 826
@@ -311,6 +348,8 @@
 11 | 14 | 0
 11 | 15 | 1
 11 | 16 | 0
+12 | 17 | 1
+13 | 17 | 1
 
 [declarations] id | file_id | symbol | start_line | end_line | start_offset | end_offset
 1 | 1 | "fixture.(Own).Envy" | 44 | 46 | 608 | 680
@@ -324,6 +363,8 @@
 9 | 1 | "fixture.Parent" | 50 | 53 | 801 | 856
 10 | 1 | "fixture.stepOne" | 54 | 61 | 857 | 979
 11 | 1 | "fixture.stepTwo" | 62 | 69 | 980 | 1102
+12 | 2 | "fixture.Check" | 18 | 24 | 238 | 368
+13 | 2 | "fixture.Fetch" | 10 | 17 | 112 | 237
 
 [dependencies] id | identity
 1 | "type:fixture.Foreign"
@@ -342,6 +383,7 @@
 14 | "interface:interface{}"
 15 | "package:fmt"
 16 | "type:error"
+17 | "type:fixture.SourceKind"
 
 [dependency_receipts] declaration_id | dependency_id | receipt_id | case_id
 6 | 2 | 25 | "C-4fb5041cb7"
@@ -395,9 +437,11 @@
 
 [files] id | path
 1 | "all.go"
+2 | "variants.go"
 
 [policy_reviews] id | note | review_prompt
 "CE-001" | "This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression."
+"RVD-001" | "This rule deliberately treats repeated interpretation of the same typed variant domain as architectural pressure even when the decisions may be intentional. This is a provisional dogfooding policy; its review note does not change the case verdict." | "Show the human the variant domain, every supporting decision site, each site's variant set, and the repeated variants with their support counts. Discuss whether the repeated knowledge should be centralized, represented as data, or moved behind a behavioral role before changing code or requesting suppression."
 
 [receipt_expansion_declarations] receipt_id | ordinal | declaration_id | symbol
 72 | 0 | 9 | "fixture.Parent"
@@ -442,130 +486,136 @@
 [report] id | schema_version | columbo_version
 1 | 1 | "test"
 
-[source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id
-1 | "C-b10bccb46b" | 0 | "declaration" | 1 | 13 | 25 | 102 | 303 | "fixture.LongFunction" | NULL | NULL | NULL | 7
-2 | "C-b10bccb46b" | 1 | "metric-contribution" | 1 | 14 | 14 | 124 | 140 | "function-lines" | "integer" | 1 | NULL | 7
-3 | "C-b10bccb46b" | 2 | "metric-contribution" | 1 | 15 | 15 | 140 | 156 | "function-lines" | "integer" | 1 | NULL | 7
-4 | "C-b10bccb46b" | 3 | "metric-contribution" | 1 | 16 | 16 | 156 | 172 | "function-lines" | "integer" | 1 | NULL | 7
-5 | "C-b10bccb46b" | 4 | "metric-contribution" | 1 | 17 | 17 | 172 | 188 | "function-lines" | "integer" | 1 | NULL | 7
-6 | "C-b10bccb46b" | 5 | "metric-contribution" | 1 | 18 | 18 | 188 | 204 | "function-lines" | "integer" | 1 | NULL | 7
-7 | "C-b10bccb46b" | 6 | "metric-contribution" | 1 | 19 | 19 | 204 | 220 | "function-lines" | "integer" | 1 | NULL | 7
-8 | "C-b10bccb46b" | 7 | "metric-contribution" | 1 | 20 | 20 | 220 | 236 | "function-lines" | "integer" | 1 | NULL | 7
-9 | "C-b10bccb46b" | 8 | "metric-contribution" | 1 | 21 | 21 | 236 | 252 | "function-lines" | "integer" | 1 | NULL | 7
-10 | "C-b10bccb46b" | 9 | "metric-contribution" | 1 | 22 | 22 | 252 | 268 | "function-lines" | "integer" | 1 | NULL | 7
-11 | "C-b10bccb46b" | 10 | "metric-contribution" | 1 | 23 | 23 | 268 | 285 | "function-lines" | "integer" | 1 | NULL | 7
-12 | "C-b10bccb46b" | 11 | "metric-contribution" | 1 | 24 | 24 | 285 | 302 | "function-lines" | "integer" | 1 | NULL | 7
-13 | "C-ad03ea5957" | 0 | "declaration" | 1 | 26 | 26 | 304 | 341 | "fixture.Parameters" | NULL | NULL | NULL | 8
-14 | "C-ad03ea5957" | 1 | "parameter" | 1 | 26 | 26 | 320 | 337 | "0:int" | "integer" | 5 | NULL | 8
-15 | "C-ad03ea5957" | 2 | "parameter" | 1 | 26 | 26 | 320 | 337 | "1:int" | "integer" | 5 | NULL | 8
-16 | "C-ad03ea5957" | 3 | "parameter" | 1 | 26 | 26 | 320 | 337 | "2:int" | "integer" | 5 | NULL | 8
-17 | "C-ad03ea5957" | 4 | "parameter" | 1 | 26 | 26 | 320 | 337 | "3:int" | "integer" | 5 | NULL | 8
-18 | "C-ad03ea5957" | 5 | "parameter" | 1 | 26 | 26 | 320 | 337 | "4:int" | "integer" | 5 | NULL | 8
-19 | "C-3d6d2adfd3" | 0 | "declaration" | 1 | 27 | 37 | 342 | 437 | "fixture.Complex" | NULL | NULL | NULL | 5
-20 | "C-3d6d2adfd3" | 1 | "metric-contribution" | 1 | 28 | 28 | 369 | 371 | "cognitive-complexity" | "integer" | 1 | 0 | 5
-21 | "C-3d6d2adfd3" | 2 | "metric-contribution" | 1 | 29 | 29 | 378 | 380 | "cognitive-complexity" | "integer" | 2 | 1 | 5
-22 | "C-3d6d2adfd3" | 3 | "metric-contribution" | 1 | 30 | 30 | 388 | 391 | "cognitive-complexity" | "integer" | 3 | 2 | 5
-23 | "C-3d6d2adfd3" | 4 | "metric-contribution" | 1 | 31 | 31 | 400 | 402 | "cognitive-complexity" | "integer" | 4 | 3 | 5
-24 | "C-4fb5041cb7" | 0 | "dependency" | 1 | 38 | 38 | 458 | 470 | "type:bytes.Buffer" | NULL | NULL | NULL | 6
-25 | "C-4fb5041cb7" | 1 | "dependency-inventory" | 1 | 38 | 38 | 464 | 470 | "package:bytes" | NULL | NULL | NULL | 6
-26 | "C-4fb5041cb7" | 2 | "dependency" | 1 | 38 | 38 | 474 | 488 | "type:strings.Reader" | NULL | NULL | NULL | 6
-27 | "C-4fb5041cb7" | 3 | "dependency-inventory" | 1 | 38 | 38 | 482 | 488 | "package:strings" | NULL | NULL | NULL | 6
-28 | "C-4fb5041cb7" | 4 | "dependency" | 1 | 38 | 38 | 492 | 501 | "type:time.Time" | NULL | NULL | NULL | 6
-29 | "C-4fb5041cb7" | 5 | "dependency-inventory" | 1 | 38 | 38 | 497 | 501 | "package:time" | NULL | NULL | NULL | 6
-30 | "C-4fb5041cb7" | 6 | "dependency" | 1 | 38 | 38 | 505 | 512 | "type:net/url.URL" | NULL | NULL | NULL | 6
-31 | "C-4fb5041cb7" | 7 | "dependency-inventory" | 1 | 38 | 38 | 509 | 512 | "package:net/url" | NULL | NULL | NULL | 6
-32 | "C-4fb5041cb7" | 8 | "dependency" | 1 | 38 | 38 | 516 | 528 | "type:encoding/json.Decoder" | NULL | NULL | NULL | 6
-33 | "C-4fb5041cb7" | 9 | "dependency-inventory" | 1 | 38 | 38 | 521 | 528 | "package:encoding/json" | NULL | NULL | NULL | 6
-34 | "C-4fb5041cb7" | 10 | "dependency" | 1 | 38 | 38 | 533 | 546 | "type:regexp.Regexp" | NULL | NULL | NULL | 6
-35 | "C-4fb5041cb7" | 11 | "dependency-inventory" | 1 | 38 | 38 | 540 | 546 | "package:regexp" | NULL | NULL | NULL | 6
-36 | "C-4fb5041cb7" | 12 | "declaration" | 1 | 38 | 39 | 438 | 551 | "fixture.Dependencies" | NULL | NULL | NULL | 6
-37 | "C-cf8ec1ee12" | 0 | "parameter" | 1 | 38 | 38 | 456 | 470 | "0:bytes.Buffer" | "integer" | 1 | NULL | 6
-38 | "C-cf8ec1ee12" | 1 | "parameter" | 1 | 38 | 38 | 472 | 488 | "1:strings.Reader" | "integer" | 1 | NULL | 6
-39 | "C-cf8ec1ee12" | 2 | "parameter" | 1 | 38 | 38 | 490 | 501 | "2:time.Time" | "integer" | 1 | NULL | 6
-40 | "C-cf8ec1ee12" | 3 | "parameter" | 1 | 38 | 38 | 503 | 512 | "3:net/url.URL" | "integer" | 1 | NULL | 6
-41 | "C-cf8ec1ee12" | 4 | "parameter" | 1 | 38 | 38 | 514 | 528 | "4:encoding/json.Decoder" | "integer" | 1 | NULL | 6
-42 | "C-cf8ec1ee12" | 5 | "parameter" | 1 | 38 | 38 | 530 | 546 | "5:regexp.Regexp" | "integer" | 1 | NULL | 6
-43 | "C-cf8ec1ee12" | 6 | "declaration" | 1 | 38 | 39 | 438 | 551 | "fixture.Dependencies" | NULL | NULL | NULL | 6
-44 | "C-4063b2b57c" | 0 | "declaration" | 1 | 44 | 46 | 608 | 680 | "fixture.(Own).Envy" | NULL | NULL | NULL | 1
-45 | "C-4063b2b57c" | 1 | "foreign-access" | 1 | 45 | 45 | 651 | 654 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1
-46 | "C-4063b2b57c" | 2 | "foreign-access" | 1 | 45 | 45 | 657 | 660 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1
-47 | "C-4063b2b57c" | 3 | "foreign-access" | 1 | 45 | 45 | 663 | 666 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1
-48 | "C-4063b2b57c" | 4 | "foreign-access" | 1 | 45 | 45 | 669 | 672 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1
-49 | "C-4063b2b57c" | 5 | "foreign-access" | 1 | 45 | 45 | 675 | 678 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1
-50 | "C-47c5c497d6" | 0 | "declaration" | 1 | 47 | 47 | 681 | 720 | "fixture.ClumpA" | NULL | NULL | NULL | 2
-51 | "C-47c5c497d6" | 1 | "parameter" | 1 | 47 | 47 | 693 | 698 | "0:int" | "integer" | 1 | NULL | 2
-52 | "C-47c5c497d6" | 2 | "parameter" | 1 | 47 | 47 | 700 | 708 | "1:string" | "integer" | 1 | NULL | 2
-53 | "C-47c5c497d6" | 3 | "parameter" | 1 | 47 | 47 | 710 | 716 | "2:bool" | "integer" | 1 | NULL | 2
-54 | "C-47c5c497d6" | 4 | "declaration" | 1 | 48 | 48 | 721 | 760 | "fixture.ClumpB" | NULL | NULL | NULL | 3
-55 | "C-47c5c497d6" | 5 | "parameter" | 1 | 48 | 48 | 733 | 738 | "0:int" | "integer" | 1 | NULL | 3
-56 | "C-47c5c497d6" | 6 | "parameter" | 1 | 48 | 48 | 740 | 748 | "1:string" | "integer" | 1 | NULL | 3
-57 | "C-47c5c497d6" | 7 | "parameter" | 1 | 48 | 48 | 750 | 756 | "2:bool" | "integer" | 1 | NULL | 3
-58 | "C-47c5c497d6" | 8 | "declaration" | 1 | 49 | 49 | 761 | 800 | "fixture.ClumpC" | NULL | NULL | NULL | 4
-59 | "C-47c5c497d6" | 9 | "parameter" | 1 | 49 | 49 | 773 | 778 | "0:int" | "integer" | 1 | NULL | 4
-60 | "C-47c5c497d6" | 10 | "parameter" | 1 | 49 | 49 | 780 | 788 | "1:string" | "integer" | 1 | NULL | 4
-61 | "C-47c5c497d6" | 11 | "parameter" | 1 | 49 | 49 | 790 | 796 | "2:bool" | "integer" | 1 | NULL | 4
-62 | "C-5522b4859c" | 0 | "declaration" | 1 | 50 | 53 | 801 | 856 | "fixture.Parent" | NULL | NULL | NULL | 9
-63 | "C-5522b4859c" | 1 | "metric-contribution" | 1 | 51 | 51 | 825 | 840 | "function-lines" | "integer" | 1 | NULL | 9
-64 | "C-5522b4859c" | 2 | "helper-call" | 1 | 51 | 51 | 826 | 839 | "fixture.stepOne" | NULL | NULL | NULL | 9
-65 | "C-5522b4859c" | 3 | "parameter" | 1 | 51 | 51 | 834 | 835 | "fixture.Parent:a@813" | NULL | NULL | NULL | 9
-66 | "C-5522b4859c" | 4 | "parameter" | 1 | 51 | 51 | 837 | 838 | "fixture.Parent:b@816" | NULL | NULL | NULL | 9
-67 | "C-5522b4859c" | 5 | "metric-contribution" | 1 | 52 | 52 | 840 | 855 | "function-lines" | "integer" | 1 | NULL | 9
-68 | "C-5522b4859c" | 6 | "helper-call" | 1 | 52 | 52 | 841 | 854 | "fixture.stepTwo" | NULL | NULL | NULL | 9
-69 | "C-5522b4859c" | 7 | "parameter" | 1 | 52 | 52 | 849 | 850 | "fixture.Parent:a@813" | NULL | NULL | NULL | 9
-70 | "C-5522b4859c" | 8 | "parameter" | 1 | 52 | 52 | 852 | 853 | "fixture.Parent:b@816" | NULL | NULL | NULL | 9
-71 | "C-5522b4859c" | 9 | "declaration" | 1 | 54 | 61 | 857 | 979 | "fixture.stepOne" | NULL | NULL | NULL | 10
-72 | "C-5522b4859c" | 10 | "metric-contribution" | 1 | 55 | 55 | 882 | 898 | "expanded-lines" | "integer" | 1 | NULL | 10
-73 | "C-5522b4859c" | 11 | "dependency-inventory" | 1 | 55 | 55 | 883 | 897 | "interface:interface{}" | NULL | NULL | NULL | 10
-74 | "C-5522b4859c" | 12 | "dependency-inventory" | 1 | 55 | 55 | 883 | 897 | "type:error" | NULL | NULL | NULL | 10
-75 | "C-5522b4859c" | 13 | "dependency" | 1 | 55 | 55 | 887 | 894 | "package:fmt" | NULL | NULL | NULL | 10
-76 | "C-5522b4859c" | 14 | "metric-contribution" | 1 | 56 | 56 | 898 | 914 | "expanded-lines" | "integer" | 1 | NULL | 10
-77 | "C-5522b4859c" | 15 | "dependency-inventory" | 1 | 56 | 56 | 899 | 913 | "interface:interface{}" | NULL | NULL | NULL | 10
-78 | "C-5522b4859c" | 16 | "dependency-inventory" | 1 | 56 | 56 | 899 | 913 | "type:error" | NULL | NULL | NULL | 10
-79 | "C-5522b4859c" | 17 | "dependency" | 1 | 56 | 56 | 903 | 910 | "package:fmt" | NULL | NULL | NULL | 10
-80 | "C-5522b4859c" | 18 | "metric-contribution" | 1 | 57 | 57 | 914 | 930 | "expanded-lines" | "integer" | 1 | NULL | 10
-81 | "C-5522b4859c" | 19 | "dependency-inventory" | 1 | 57 | 57 | 915 | 929 | "interface:interface{}" | NULL | NULL | NULL | 10
-82 | "C-5522b4859c" | 20 | "dependency-inventory" | 1 | 57 | 57 | 915 | 929 | "type:error" | NULL | NULL | NULL | 10
-83 | "C-5522b4859c" | 21 | "dependency" | 1 | 57 | 57 | 919 | 926 | "package:fmt" | NULL | NULL | NULL | 10
-84 | "C-5522b4859c" | 22 | "metric-contribution" | 1 | 58 | 58 | 930 | 946 | "expanded-lines" | "integer" | 1 | NULL | 10
-85 | "C-5522b4859c" | 23 | "dependency-inventory" | 1 | 58 | 58 | 931 | 945 | "interface:interface{}" | NULL | NULL | NULL | 10
-86 | "C-5522b4859c" | 24 | "dependency-inventory" | 1 | 58 | 58 | 931 | 945 | "type:error" | NULL | NULL | NULL | 10
-87 | "C-5522b4859c" | 25 | "dependency" | 1 | 58 | 58 | 935 | 942 | "package:fmt" | NULL | NULL | NULL | 10
-88 | "C-5522b4859c" | 26 | "metric-contribution" | 1 | 59 | 59 | 946 | 962 | "expanded-lines" | "integer" | 1 | NULL | 10
-89 | "C-5522b4859c" | 27 | "dependency-inventory" | 1 | 59 | 59 | 947 | 961 | "interface:interface{}" | NULL | NULL | NULL | 10
-90 | "C-5522b4859c" | 28 | "dependency-inventory" | 1 | 59 | 59 | 947 | 961 | "type:error" | NULL | NULL | NULL | 10
-91 | "C-5522b4859c" | 29 | "dependency" | 1 | 59 | 59 | 951 | 958 | "package:fmt" | NULL | NULL | NULL | 10
-92 | "C-5522b4859c" | 30 | "metric-contribution" | 1 | 60 | 60 | 962 | 978 | "expanded-lines" | "integer" | 1 | NULL | 10
-93 | "C-5522b4859c" | 31 | "dependency-inventory" | 1 | 60 | 60 | 963 | 977 | "interface:interface{}" | NULL | NULL | NULL | 10
-94 | "C-5522b4859c" | 32 | "dependency-inventory" | 1 | 60 | 60 | 963 | 977 | "type:error" | NULL | NULL | NULL | 10
-95 | "C-5522b4859c" | 33 | "dependency" | 1 | 60 | 60 | 967 | 974 | "package:fmt" | NULL | NULL | NULL | 10
-96 | "C-5522b4859c" | 34 | "declaration" | 1 | 62 | 69 | 980 | 1102 | "fixture.stepTwo" | NULL | NULL | NULL | 11
-97 | "C-5522b4859c" | 35 | "metric-contribution" | 1 | 63 | 63 | 1005 | 1021 | "expanded-lines" | "integer" | 1 | NULL | 11
-98 | "C-5522b4859c" | 36 | "dependency-inventory" | 1 | 63 | 63 | 1006 | 1020 | "interface:interface{}" | NULL | NULL | NULL | 11
-99 | "C-5522b4859c" | 37 | "dependency-inventory" | 1 | 63 | 63 | 1006 | 1020 | "type:error" | NULL | NULL | NULL | 11
-100 | "C-5522b4859c" | 38 | "dependency" | 1 | 63 | 63 | 1010 | 1017 | "package:fmt" | NULL | NULL | NULL | 11
-101 | "C-5522b4859c" | 39 | "metric-contribution" | 1 | 64 | 64 | 1021 | 1037 | "expanded-lines" | "integer" | 1 | NULL | 11
-102 | "C-5522b4859c" | 40 | "dependency-inventory" | 1 | 64 | 64 | 1022 | 1036 | "interface:interface{}" | NULL | NULL | NULL | 11
-103 | "C-5522b4859c" | 41 | "dependency-inventory" | 1 | 64 | 64 | 1022 | 1036 | "type:error" | NULL | NULL | NULL | 11
-104 | "C-5522b4859c" | 42 | "dependency" | 1 | 64 | 64 | 1026 | 1033 | "package:fmt" | NULL | NULL | NULL | 11
-105 | "C-5522b4859c" | 43 | "metric-contribution" | 1 | 65 | 65 | 1037 | 1053 | "expanded-lines" | "integer" | 1 | NULL | 11
-106 | "C-5522b4859c" | 44 | "dependency-inventory" | 1 | 65 | 65 | 1038 | 1052 | "interface:interface{}" | NULL | NULL | NULL | 11
-107 | "C-5522b4859c" | 45 | "dependency-inventory" | 1 | 65 | 65 | 1038 | 1052 | "type:error" | NULL | NULL | NULL | 11
-108 | "C-5522b4859c" | 46 | "dependency" | 1 | 65 | 65 | 1042 | 1049 | "package:fmt" | NULL | NULL | NULL | 11
-109 | "C-5522b4859c" | 47 | "metric-contribution" | 1 | 66 | 66 | 1053 | 1069 | "expanded-lines" | "integer" | 1 | NULL | 11
-110 | "C-5522b4859c" | 48 | "dependency-inventory" | 1 | 66 | 66 | 1054 | 1068 | "interface:interface{}" | NULL | NULL | NULL | 11
-111 | "C-5522b4859c" | 49 | "dependency-inventory" | 1 | 66 | 66 | 1054 | 1068 | "type:error" | NULL | NULL | NULL | 11
-112 | "C-5522b4859c" | 50 | "dependency" | 1 | 66 | 66 | 1058 | 1065 | "package:fmt" | NULL | NULL | NULL | 11
-113 | "C-5522b4859c" | 51 | "metric-contribution" | 1 | 67 | 67 | 1069 | 1085 | "expanded-lines" | "integer" | 1 | NULL | 11
-114 | "C-5522b4859c" | 52 | "dependency-inventory" | 1 | 67 | 67 | 1070 | 1084 | "interface:interface{}" | NULL | NULL | NULL | 11
-115 | "C-5522b4859c" | 53 | "dependency-inventory" | 1 | 67 | 67 | 1070 | 1084 | "type:error" | NULL | NULL | NULL | 11
-116 | "C-5522b4859c" | 54 | "dependency" | 1 | 67 | 67 | 1074 | 1081 | "package:fmt" | NULL | NULL | NULL | 11
-117 | "C-5522b4859c" | 55 | "metric-contribution" | 1 | 68 | 68 | 1085 | 1101 | "expanded-lines" | "integer" | 1 | NULL | 11
-118 | "C-5522b4859c" | 56 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "interface:interface{}" | NULL | NULL | NULL | 11
-119 | "C-5522b4859c" | 57 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "type:error" | NULL | NULL | NULL | 11
-120 | "C-5522b4859c" | 58 | "dependency" | 1 | 68 | 68 | 1090 | 1097 | "package:fmt" | NULL | NULL | NULL | 11
+[source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id | spelling
+1 | "C-b10bccb46b" | 0 | "declaration" | 1 | 13 | 25 | 102 | 303 | "fixture.LongFunction" | NULL | NULL | NULL | 7 | ""
+2 | "C-b10bccb46b" | 1 | "metric-contribution" | 1 | 14 | 14 | 124 | 140 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+3 | "C-b10bccb46b" | 2 | "metric-contribution" | 1 | 15 | 15 | 140 | 156 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+4 | "C-b10bccb46b" | 3 | "metric-contribution" | 1 | 16 | 16 | 156 | 172 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+5 | "C-b10bccb46b" | 4 | "metric-contribution" | 1 | 17 | 17 | 172 | 188 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+6 | "C-b10bccb46b" | 5 | "metric-contribution" | 1 | 18 | 18 | 188 | 204 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+7 | "C-b10bccb46b" | 6 | "metric-contribution" | 1 | 19 | 19 | 204 | 220 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+8 | "C-b10bccb46b" | 7 | "metric-contribution" | 1 | 20 | 20 | 220 | 236 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+9 | "C-b10bccb46b" | 8 | "metric-contribution" | 1 | 21 | 21 | 236 | 252 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+10 | "C-b10bccb46b" | 9 | "metric-contribution" | 1 | 22 | 22 | 252 | 268 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+11 | "C-b10bccb46b" | 10 | "metric-contribution" | 1 | 23 | 23 | 268 | 285 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+12 | "C-b10bccb46b" | 11 | "metric-contribution" | 1 | 24 | 24 | 285 | 302 | "function-lines" | "integer" | 1 | NULL | 7 | ""
+13 | "C-ad03ea5957" | 0 | "declaration" | 1 | 26 | 26 | 304 | 341 | "fixture.Parameters" | NULL | NULL | NULL | 8 | ""
+14 | "C-ad03ea5957" | 1 | "parameter" | 1 | 26 | 26 | 320 | 337 | "0:int" | "integer" | 5 | NULL | 8 | ""
+15 | "C-ad03ea5957" | 2 | "parameter" | 1 | 26 | 26 | 320 | 337 | "1:int" | "integer" | 5 | NULL | 8 | ""
+16 | "C-ad03ea5957" | 3 | "parameter" | 1 | 26 | 26 | 320 | 337 | "2:int" | "integer" | 5 | NULL | 8 | ""
+17 | "C-ad03ea5957" | 4 | "parameter" | 1 | 26 | 26 | 320 | 337 | "3:int" | "integer" | 5 | NULL | 8 | ""
+18 | "C-ad03ea5957" | 5 | "parameter" | 1 | 26 | 26 | 320 | 337 | "4:int" | "integer" | 5 | NULL | 8 | ""
+19 | "C-3d6d2adfd3" | 0 | "declaration" | 1 | 27 | 37 | 342 | 437 | "fixture.Complex" | NULL | NULL | NULL | 5 | ""
+20 | "C-3d6d2adfd3" | 1 | "metric-contribution" | 1 | 28 | 28 | 369 | 371 | "cognitive-complexity" | "integer" | 1 | 0 | 5 | ""
+21 | "C-3d6d2adfd3" | 2 | "metric-contribution" | 1 | 29 | 29 | 378 | 380 | "cognitive-complexity" | "integer" | 2 | 1 | 5 | ""
+22 | "C-3d6d2adfd3" | 3 | "metric-contribution" | 1 | 30 | 30 | 388 | 391 | "cognitive-complexity" | "integer" | 3 | 2 | 5 | ""
+23 | "C-3d6d2adfd3" | 4 | "metric-contribution" | 1 | 31 | 31 | 400 | 402 | "cognitive-complexity" | "integer" | 4 | 3 | 5 | ""
+24 | "C-4fb5041cb7" | 0 | "dependency" | 1 | 38 | 38 | 458 | 470 | "type:bytes.Buffer" | NULL | NULL | NULL | 6 | ""
+25 | "C-4fb5041cb7" | 1 | "dependency-inventory" | 1 | 38 | 38 | 464 | 470 | "package:bytes" | NULL | NULL | NULL | 6 | ""
+26 | "C-4fb5041cb7" | 2 | "dependency" | 1 | 38 | 38 | 474 | 488 | "type:strings.Reader" | NULL | NULL | NULL | 6 | ""
+27 | "C-4fb5041cb7" | 3 | "dependency-inventory" | 1 | 38 | 38 | 482 | 488 | "package:strings" | NULL | NULL | NULL | 6 | ""
+28 | "C-4fb5041cb7" | 4 | "dependency" | 1 | 38 | 38 | 492 | 501 | "type:time.Time" | NULL | NULL | NULL | 6 | ""
+29 | "C-4fb5041cb7" | 5 | "dependency-inventory" | 1 | 38 | 38 | 497 | 501 | "package:time" | NULL | NULL | NULL | 6 | ""
+30 | "C-4fb5041cb7" | 6 | "dependency" | 1 | 38 | 38 | 505 | 512 | "type:net/url.URL" | NULL | NULL | NULL | 6 | ""
+31 | "C-4fb5041cb7" | 7 | "dependency-inventory" | 1 | 38 | 38 | 509 | 512 | "package:net/url" | NULL | NULL | NULL | 6 | ""
+32 | "C-4fb5041cb7" | 8 | "dependency" | 1 | 38 | 38 | 516 | 528 | "type:encoding/json.Decoder" | NULL | NULL | NULL | 6 | ""
+33 | "C-4fb5041cb7" | 9 | "dependency-inventory" | 1 | 38 | 38 | 521 | 528 | "package:encoding/json" | NULL | NULL | NULL | 6 | ""
+34 | "C-4fb5041cb7" | 10 | "dependency" | 1 | 38 | 38 | 533 | 546 | "type:regexp.Regexp" | NULL | NULL | NULL | 6 | ""
+35 | "C-4fb5041cb7" | 11 | "dependency-inventory" | 1 | 38 | 38 | 540 | 546 | "package:regexp" | NULL | NULL | NULL | 6 | ""
+36 | "C-4fb5041cb7" | 12 | "declaration" | 1 | 38 | 39 | 438 | 551 | "fixture.Dependencies" | NULL | NULL | NULL | 6 | ""
+37 | "C-cf8ec1ee12" | 0 | "parameter" | 1 | 38 | 38 | 456 | 470 | "0:bytes.Buffer" | "integer" | 1 | NULL | 6 | ""
+38 | "C-cf8ec1ee12" | 1 | "parameter" | 1 | 38 | 38 | 472 | 488 | "1:strings.Reader" | "integer" | 1 | NULL | 6 | ""
+39 | "C-cf8ec1ee12" | 2 | "parameter" | 1 | 38 | 38 | 490 | 501 | "2:time.Time" | "integer" | 1 | NULL | 6 | ""
+40 | "C-cf8ec1ee12" | 3 | "parameter" | 1 | 38 | 38 | 503 | 512 | "3:net/url.URL" | "integer" | 1 | NULL | 6 | ""
+41 | "C-cf8ec1ee12" | 4 | "parameter" | 1 | 38 | 38 | 514 | 528 | "4:encoding/json.Decoder" | "integer" | 1 | NULL | 6 | ""
+42 | "C-cf8ec1ee12" | 5 | "parameter" | 1 | 38 | 38 | 530 | 546 | "5:regexp.Regexp" | "integer" | 1 | NULL | 6 | ""
+43 | "C-cf8ec1ee12" | 6 | "declaration" | 1 | 38 | 39 | 438 | 551 | "fixture.Dependencies" | NULL | NULL | NULL | 6 | ""
+44 | "C-4063b2b57c" | 0 | "declaration" | 1 | 44 | 46 | 608 | 680 | "fixture.(Own).Envy" | NULL | NULL | NULL | 1 | ""
+45 | "C-4063b2b57c" | 1 | "foreign-access" | 1 | 45 | 45 | 651 | 654 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
+46 | "C-4063b2b57c" | 2 | "foreign-access" | 1 | 45 | 45 | 657 | 660 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
+47 | "C-4063b2b57c" | 3 | "foreign-access" | 1 | 45 | 45 | 663 | 666 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
+48 | "C-4063b2b57c" | 4 | "foreign-access" | 1 | 45 | 45 | 669 | 672 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
+49 | "C-4063b2b57c" | 5 | "foreign-access" | 1 | 45 | 45 | 675 | 678 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
+50 | "C-47c5c497d6" | 0 | "declaration" | 1 | 47 | 47 | 681 | 720 | "fixture.ClumpA" | NULL | NULL | NULL | 2 | ""
+51 | "C-47c5c497d6" | 1 | "parameter" | 1 | 47 | 47 | 693 | 698 | "0:int" | "integer" | 1 | NULL | 2 | ""
+52 | "C-47c5c497d6" | 2 | "parameter" | 1 | 47 | 47 | 700 | 708 | "1:string" | "integer" | 1 | NULL | 2 | ""
+53 | "C-47c5c497d6" | 3 | "parameter" | 1 | 47 | 47 | 710 | 716 | "2:bool" | "integer" | 1 | NULL | 2 | ""
+54 | "C-47c5c497d6" | 4 | "declaration" | 1 | 48 | 48 | 721 | 760 | "fixture.ClumpB" | NULL | NULL | NULL | 3 | ""
+55 | "C-47c5c497d6" | 5 | "parameter" | 1 | 48 | 48 | 733 | 738 | "0:int" | "integer" | 1 | NULL | 3 | ""
+56 | "C-47c5c497d6" | 6 | "parameter" | 1 | 48 | 48 | 740 | 748 | "1:string" | "integer" | 1 | NULL | 3 | ""
+57 | "C-47c5c497d6" | 7 | "parameter" | 1 | 48 | 48 | 750 | 756 | "2:bool" | "integer" | 1 | NULL | 3 | ""
+58 | "C-47c5c497d6" | 8 | "declaration" | 1 | 49 | 49 | 761 | 800 | "fixture.ClumpC" | NULL | NULL | NULL | 4 | ""
+59 | "C-47c5c497d6" | 9 | "parameter" | 1 | 49 | 49 | 773 | 778 | "0:int" | "integer" | 1 | NULL | 4 | ""
+60 | "C-47c5c497d6" | 10 | "parameter" | 1 | 49 | 49 | 780 | 788 | "1:string" | "integer" | 1 | NULL | 4 | ""
+61 | "C-47c5c497d6" | 11 | "parameter" | 1 | 49 | 49 | 790 | 796 | "2:bool" | "integer" | 1 | NULL | 4 | ""
+62 | "C-5522b4859c" | 0 | "declaration" | 1 | 50 | 53 | 801 | 856 | "fixture.Parent" | NULL | NULL | NULL | 9 | ""
+63 | "C-5522b4859c" | 1 | "metric-contribution" | 1 | 51 | 51 | 825 | 840 | "function-lines" | "integer" | 1 | NULL | 9 | ""
+64 | "C-5522b4859c" | 2 | "helper-call" | 1 | 51 | 51 | 826 | 839 | "fixture.stepOne" | NULL | NULL | NULL | 9 | ""
+65 | "C-5522b4859c" | 3 | "parameter" | 1 | 51 | 51 | 834 | 835 | "fixture.Parent:a@813" | NULL | NULL | NULL | 9 | ""
+66 | "C-5522b4859c" | 4 | "parameter" | 1 | 51 | 51 | 837 | 838 | "fixture.Parent:b@816" | NULL | NULL | NULL | 9 | ""
+67 | "C-5522b4859c" | 5 | "metric-contribution" | 1 | 52 | 52 | 840 | 855 | "function-lines" | "integer" | 1 | NULL | 9 | ""
+68 | "C-5522b4859c" | 6 | "helper-call" | 1 | 52 | 52 | 841 | 854 | "fixture.stepTwo" | NULL | NULL | NULL | 9 | ""
+69 | "C-5522b4859c" | 7 | "parameter" | 1 | 52 | 52 | 849 | 850 | "fixture.Parent:a@813" | NULL | NULL | NULL | 9 | ""
+70 | "C-5522b4859c" | 8 | "parameter" | 1 | 52 | 52 | 852 | 853 | "fixture.Parent:b@816" | NULL | NULL | NULL | 9 | ""
+71 | "C-5522b4859c" | 9 | "declaration" | 1 | 54 | 61 | 857 | 979 | "fixture.stepOne" | NULL | NULL | NULL | 10 | ""
+72 | "C-5522b4859c" | 10 | "metric-contribution" | 1 | 55 | 55 | 882 | 898 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+73 | "C-5522b4859c" | 11 | "dependency-inventory" | 1 | 55 | 55 | 883 | 897 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+74 | "C-5522b4859c" | 12 | "dependency-inventory" | 1 | 55 | 55 | 883 | 897 | "type:error" | NULL | NULL | NULL | 10 | ""
+75 | "C-5522b4859c" | 13 | "dependency" | 1 | 55 | 55 | 887 | 894 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+76 | "C-5522b4859c" | 14 | "metric-contribution" | 1 | 56 | 56 | 898 | 914 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+77 | "C-5522b4859c" | 15 | "dependency-inventory" | 1 | 56 | 56 | 899 | 913 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+78 | "C-5522b4859c" | 16 | "dependency-inventory" | 1 | 56 | 56 | 899 | 913 | "type:error" | NULL | NULL | NULL | 10 | ""
+79 | "C-5522b4859c" | 17 | "dependency" | 1 | 56 | 56 | 903 | 910 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+80 | "C-5522b4859c" | 18 | "metric-contribution" | 1 | 57 | 57 | 914 | 930 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+81 | "C-5522b4859c" | 19 | "dependency-inventory" | 1 | 57 | 57 | 915 | 929 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+82 | "C-5522b4859c" | 20 | "dependency-inventory" | 1 | 57 | 57 | 915 | 929 | "type:error" | NULL | NULL | NULL | 10 | ""
+83 | "C-5522b4859c" | 21 | "dependency" | 1 | 57 | 57 | 919 | 926 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+84 | "C-5522b4859c" | 22 | "metric-contribution" | 1 | 58 | 58 | 930 | 946 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+85 | "C-5522b4859c" | 23 | "dependency-inventory" | 1 | 58 | 58 | 931 | 945 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+86 | "C-5522b4859c" | 24 | "dependency-inventory" | 1 | 58 | 58 | 931 | 945 | "type:error" | NULL | NULL | NULL | 10 | ""
+87 | "C-5522b4859c" | 25 | "dependency" | 1 | 58 | 58 | 935 | 942 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+88 | "C-5522b4859c" | 26 | "metric-contribution" | 1 | 59 | 59 | 946 | 962 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+89 | "C-5522b4859c" | 27 | "dependency-inventory" | 1 | 59 | 59 | 947 | 961 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+90 | "C-5522b4859c" | 28 | "dependency-inventory" | 1 | 59 | 59 | 947 | 961 | "type:error" | NULL | NULL | NULL | 10 | ""
+91 | "C-5522b4859c" | 29 | "dependency" | 1 | 59 | 59 | 951 | 958 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+92 | "C-5522b4859c" | 30 | "metric-contribution" | 1 | 60 | 60 | 962 | 978 | "expanded-lines" | "integer" | 1 | NULL | 10 | ""
+93 | "C-5522b4859c" | 31 | "dependency-inventory" | 1 | 60 | 60 | 963 | 977 | "interface:interface{}" | NULL | NULL | NULL | 10 | ""
+94 | "C-5522b4859c" | 32 | "dependency-inventory" | 1 | 60 | 60 | 963 | 977 | "type:error" | NULL | NULL | NULL | 10 | ""
+95 | "C-5522b4859c" | 33 | "dependency" | 1 | 60 | 60 | 967 | 974 | "package:fmt" | NULL | NULL | NULL | 10 | ""
+96 | "C-5522b4859c" | 34 | "declaration" | 1 | 62 | 69 | 980 | 1102 | "fixture.stepTwo" | NULL | NULL | NULL | 11 | ""
+97 | "C-5522b4859c" | 35 | "metric-contribution" | 1 | 63 | 63 | 1005 | 1021 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+98 | "C-5522b4859c" | 36 | "dependency-inventory" | 1 | 63 | 63 | 1006 | 1020 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+99 | "C-5522b4859c" | 37 | "dependency-inventory" | 1 | 63 | 63 | 1006 | 1020 | "type:error" | NULL | NULL | NULL | 11 | ""
+100 | "C-5522b4859c" | 38 | "dependency" | 1 | 63 | 63 | 1010 | 1017 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+101 | "C-5522b4859c" | 39 | "metric-contribution" | 1 | 64 | 64 | 1021 | 1037 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+102 | "C-5522b4859c" | 40 | "dependency-inventory" | 1 | 64 | 64 | 1022 | 1036 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+103 | "C-5522b4859c" | 41 | "dependency-inventory" | 1 | 64 | 64 | 1022 | 1036 | "type:error" | NULL | NULL | NULL | 11 | ""
+104 | "C-5522b4859c" | 42 | "dependency" | 1 | 64 | 64 | 1026 | 1033 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+105 | "C-5522b4859c" | 43 | "metric-contribution" | 1 | 65 | 65 | 1037 | 1053 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+106 | "C-5522b4859c" | 44 | "dependency-inventory" | 1 | 65 | 65 | 1038 | 1052 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+107 | "C-5522b4859c" | 45 | "dependency-inventory" | 1 | 65 | 65 | 1038 | 1052 | "type:error" | NULL | NULL | NULL | 11 | ""
+108 | "C-5522b4859c" | 46 | "dependency" | 1 | 65 | 65 | 1042 | 1049 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+109 | "C-5522b4859c" | 47 | "metric-contribution" | 1 | 66 | 66 | 1053 | 1069 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+110 | "C-5522b4859c" | 48 | "dependency-inventory" | 1 | 66 | 66 | 1054 | 1068 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+111 | "C-5522b4859c" | 49 | "dependency-inventory" | 1 | 66 | 66 | 1054 | 1068 | "type:error" | NULL | NULL | NULL | 11 | ""
+112 | "C-5522b4859c" | 50 | "dependency" | 1 | 66 | 66 | 1058 | 1065 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+113 | "C-5522b4859c" | 51 | "metric-contribution" | 1 | 67 | 67 | 1069 | 1085 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+114 | "C-5522b4859c" | 52 | "dependency-inventory" | 1 | 67 | 67 | 1070 | 1084 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+115 | "C-5522b4859c" | 53 | "dependency-inventory" | 1 | 67 | 67 | 1070 | 1084 | "type:error" | NULL | NULL | NULL | 11 | ""
+116 | "C-5522b4859c" | 54 | "dependency" | 1 | 67 | 67 | 1074 | 1081 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+117 | "C-5522b4859c" | 55 | "metric-contribution" | 1 | 68 | 68 | 1085 | 1101 | "expanded-lines" | "integer" | 1 | NULL | 11 | ""
+118 | "C-5522b4859c" | 56 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "interface:interface{}" | NULL | NULL | NULL | 11 | ""
+119 | "C-5522b4859c" | 57 | "dependency-inventory" | 1 | 68 | 68 | 1086 | 1100 | "type:error" | NULL | NULL | NULL | 11 | ""
+120 | "C-5522b4859c" | 58 | "dependency" | 1 | 68 | 68 | 1090 | 1097 | "package:fmt" | NULL | NULL | NULL | 11 | ""
+121 | "C-82bc134f4f" | 0 | "variant-decision" | 2 | 11 | 16 | 143 | 235 | "value:fixture.SourceKind" | NULL | NULL | NULL | 13 | ""
+122 | "C-82bc134f4f" | 1 | "variant-arm" | 2 | 12 | 12 | 163 | 166 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 13 | "RSS"
+123 | "C-82bc134f4f" | 2 | "variant-arm" | 2 | 14 | 14 | 197 | 204 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 13 | "Reuters"
+124 | "C-82bc134f4f" | 3 | "variant-arm" | 2 | 19 | 19 | 280 | 283 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 12 | "RSS"
+125 | "C-82bc134f4f" | 4 | "variant-decision" | 2 | 19 | 23 | 269 | 366 | "value:fixture.SourceKind" | NULL | NULL | NULL | 12 | ""
+126 | "C-82bc134f4f" | 5 | "variant-arm" | 2 | 21 | 21 | 329 | 336 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 12 | "Reuters"
 
 [summary] failed | warned | suppressed
-8 | 0 | 0
+9 | 0 | 0
 
 [suppressions] id | ordinal | smell | symbol | file_id | line | justification | applied | case_id
 

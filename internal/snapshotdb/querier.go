@@ -41,6 +41,8 @@ type Querier interface {
 	SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([]PolicyReview, error)
 	SummarySuppressions(ctx context.Context, arg SummarySuppressionsParams) ([]SummarySuppressionsRow, error)
 	SummaryTotals(ctx context.Context) (SummaryTotalsRow, error)
+	SummaryVariantDecisions(ctx context.Context, arg SummaryVariantDecisionsParams) ([]SummaryVariantDecisionsRow, error)
+	SummaryVariantSets(ctx context.Context, arg SummaryVariantSetsParams) ([]SummaryVariantSetsRow, error)
 	SummaryWarnings(ctx context.Context) ([]SummaryWarningsRow, error)
 	WarningMessages(ctx context.Context) ([]string, error)
 }

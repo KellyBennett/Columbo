@@ -130,3 +130,16 @@ JOIN files f ON f.id = r.file_id
 WHERE c.smell = 'duplicate-code' AND r.kind = 'duplicate-fragment'
 ORDER BY c.ordinal, f.path, r.start_offset;
 ```
+
+## Repeated variant evidence
+
+`repeated-variant-decision` groups decisions by canonical typed domain, independent of branch bodies and duplicate-code. `variant-decision-sites`, `repeated-variant-count`, and `variant-support` are numeric clues; `repeated-variant-set` and `variant-set` use ordered `clue_values`. Source receipts use `variant-decision` and `variant-arm`, with explicit `source_declaration_id` ownership. The additive `source_receipts.spelling` column retains arm text (including aliases); its default is an empty string for other receipts. Existing schema/application identity stays at v1. See [the rule specification](repeated-variant-decision.md).
+
+```sql
+SELECT c.id,r.subject,f.path,r.start_line,r.start_offset,d.symbol,r.spelling
+FROM cases c JOIN source_receipts r ON r.case_id=c.id
+JOIN files f ON f.id=r.file_id
+JOIN declarations d ON d.id=r.source_declaration_id
+WHERE c.smell='repeated-variant-decision'
+ORDER BY c.ordinal,f.path,r.start_offset,r.kind;
+```
