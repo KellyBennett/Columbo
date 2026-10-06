@@ -1,5 +1,7 @@
 # Columbo 🕵️
 
+*Just one more thing… about that function.*
+
 **Agent-first static analysis. Strict on purpose.**
 
 **Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
