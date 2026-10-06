@@ -55,7 +55,7 @@ You can also run Columbo locally to investigate findings before pushing:
 Install with Go 1.25.1 and run from your Go module:
 
 ```sh
-CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@latest
+go install github.com/KellyBennett/Columbo/cmd/columbo@latest
 columbo ./...
 ```
 
