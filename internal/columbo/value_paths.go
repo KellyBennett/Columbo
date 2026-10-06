@@ -44,13 +44,7 @@ func resolveValuePath(info *types.Info, expr ast.Expr, normalize func(ast.Expr) 
 	return (&valuePathResolver{info: info, normalize: normalize}).resolve(expr)
 }
 func (r *valuePathResolver) resolve(expr ast.Expr) resolvedValuePath {
-	switch n := r.normalize(expr).(type) {
-	case *ast.Ident:
-		return r.identifier(n)
-	case *ast.SelectorExpr:
-		return r.selector(n)
-	}
-	return resolvedValuePath{}
+	return visitReference(r.normalize(expr), r)
 }
 func (r *valuePathResolver) identifier(id *ast.Ident) resolvedValuePath {
 	variable, _ := r.info.ObjectOf(id).(*types.Var)

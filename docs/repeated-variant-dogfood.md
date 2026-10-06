@@ -75,3 +75,18 @@ This small protocol gives semantic type classification one owner without making 
 The `type:go/types.Type` case `C-44ed8eaf6c` clears because only one qualifying decision remains. Default self-check now reports **1 FAIL, 4 WARN, 0 suppressed**. The remaining `ast.Expr` case retains identity `C-499393d3e6`, three supporting sites, Ident support 2, and SelectorExpr support 3. No thresholds, severity settings, or suppressions changed. Its dependency-scanning site has moved to `metrics.go:308` (byte 9733).
 
 A regression fixture combines an alias, an instantiated generic recursive type, an interface-valued field, and nested method-signature interfaces. It confirms that discovery reaches underlying fields and method signatures without looping or duplicating results, while dependency collection preserves named boundaries and follows type arguments. Full Go tests, vet, existing evidence goldens, and the SQL boundary/sqlc checks pass.
+
+## Reference visitor follow-up
+
+Callee identification and value-path resolution now share `referenceVisitor[T]`, a two-message role for identifier and selector syntax. `visitReference` owns that classification and returns the operation's result type, or its zero value for unsupported syntax. The role describes syntax only: each operation retains semantic eligibility and normalization.
+
+| Operation | Identifier | Selector | Normalization |
+| --- | --- | --- | --- |
+| Callee name | Return the original identifier | Return the original selected identifier | Parentheses and generic callee indexing |
+| Resolved value path | Resolve a variable root | Resolve a field and recursively extend the root's path | Parentheses for variants; address/dereference normalization for Feature Envy |
+
+The dispatcher has one concrete name visitor and the existing value-path resolver as its collaborators. It needs neither wrapper objects nor empty methods for unrelated syntax. Dependency scanning continues to classify selectors, composite literals, and type assertions independently. The cost is a generic two-method protocol and an extra navigation step; the benefit is one owner for the shared identifier/selector syntax decision, with typed results and explicit caller policies.
+
+The `ast.Expr` group now has two decision sites, but only SelectorExpr repeats. Ident appears only in reference dispatch, while CompositeLit and TypeAssertExpr appear only in dependency scanning. Case `C-499393d3e6` therefore clears under the unchanged 2-site / 2-variant thresholds. The default self-check reports **0 FAIL, 4 duplicate-code WARN, 0 suppressed**, with the existing private-type-dispersion advisories also present.
+
+Callee regression tests cover original identifier/source-range preservation, generic calls, parentheses, and unsupported expression forms. Existing resolved-path tests continue to cover normalization boundaries, rejected indexes/calls/method selections, shadowed variables, and field identity. Full Go tests, vet, and SQL boundary/sqlc checks pass without evidence golden changes.

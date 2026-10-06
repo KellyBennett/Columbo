@@ -173,14 +173,13 @@ func calleeBase(e ast.Expr) ast.Expr {
 	return e
 }
 func calleeIdentifier(e ast.Expr) *ast.Ident {
-	switch x := calleeBase(e).(type) {
-	case *ast.Ident:
-		return x
-	case *ast.SelectorExpr:
-		return x.Sel
-	}
-	return nil
+	return visitReference(calleeBase(e), calleeName{})
 }
+
+type calleeName struct{}
+
+func (calleeName) identifier(id *ast.Ident) *ast.Ident        { return id }
+func (calleeName) selector(expr *ast.SelectorExpr) *ast.Ident { return expr.Sel }
 
 type callResolver struct{ info *types.Info }
 
