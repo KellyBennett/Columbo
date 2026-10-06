@@ -2,28 +2,30 @@
 
 *Just one more thing… about that function.*
 
-**Agent-first static analysis. Strict on purpose.**
+**Agent-first architectural enforcement. Strict on purpose.**
 
-**Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
+**Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to mechanically close off structural paths by which coupling can spread through agent-written code.
 
-Columbo supplies your agents with evidence and leads for investigating each finding, so they can understand what triggered it, where to look next, and how to improve the design.
+Columbo supplies your agents with evidence and leads for investigating each finding, so they can understand what triggered it, what architectural pressure the rule is protecting against, and how to change the design rather than merely hide the evidence.
 
 ## Why Columbo?
 
-When your agents write code that couples unrelated responsibilities, tangles dependencies, or makes the codebase harder to change and maintain over time, Columbo finds it.
+Agentic coding changes the economics of architectural enforcement. Refactoring is cheaper, so CI can afford to reject structural shortcuts that a human team might reasonably tolerate in isolation.
 
-Each finding tells the agent what coupling risk Columbo detected, shows the concrete evidence behind it, identifies the code involved, and points to where to investigate next. Instead of spending tokens rediscovering the shape of the problem from scratch, the agent gets a focused starting point for understanding the design issue, changing the code, and running the check again.
+Columbo does not need to prove that every failing occurrence is already causing pain. A FAIL means the source contains a structural form that the configured policy has chosen not to permit. The local code may be perfectly understandable; the policy can still reject it because allowing that shape leaves a coupling vector available to accumulate across the system.
+
+Each finding separates the mechanical evidence Columbo can prove from the architectural diagnosis it suggests. The evidence determines whether the configured invariant was crossed. The diagnosis and leads help the agent remove the coupling vector instead of making the detector unable to see it.
 
 That creates a tight feedback loop:
 
 1. The agent writes code.
-2. Columbo catches suspicious structure and fails CI.
-3. Columbo gives the agent evidence and context for the finding.
-4. The agent improves the design and reruns the check.
+2. Columbo detects a prohibited structural shape and fails CI.
+3. Columbo gives the agent evidence, architectural context, and leads.
+4. The agent removes the coupling vector and reruns the check.
 
-Columbo is strict on purpose. A finding can still be defensible, and an agent can make that case. But exceptions stay exceptional.
+Columbo is strict on purpose. A particular occurrence can still be defensible, but "this instance seems harmless" is not enough to defeat a system-wide invariant. Suppressions exist for genuine exceptions; they stay exceptional.
 
-The goal is to let you delegate implementation without personally reconstructing the design problems in every agent-written change.
+The goal is to let you delegate implementation while CI continuously applies architectural pressure toward code that is easier to change.
 
 ## Use it
 
