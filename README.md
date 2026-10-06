@@ -1,6 +1,6 @@
 # Columbo 🕵️
 
-**Agent-first static analysis for Go. Strict on purpose.**
+**Agent-first static analysis. Strict on purpose.**
 
 **Put Columbo in your CI to get yourself out of the code review loop.** Its goal is to stop you having to inspect every agent-written change for coupling, tangled responsibilities, and decisions that will make your codebase harder to change.
 
@@ -54,6 +54,16 @@ CGO_ENABLED=0 go install github.com/KellyBennett/Columbo/cmd/columbo@latest
 columbo ./...
 ```
 
-No configuration is required. Columbo currently analyzes production Go code; test files are excluded.
+No configuration is required. Columbo currently analyzes production code; test files are excluded.
 
 [Configuration and rules](SPEC.md) · [Evidence query guide](docs/sqlite-schema.md) · [Development](docs/development.md)
+
+## Supported Languages
+
+- Go
+
+### Coming Soon
+
+- JavaScript
+- Python
+- Ruby
