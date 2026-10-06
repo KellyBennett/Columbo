@@ -5,8 +5,6 @@ import (
 	"go/token"
 )
 
-// expansionContext owns the recursive call path shared by both virtual metrics.
-// Each child gets its own trace; the stack disqualifies recursive expansion.
 type expansionContext struct {
 	engine *engine
 	owner  *declaration
@@ -92,8 +90,6 @@ func (e *lineExpansion) remove(call *ast.CallExpr) {
 	}
 }
 
-// A replaced call loses its own syntax while retaining nested-call token ranges.
-// Nested calls are expanded first, so their masks and copied evidence survive.
 type tokenRange struct{ start, end token.Pos }
 type callMask struct {
 	root     *ast.CallExpr

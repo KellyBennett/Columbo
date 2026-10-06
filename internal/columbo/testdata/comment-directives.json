@@ -1,0 +1,41 @@
+{
+  "allowed": [
+    "//go:build linux",
+    "// +build linux",
+    "//go:generate stringer -type=State",
+    "//go:embed assets/*",
+    "//go:noinline",
+    "//go:noescape",
+    "//go:nosplit",
+    "//go:linkname name other.name",
+    "//go:wasmimport env fn",
+    "//go:wasmexport fn",
+    "//go:debug panicnil=1",
+    "//line original.go:23",
+    "/*line original.go:23:4*/",
+    "//export Function",
+    "//nolint",
+    "//nolint:revive,staticcheck // required reason",
+    "//lint:ignore SA1019 compatibility reason",
+    "//lint:file-ignore U1000 generated bridge",
+    "// columbo:ignore long-function -- accepted design exception"
+  ],
+  "rejected": [
+    "//",
+    "/* */",
+    "// TODO: preserve behavior",
+    "//go:invented prose",
+    "// go:embed assets/*",
+    "//go:noinline please keep this design",
+    "//go:embed",
+    "//go:embedded prose",
+    "/*go:noinline*/",
+    "//custom:ignore anything",
+    "//nolint prose",
+    "//nolintx",
+    "//line missing.go",
+    "//export ",
+    "//lint:ignore",
+    "//columbo:ignore"
+  ]
+}

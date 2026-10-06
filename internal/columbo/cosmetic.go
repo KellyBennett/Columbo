@@ -164,8 +164,6 @@ func (cl *helperCluster) matches(config Config) bool {
 	return meets(cl.meanP, config.Ratios["cosmetic-parameter-overlap"]) && meets(cl.meanD, config.Ratios["cosmetic-dependency-overlap"])
 }
 
-// These grammar tables classify lexical scopes and sequence boundaries. They do
-// not select helpers or relax policy: every boundary from the original rule is kept.
 var clusterBoundaries = map[reflect.Type]bool{
 	reflect.TypeOf((*ast.IfStmt)(nil)):         true,
 	reflect.TypeOf((*ast.ForStmt)(nil)):        true,
@@ -419,7 +417,6 @@ func (p *clusterPresentation) memberEvidence(call *ast.CallExpr) {
 	appendSources(p.finding, sources)
 }
 
-// clusterEvidence owns the distinct evidence roles behind aggregate overlaps.
 type clusterEvidence struct {
 	cluster *helperCluster
 	engine  *engine

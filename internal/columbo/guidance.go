@@ -8,6 +8,7 @@ type advice struct {
 }
 
 var adviceCatalog = map[string]advice{
+	commentSmell:                commentAdvice,
 	variantSmell:                variantAdvice,
 	selectionSmell:              selectionAdvice,
 	"duplicate-code":            {"Repeated syntax can hide shared policy and increase the cost of coordinated changes.", "The fragment anchored at {symbol} has matching Go AST structure elsewhere; names and literal values are ignored. This is a review lead, not proof of equivalent behavior.", []string{"Compare every duplicate-fragment receipt and identify knowledge that must change together.", "Share an operation only when the copies own the same policy."}, []string{"Extracting ordinary Go boilerplate or unrelated operations solely to remove a structural match.", "Treating structural similarity as semantic equivalence."}},
@@ -26,4 +27,19 @@ func guidance(c *Case) {
 	c.Diagnosis = strings.ReplaceAll(a.diagnosis, "{symbol}", c.Symbol)
 	c.Leads = append([]string{}, a.leads...)
 	c.Avoid = append([]string{}, a.avoid...)
+}
+
+var commentAdvice = advice{
+	why:       "Prose comments cannot reliably enforce behavior or prevent a future agent from undoing an intentional omission.",
+	diagnosis: "The file contains prose comments prohibited by policy; recognized machine directives are exempt. This proves a policy violation, not that the documented intent is unimportant.",
+	leads: []string{
+		"If a comment preserves an intentional omission or guards against a future fix, write a regression test that fails when the unwanted behavior is introduced. Comments are not a reliable enforcement mechanism.",
+		"Express intent through clear names, cohesive structure, and executable contracts; preserve useful design rationale in external documentation.",
+		"Remove obsolete explanations and commented-out code after preserving any required behavior in tests.",
+	},
+	avoid: []string{
+		"Deleting a comment that describes an untested invariant without first preserving that invariant in a regression test.",
+		"Disguising prose as a machine directive, generated code, or an unused string.",
+		"Writing tests that merely assert comment absence instead of the behavior the comment was intended to protect.",
+	},
 }

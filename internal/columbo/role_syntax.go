@@ -6,8 +6,6 @@ import (
 	"reflect"
 )
 
-// The syntax adapters own arm boundaries for both inference contexts. Each arm
-// carries its labels, so variant correlation need not rediscover branch syntax.
 type roleArm struct {
 	labels []ast.Expr
 	body   ast.Node

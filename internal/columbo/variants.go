@@ -9,8 +9,6 @@ import (
 
 const variantSmell = "repeated-variant-decision"
 
-// A site owns its physical evidence. Correlation uses only typed domain and
-// variant identities; branch bodies never participate.
 type variantSite struct {
 	node     ast.Node
 	domain   string
@@ -21,7 +19,6 @@ type variantSite struct {
 	arms     map[string][]Source
 }
 
-// The index owns domain correlation across all included declarations.
 type variantIndex struct {
 	engine  *engine
 	domains map[string][]variantSite
@@ -68,7 +65,6 @@ func sortedVariantDomains(domains map[string][]variantSite) []string {
 	return keys
 }
 
-// A scanner owns declaration attribution, chain membership and its local sites.
 type variantScanner struct {
 	owner *declaration
 	info  *types.Info
@@ -171,8 +167,7 @@ func (s *variantSite) valueArm(expr ast.Expr) bool {
 	if info.Value == nil {
 		return false
 	}
-	// Successful Go type checking establishes representability at every supported
-	// switch/equality. Typed constants must match; untyped constants are permitted.
+
 	if domain := valueVariantDomain(info.Type); domain != "" && domain != s.domain {
 		return false
 	}

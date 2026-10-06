@@ -9,8 +9,6 @@ import (
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
-// RenderSnapshot reads an already completed snapshot. It never evaluates rules
-// or accepts an analyzer report; the stored outcomes also determine its exit code.
 func RenderSnapshot(queries snapshotdb.Querier, path string) ([]byte, int, error) {
 	renderer := &snapshotRenderer{queries: queries}
 	if err := renderer.render(path); err != nil {

@@ -1,5 +1,3 @@
-// Adapted from github.com/uudashr/gocognit v1.2.0 (BSD-3-Clause).
-// The only traversal extension is the CallExpr interception hook.
 package columbo
 
 import (
@@ -96,7 +94,6 @@ func (v *complexityVisitor) isCalculated(e ast.Expr) bool {
 	return v.calculatedExprs[e]
 }
 
-// Each specialized handler owns its node's traversal; other nodes use ast.Walk.
 type complexityHandler func(*complexityVisitor, ast.Node) ast.Visitor
 
 func handlerFor[T ast.Node](visit func(*complexityVisitor, T) ast.Visitor) complexityHandler {
@@ -116,7 +113,6 @@ var complexityHandlers = map[reflect.Type]complexityHandler{
 	reflect.TypeOf((*ast.CallExpr)(nil)):       handlerFor((*complexityVisitor).visitCallExpr),
 }
 
-// Visit implements the ast.Visitor interface.
 func (v *complexityVisitor) Visit(n ast.Node) ast.Visitor {
 	if visit := complexityHandlers[reflect.TypeOf(n)]; visit != nil {
 		return visit(v, n)

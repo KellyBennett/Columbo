@@ -19,7 +19,6 @@ func (r *snapshotRenderer) clueSets(id string) error {
 	return nil
 }
 
-// The cursor owns grouping the ordered relational values into one displayed set.
 type summaryClueSets struct {
 	rows     []snapshotdb.SummaryClueSetsRow
 	position int

@@ -14,6 +14,10 @@ Columbo MUST detect deterministic clues, derive defined smells, report each smel
 
 Core CI enforcement MUST NOT require an LLM. Identical source, Go toolchain, Git history, and configuration MUST produce identical enforcement results.
 
+## Prose Comment Policy
+
+The [prose comment policy](docs/prose-comments.md) is authoritative for `prose-comment`. Columbo MUST fail on existing and new prose comments in analyzed production source by default, exempt only recognized machine input, and give agents regression-test guidance for intentional omissions. File-wide cases MUST use physical package-clause anchors and receipts for every prohibited comment; they MUST NOT invent function ownership.
+
 ## Motivation
 
 Agentic coding changes the economics of strict architectural enforcement. Refactoring is cheaper, so CI can afford to reject structural shortcuts that a human team might reasonably tolerate when each occurrence is considered in isolation.
@@ -294,7 +298,7 @@ Selected packages' original build-selected production physical source files form
 
 Exit codes: 0 means completed with no unsuppressed FAIL cases; 1 means completed with at least one unsuppressed FAIL; 2 means invalid invocation/configuration, package loading/parsing/type-checking failure, internal error, or database/summary delivery failure. Determine 0/1 by SQL over stored verdicts and suppression flags, never by rerunning rules or comparing rounded display values. Complete analysis, validation, and atomic no-clobber database publication before writing an analysis summary to stdout. Any pre-publication fatal error preserves earlier snapshots and any existing destination, emits no stdout analysis summary, emits diagnostics on stderr, and exits 2 regardless of discoveries. A summary write failure emits a diagnostic and exits 2 even when publication already succeeded; a prefix accepted by stdout is permitted but is not a completed summary. Help/version output does not create a database.
 
-Named function/method declarations, including blank-named func _ declarations, are finding subjects. Blank-named declarations participate in every applicable rule but cannot be helper candidates because they cannot have a resolved caller. Bodyless declarations participate only in parameter-list and Data Clump rules. Function literals, interface methods, and function-type declarations are not independent subjects. Enclosing-body metrics include nested literals; parameters of nested literals do not contribute to the enclosing parameter list. Feature Envy and helper-cluster analysis do not cross function-literal boundaries.
+Named function/method declarations, including blank-named func _ declarations, are finding subjects. The file-wide `prose-comment` rule instead uses the physical package clause as its declaration anchor. Blank-named declarations participate in every applicable rule but cannot be helper candidates because they cannot have a resolved caller. Bodyless declarations participate only in parameter-list and Data Clump rules. Function literals, interface methods, and function-type declarations are not independent subjects. Enclosing-body metrics include nested literals; parameters of nested literals do not contribute to the enclosing parameter list. Feature Envy and helper-cluster analysis do not cross function-literal boundaries.
 
 ## Configuration
 
@@ -312,6 +316,7 @@ severity:
   cosmetic-extraction: fail
   duplicate-code: warn
   repeated-variant-decision: fail
+  prose-comment: fail
 thresholds:
   function-lines: 10
   parameters: 4

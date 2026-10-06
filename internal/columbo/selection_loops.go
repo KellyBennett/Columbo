@@ -7,9 +7,6 @@ import (
 	"slices"
 )
 
-// Loop solving first stabilizes reaching origins without recording evidence.
-// A second fixed point propagates finite site/alias sets over those stable
-// values, so neither iteration order nor an early partial state invents a use.
 type selectionLoop struct {
 	init, post ast.Stmt
 	cond       ast.Expr

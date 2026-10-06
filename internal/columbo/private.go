@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// Private-type dispersion is deliberately separate from function dependency
-// fan-out. Function metrics ignore package-private named types; this index
-// records how broadly those types are spread through production files.
 type privateTypeUsage struct {
 	name          string
 	path          string

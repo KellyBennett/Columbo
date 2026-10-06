@@ -36,8 +36,6 @@ func (s *selectionScan) advance(stmt ast.Stmt, paths []selectionPath) []selectio
 
 type selectionStep func(*selectionScan, ast.Stmt, selectionEnv) []selectionPath
 
-// One dispatch table owns statement classification. Each handler owns the
-// transfer semantics of its syntax, rather than repeating a variant switch.
 var selectionSteps = map[reflect.Type]selectionStep{
 	reflect.TypeOf((*ast.IfStmt)(nil)): func(s *selectionScan, n ast.Stmt, e selectionEnv) []selectionPath {
 		return s.ifStatement(n.(*ast.IfStmt), e)
@@ -229,8 +227,6 @@ func (s *selectionScan) newSite(key selectionKey, role string, value selectedVal
 	return site
 }
 
-// Write traversal is shared by unsupported-region invalidation and capture
-// analysis; each caller supplies the meaning of an indirect assignment.
 type selectionWrites struct {
 	nested     bool
 	assignment func([]ast.Expr)

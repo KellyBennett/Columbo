@@ -13,8 +13,6 @@ type accessGroup struct {
 	first    int
 }
 
-// Feature Envy's normalization also treats address-taking and dereferencing
-// as access to the same stable value; the shared path resolver owns fields.
 func stableValue(d *declaration, expr ast.Expr) (*types.Var, string, bool) {
 	path := resolveValuePath(d.file.typeInfo(), expr, valueBase)
 	if !path.valid() {
@@ -35,7 +33,6 @@ func valueBase(expr ast.Expr) ast.Expr {
 	return expr
 }
 
-// valueAccess binds a selected member to the stable value that owns it.
 type valueAccess struct {
 	declaration *declaration
 	selector    *ast.SelectorExpr

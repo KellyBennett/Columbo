@@ -104,8 +104,6 @@ func (m *clumpMiner) add(s typeMultiset) {
 	m.patterns = append(m.patterns, s)
 }
 
-// Closed frequent multisets are intersections of supporting signatures.
-// Keep each intersection once rather than enumerate every possible subset.
 func (m *clumpMiner) intersections() {
 	for i := 0; i < len(m.patterns); i++ {
 		m.intersectSignatures(m.patterns[i])
@@ -156,7 +154,6 @@ func (m *clumpMiner) patternCase(pattern typeMultiset, support []*declaration) (
 	return c, nil
 }
 
-// clumpEvidence keeps the three support roles named until their clues are complete.
 type clumpEvidence struct {
 	finding                  *Case
 	types, size, occurrences *clueSupport

@@ -36,7 +36,6 @@ func (n *typeNormalizer) bindParameters(list *types.TypeParamList, prefix string
 	}
 }
 
-// Rebuild only structural components. Named underlying types remain opaque.
 type typeNormalizer struct {
 	vars     map[*types.TypeParam]*types.TypeParam
 	handlers map[reflect.Type]normalization
@@ -173,7 +172,6 @@ func (n *typeNormalizer) term(t *types.Term) *types.Term {
 	return types.NewTerm(t.Tilde(), n.normalize(t.Type()))
 }
 
-// dependencyCollector owns recursive type policy; dependencyScan owns source sites.
 type dependencyCollector struct {
 	engine      *engine
 	declaration *declaration
