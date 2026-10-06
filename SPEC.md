@@ -4,19 +4,25 @@ The accepted [SQLite implementation specification](docs/sqlite-implementation-sp
 
 ## Purpose
 
-Columbo is a strict architectural code-smell detector for Go, designed for CI enforcement in agentic development. A smell is evidence pointing toward a deeper design issue, not merely "bad code."
+Columbo is a strict architectural enforcement tool for Go, designed for CI in agentic development. It detects deterministic structural conditions that can create or spread coupling, then applies an explicit policy deciding which of those conditions the codebase permits.
 
-Columbo MUST detect deterministic clues, derive defined smells, report each smell as a case, provide evidence-backed diagnoses and refactoring leads, fail CI for configured violations, and detect superficial metric-gaming refactors.
+A finding does not need to prove that one local occurrence is already harmful. Columbo may deliberately reject a locally reasonable structure because permitting that structural form leaves a coupling vector available to accumulate elsewhere in the system.
 
-> **Columbo follows code smells to their architectural cause and leaves leads for fixing them.**
+Columbo MUST detect deterministic clues, derive defined smells, report each smell as a case, provide evidence-backed diagnoses and refactoring leads, fail CI for configured policy violations, and detect superficial metric-gaming refactors.
+
+> **Columbo follows structural clues to their architectural pressure and makes prohibited coupling vectors expensive to keep.**
 
 Core CI enforcement MUST NOT require an LLM. Identical source, Go toolchain, Git history, and configuration MUST produce identical enforcement results.
 
 ## Motivation
 
-Agentic coding changes the economics of strict CI enforcement. Columbo is intended to run in CI even when developers or coding agents never run it locally. A red build is deliberate feedback: code is submitted, Columbo detects architectural pressure, CI fails, and the coding agent receives enough evidence and guidance to make another design pass.
+Agentic coding changes the economics of strict architectural enforcement. Refactoring is cheaper, so CI can afford to reject structural shortcuts that a human team might reasonably tolerate when each occurrence is considered in isolation.
 
-Merely enforcing metrics is insufficient because coding agents can satisfy metrics literally. A 30-line function can become five tiny private helpers while preserving exactly the same responsibility structure. Columbo therefore treats metrics as clues and attempts to distinguish meaningful decomposition from cosmetic decomposition.
+Columbo is intended to run in CI even when developers or coding agents never run it locally. A red build is deliberate feedback: code is submitted, Columbo proves that a configured structural condition exists, policy rejects that condition, and the coding agent receives enough evidence and guidance to make another design pass.
+
+The goal is not to prove that every failing occurrence is currently painful. The goal is to remove structural capabilities through which coupling can spread: duplicated policy, distributed variant knowledge, concrete-selection knowledge in collaborators, hidden procedural coupling, and other mechanically identifiable forms.
+
+Merely enforcing metrics is insufficient because coding agents can satisfy metrics literally. A 30-line function can become five tiny private helpers while preserving exactly the same responsibility structure. Columbo therefore treats metrics as clues and attempts to distinguish meaningful architectural change from changes that merely make the detector unable to see the original coupling.
 
 The inconvenience is intentional. In an agentic workflow, the CI failure is the trigger that sends the agent back to reconsider the architecture.
 
@@ -44,9 +50,21 @@ A developer or agent must always be able to ask why Columbo reached a conclusion
 
 Columbo is not a passive suggestion engine. Teams may deliberately configure aggressive thresholds so ordinary development regularly encounters its guardrails. CI failure is a feature.
 
+A FAIL verdict means that deterministic evidence crossed a configured architectural policy boundary. It does not mean Columbo proved that this isolated occurrence is objectively bad code.
+
+### Policy Over Local Harm
+
+Columbo may prohibit a structural form even when a particular instance is understandable, compact, or defensible. The policy question is broader:
+
+> If this structural capability remains available throughout the codebase, can it become a vector for coupling that would otherwise be mechanically prevented?
+
+This makes occasional locally unnecessary refactoring an explicit possible cost of a system-wide invariant. Dogfooding and calibration determine whether that cost is justified; individual harmless-looking examples do not automatically invalidate the rule.
+
 ### Architecture Over Metrics
 
-Metrics are evidence, not the objective. Columbo prefers better design over smaller numbers. Whenever practical, it detects attempts to satisfy structural metrics without improving cohesion, coupling, ownership, or responsibility boundaries.
+Metrics are evidence, not the objective. Columbo prefers removal of the targeted coupling vector over smaller numbers. Whenever practical, it detects attempts to satisfy structural metrics without improving cohesion, coupling, ownership, or responsibility boundaries.
+
+A refactor is not successful merely because Columbo can no longer observe the original syntax. The intended green state removes, centralizes, or makes explicit the knowledge or responsibility that created the prohibited coupling vector.
 
 ### Make the Correct Fix Easier Than the Fake Fix
 
@@ -91,13 +109,17 @@ A **Smell** is a recognized design heuristic supported by one or more clues.
 
 Examples include Long Function, Long Parameter List, High Cognitive Complexity, Excessive Dependencies, Feature Envy, Data Clump, and Cosmetic Extraction.
 
-The metaphor is intentional: a smell is a **scent worth following**, not a declaration that code "stinks." A smell says that something about the structure deserves investigation; it does not prove the architecture is wrong.
+The metaphor is intentional: a smell is a **scent worth following**, not a declaration that code "stinks." A smell identifies a structural condition with architectural significance; it does not prove that one local occurrence is already harmful.
+
+Whether the smell blocks CI is a separate policy decision. A configured FAIL may intentionally reject every occurrence of that structural form in order to remove the associated coupling vector from the codebase.
 
 ## Case
 
 A **Case** is the primary investigative and reporting unit presented to developers, agents, and CI. It contains the smell, its clues, receipts, diagnosis, leads, avoid guidance, severity, and verdict.
 
-Conceptually, multiple observations may point toward a common architectural cause. For v1, however, case formation is deliberately deterministic: **one triggered smell produces one case**. Columbo does not automatically merge multiple smells into a larger case in v1. Future versions may correlate cases without changing the meaning of the underlying vocabulary.
+Conceptually, multiple observations may point toward a common architectural cause. Case formation remains deliberately deterministic: **one triggered smell produces one case**. Columbo does not merge independently enforced smells into a larger verdict.
+
+Non-enforcing correlations may connect existing cases and evidence when deterministic joins show that they likely describe one architectural cause. Correlation enriches diagnosis and guidance; it does not change the member cases' identities, suppressions, verdicts, or enforcement.
 
 ## Diagnosis
 
@@ -153,7 +175,17 @@ The critical distinction is:
 
 > **Architectural uncertainty does not imply enforcement uncertainty.**
 
-Columbo may be cautious about a diagnosis while being completely certain that a configured deterministic threshold was exceeded.
+Columbo may be cautious about whether a particular occurrence is presently harmful while being completely certain that deterministic evidence crossed a configured policy boundary.
+
+A `FAIL` therefore means:
+
+> **This code contains a structural form the current architectural policy does not permit.**
+
+It does not mean:
+
+> **Columbo proved this isolated design is objectively bad.**
+
+This separation lets Columbo enforce system-wide invariants without overstating what static analysis can know about local intent or future cost.
 
 ## Agent-Oriented CI Output
 
