@@ -10,19 +10,20 @@ Columbo supplies your agents with evidence and leads for investigating each find
 
 ## Why Columbo?
 
-A normal linter on a human-run project usually stays out of your way. Columbo deliberately gets in the way. Humans will hate working in your codebase. Your agents can handle it.
+When your agents write code that couples unrelated responsibilities, tangles dependencies, or makes a change harder to reason about, Columbo finds it.
 
-Writing more rules in `CLAUDE.md` won't reliably make an agent get the design right up front. You need a feedback loop:
+Each finding gives the agent concrete evidence about what triggered the check and where to investigate next. Instead of spending tokens rediscovering the shape of the problem from scratch, the agent gets a focused starting point for understanding the design issue, changing the code, and running the check again.
+
+That creates a tight feedback loop:
 
 1. The agent writes code.
-2. Columbo catches structural problems and fails CI.
-3. The agent investigates the evidence, improves the design, and runs it again.
+2. Columbo catches suspicious structure and fails CI.
+3. Columbo gives the agent evidence and context for the finding.
+4. The agent improves the design and reruns the check.
 
-Columbo gives agents little leeway. It flags suspicious code even when that code might be defensible. Its checks run without an LLM.
+Columbo is strict on purpose. A finding can still be defensible, and an agent can make that case. But exceptions stay exceptional.
 
-An agent can argue that a finding would make the design worse. The human driving it decides whether to grant an exception. Exceptions should stay exceptional.
-
-Columbo is one piece of a development workflow that lets you delegate implementation without personally policing the design of every change.
+The goal is to let you delegate implementation without personally reconstructing the design problems in every agent-written change.
 
 ## Use it
 
