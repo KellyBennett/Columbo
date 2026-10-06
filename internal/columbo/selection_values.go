@@ -20,14 +20,15 @@ type selectedValue struct {
 type selectionEnv map[types.Object]selectedValue
 
 type selectionSite struct {
-	owner       *declaration
-	decision    ast.Node
-	role        string
-	origins     map[ast.Expr]string
-	usedOrigins map[ast.Expr]string
-	messages    map[*ast.CallExpr]string
-	flows       map[ast.Node]bool
-	returned    bool
+	observations []selectedUse
+	owner        *declaration
+	decision     ast.Node
+	role         string
+	origins      map[ast.Expr]string
+	usedOrigins  map[ast.Expr]string
+	messages     map[*ast.CallExpr]string
+	flows        map[ast.Node]bool
+	returned     bool
 }
 
 func emptySelectedValue() selectedValue {

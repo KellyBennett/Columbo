@@ -595,3 +595,7 @@ extends this specification with `selection-use-coupling` (default FAIL), the
 origins, construction/runtime exemptions, stable declaration-plus-role identity,
 and the selected-role/implementation/message evidence contract. It is independent
 of Repeated Variant Decision, Duplicate Code, and Excessive Dependencies.
+
+## Common-role inference
+
+[Common-role inference](docs/common-role-inference.md) supplies deterministic, minimal observed-role evidence in selection/use and repeated-variant contexts. It is not a smell and cannot independently change verdicts. Schema version 2 persists role candidates, players, messages, interface matches, source receipts and links to existing cases.

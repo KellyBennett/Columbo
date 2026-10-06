@@ -45,6 +45,7 @@ type MemberRef struct {
 }
 
 type Report struct {
+	Roles        []RoleCandidate       `json:"role_candidates,omitempty"`
 	Version      int                   `json:"version"`
 	Summary      Summary               `json:"summary"`
 	Cases        []Case                `json:"cases"`
@@ -110,6 +111,7 @@ type Detail struct {
 	ExpansionDeclarations []DeclarationRef `json:"-"`
 }
 type Source struct {
+	RoleMessage            string          `json:"role_message,omitempty"`
 	Spelling               string          `json:"spelling,omitempty"`
 	Kind                   string          `json:"kind"`
 	File                   string          `json:"file"`

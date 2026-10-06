@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 2),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -260,3 +260,45 @@ CREATE VIEW summary AS SELECT
  COALESCE(SUM(CASE WHEN verdict = 'WARN' AND suppressed = 0 THEN 1 ELSE 0 END), 0) AS warned,
  COALESCE(SUM(CASE WHEN suppressed = 1 THEN 1 ELSE 0 END), 0) AS suppressed
  FROM cases;
+
+-- Common-role inference is evidence. None of these tables contributes to summary.
+CREATE TABLE role_candidates (
+ id TEXT PRIMARY KEY,
+ canonical_interface TEXT NOT NULL,
+ confidence TEXT NOT NULL CHECK (confidence IN ('strong','supporting')),
+ classification TEXT NOT NULL CHECK (classification IN ('inferred role','existing role'))
+) STRICT;
+CREATE TABLE role_candidate_implementations (
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ identity TEXT NOT NULL,
+ PRIMARY KEY (candidate_id,identity)
+) STRICT;
+CREATE TABLE role_candidate_messages (
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ identity TEXT NOT NULL,
+ PRIMARY KEY (candidate_id,identity)
+) STRICT;
+CREATE TABLE role_candidate_interfaces (
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ identity TEXT NOT NULL,
+ relationship TEXT NOT NULL CHECK (relationship IN ('exact','compatible','used')),
+ PRIMARY KEY (candidate_id,identity,relationship)
+) STRICT;
+CREATE TABLE role_candidate_receipts (
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ declaration_id INTEGER NOT NULL REFERENCES declarations(id),
+ kind TEXT NOT NULL,
+ subject TEXT NOT NULL,
+ message TEXT NOT NULL,
+ start_line INTEGER NOT NULL CHECK (start_line > 0),
+ end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+ start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+ end_offset INTEGER NOT NULL CHECK (end_offset >= start_offset),
+ PRIMARY KEY (candidate_id,ordinal)
+) STRICT;
+CREATE TABLE role_candidate_case_links (
+ candidate_id TEXT NOT NULL REFERENCES role_candidates(id),
+ case_id TEXT NOT NULL REFERENCES cases(id),
+ PRIMARY KEY (candidate_id,case_id)
+) STRICT;

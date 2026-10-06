@@ -415,6 +415,103 @@ func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) erro
 	return err
 }
 
+const insertRoleCandidate = `-- name: InsertRoleCandidate :exec
+INSERT INTO role_candidates (id,canonical_interface,confidence,classification) VALUES (?,?,?,?)
+`
+
+type InsertRoleCandidateParams struct {
+	ID                 string
+	CanonicalInterface string
+	Confidence         string
+	Classification     string
+}
+
+func (q *Queries) InsertRoleCandidate(ctx context.Context, arg InsertRoleCandidateParams) error {
+	_, err := q.db.ExecContext(ctx, insertRoleCandidate,
+		arg.ID,
+		arg.CanonicalInterface,
+		arg.Confidence,
+		arg.Classification,
+	)
+	return err
+}
+
+const insertRoleImplementation = `-- name: InsertRoleImplementation :exec
+INSERT INTO role_candidate_implementations (candidate_id,identity) VALUES (?,?)
+`
+
+type InsertRoleImplementationParams struct {
+	CandidateID string
+	Identity    string
+}
+
+func (q *Queries) InsertRoleImplementation(ctx context.Context, arg InsertRoleImplementationParams) error {
+	_, err := q.db.ExecContext(ctx, insertRoleImplementation, arg.CandidateID, arg.Identity)
+	return err
+}
+
+const insertRoleInterface = `-- name: InsertRoleInterface :exec
+INSERT INTO role_candidate_interfaces (candidate_id,identity,relationship) VALUES (?,?,?)
+`
+
+type InsertRoleInterfaceParams struct {
+	CandidateID  string
+	Identity     string
+	Relationship string
+}
+
+func (q *Queries) InsertRoleInterface(ctx context.Context, arg InsertRoleInterfaceParams) error {
+	_, err := q.db.ExecContext(ctx, insertRoleInterface, arg.CandidateID, arg.Identity, arg.Relationship)
+	return err
+}
+
+const insertRoleMessage = `-- name: InsertRoleMessage :exec
+INSERT INTO role_candidate_messages (candidate_id,identity) VALUES (?,?)
+`
+
+type InsertRoleMessageParams struct {
+	CandidateID string
+	Identity    string
+}
+
+func (q *Queries) InsertRoleMessage(ctx context.Context, arg InsertRoleMessageParams) error {
+	_, err := q.db.ExecContext(ctx, insertRoleMessage, arg.CandidateID, arg.Identity)
+	return err
+}
+
+const insertRoleReceipt = `-- name: InsertRoleReceipt :exec
+INSERT INTO role_candidate_receipts (candidate_id,ordinal,declaration_id,kind,subject,message,start_line,end_line,start_offset,end_offset) VALUES (?,?,?,?,?,?,?,?,?,?)
+`
+
+type InsertRoleReceiptParams struct {
+	CandidateID   string
+	Ordinal       int64
+	DeclarationID int64
+	Kind          string
+	Subject       string
+	Message       string
+	StartLine     int64
+	EndLine       int64
+	StartOffset   int64
+	EndOffset     int64
+}
+
+func (q *Queries) InsertRoleReceipt(ctx context.Context, arg InsertRoleReceiptParams) error {
+	_, err := q.db.ExecContext(ctx, insertRoleReceipt,
+		arg.CandidateID,
+		arg.Ordinal,
+		arg.DeclarationID,
+		arg.Kind,
+		arg.Subject,
+		arg.Message,
+		arg.StartLine,
+		arg.EndLine,
+		arg.StartOffset,
+		arg.EndOffset,
+	)
+	return err
+}
+
 const insertSourceReceipt = `-- name: InsertSourceReceipt :execlastid
 INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id,spelling) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 `
@@ -553,6 +650,20 @@ type LinkPolicyParams struct {
 
 func (q *Queries) LinkPolicy(ctx context.Context, arg LinkPolicyParams) error {
 	_, err := q.db.ExecContext(ctx, linkPolicy, arg.CaseID, arg.Ordinal, arg.PolicyID)
+	return err
+}
+
+const linkRoleCase = `-- name: LinkRoleCase :exec
+INSERT INTO role_candidate_case_links (candidate_id,case_id) VALUES (?,?)
+`
+
+type LinkRoleCaseParams struct {
+	CandidateID string
+	CaseID      string
+}
+
+func (q *Queries) LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error {
+	_, err := q.db.ExecContext(ctx, linkRoleCase, arg.CandidateID, arg.CaseID)
 	return err
 }
 
@@ -782,6 +893,74 @@ func (q *Queries) SummaryPolicy(ctx context.Context, arg SummaryPolicyParams) ([
 	for rows.Next() {
 		var i PolicyReview
 		if err := rows.Scan(&i.ID, &i.Note, &i.ReviewPrompt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryRoleInterfaces = `-- name: SummaryRoleInterfaces :many
+SELECT identity,relationship FROM role_candidate_interfaces WHERE candidate_id=?1 ORDER BY relationship,identity
+`
+
+type SummaryRoleInterfacesParams struct {
+	CandidateID string
+}
+
+type SummaryRoleInterfacesRow struct {
+	Identity     string
+	Relationship string
+}
+
+func (q *Queries) SummaryRoleInterfaces(ctx context.Context, arg SummaryRoleInterfacesParams) ([]SummaryRoleInterfacesRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryRoleInterfaces, arg.CandidateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryRoleInterfacesRow
+	for rows.Next() {
+		var i SummaryRoleInterfacesRow
+		if err := rows.Scan(&i.Identity, &i.Relationship); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryRoles = `-- name: SummaryRoles :many
+SELECT id,canonical_interface,confidence,classification FROM role_candidates ORDER BY id
+`
+
+func (q *Queries) SummaryRoles(ctx context.Context) ([]RoleCandidate, error) {
+	rows, err := q.db.QueryContext(ctx, summaryRoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoleCandidate
+	for rows.Next() {
+		var i RoleCandidate
+		if err := rows.Scan(
+			&i.ID,
+			&i.CanonicalInterface,
+			&i.Confidence,
+			&i.Classification,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

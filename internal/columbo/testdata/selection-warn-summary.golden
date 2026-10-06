@@ -15,5 +15,8 @@ CASE C-92ebcdd20a fixture.Send source.go:16-16
   selected message source.go:16-16 (bytes 705-719): Close() error
   Policy SUC-001: This rule deliberately treats local concrete-player selection followed by role collaboration as architectural pressure. This is a provisional dogfooding policy; its review note does not change the case verdict.
   Review: Show the human the selected role, concrete origins, controlling decision, value-flow evidence, and downstream messages. Discuss whether this function should own both implementation selection and collaboration before changing code or requesting suppression.
+Role evidence R-13c7183a8f36ed220d942e71d72b3d4c70ae26913b36591c2ecf7a54fc1bac91 (strong, existing role): interface { Close() error; Send(string) error }
+  exact interface: fixture.Sender
+  used interface: fixture.Sender
 Columbo: 0 failed, 1 warned, 0 suppressed
 Database: report.sqlite

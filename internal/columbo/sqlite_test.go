@@ -440,3 +440,29 @@ func snapshotBoundaryOpenError(path string) error {
 	}
 	return err
 }
+
+func TestRoleSnapshotWithoutCase(t *testing.T) {
+	report := roleFixture(t, rolePrelude+roleSwitch, selectionConfig())
+	h := newSQLiteHarness(t)
+	h.write(report)
+	db := h.open()
+	var candidates, cases, receipts int
+	require.NoError(t, db.QueryRow("SELECT count(*) FROM role_candidates").Scan(&candidates))
+	require.NoError(t, db.QueryRow("SELECT count(*) FROM cases").Scan(&cases))
+	require.NoError(t, db.QueryRow("SELECT count(*) FROM role_candidate_receipts").Scan(&receipts))
+	require.Equal(t, 1, candidates)
+	require.Zero(t, cases)
+	require.Equal(t, len(report.Roles[0].Receipts), receipts)
+	require.Equal(t, report.Roles[0].Messages, (&testHarness{T: t}).sqlStrings(db, "SELECT identity FROM role_candidate_messages ORDER BY identity"))
+}
+func TestRoleSnapshotLinksAndImmutability(t *testing.T) {
+	report := roleFixture(t, selectionPrelude+selectionFunction(selectSender+`sender.Send("x")`), selectionConfig())
+	h := newSQLiteHarness(t)
+	h.write(report)
+	db := h.open()
+	var roleID, caseID string
+	require.NoError(t, db.QueryRow("SELECT candidate_id,case_id FROM role_candidate_case_links").Scan(&roleID, &caseID))
+	require.Equal(t, report.Roles[0].ID, roleID)
+	require.Equal(t, report.Cases[0].ID, caseID)
+	h.preserved(report)
+}
