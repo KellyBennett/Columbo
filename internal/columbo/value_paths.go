@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-// resolvedValuePath owns the identity of a variable-rooted field chain. Resolved
-// objects distinguish shadowed roots and fields with the same source spelling.
 type resolvedValuePath struct {
 	root   *types.Var
 	fields []*types.Var
@@ -33,8 +31,6 @@ func (p resolvedValuePath) key(rootIdentity string) string {
 	return strings.Join(names, ".")
 }
 
-// The caller owns normalization policy. Both callers share root/field resolution
-// while only Feature Envy normalizes address-taking and dereferencing.
 type valuePathResolver struct {
 	info      *types.Info
 	normalize func(ast.Expr) ast.Expr

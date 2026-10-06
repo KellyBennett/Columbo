@@ -2,8 +2,6 @@ package columbo
 
 import "go/ast"
 
-// Dynamic construction is a local taint, not an inferred implementation. This
-// intentionally never follows a called constructor's body.
 func (s *selectionScan) findDynamicLocals() {
 	for {
 		before := len(s.dynamicLocals)

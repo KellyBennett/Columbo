@@ -6,8 +6,6 @@ import (
 	"slices"
 )
 
-// Origins describe evidence, not a second scoring policy. One identity may
-// occur in several origin lists while consuming the dependency budget once.
 type dependencyUses struct {
 	identities map[string]map[string]bool
 	receipts   map[string]map[string]Source
@@ -113,8 +111,6 @@ func (s *dependencyScan) callResults(call *ast.CallExpr) {
 	}
 }
 
-// Tuple results were previously counted through callable signatures. Annotate
-// those identities without broadening the collector or changing package scoring.
 func (s *dependencyScan) annotateResult(call *ast.CallExpr, typ types.Type, origin string) {
 	collector := *s.collector
 	collector.identities = map[string]bool{}

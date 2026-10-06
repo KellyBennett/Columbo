@@ -93,7 +93,7 @@ func (d *suppressionDirective) parse(text string, config Config) error {
 		return d.invalid()
 	}
 	d.smell = m[1]
-	if _, ok := config.Severity[d.smell]; !ok || d.smell == "data-clump" {
+	if _, ok := config.Severity[d.smell]; !ok || (d.smell == "data-clump" || d.smell == commentSmell) {
 		return d.invalid()
 	}
 	d.justification = strings.TrimSpace(m[2])

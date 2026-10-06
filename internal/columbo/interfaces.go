@@ -5,8 +5,6 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// interfaceDiscovery follows loaded semantic type graphs, independent of source
-// exclusions, while the seen set prevents recursive named types from looping.
 type interfaceDiscovery struct {
 	seen       map[types.Type]bool
 	interfaces []types.Type

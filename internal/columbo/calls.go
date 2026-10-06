@@ -7,9 +7,6 @@ import (
 	"golang.org/x/tools/go/types/typeutil"
 )
 
-// callGraph owns the reference universe and helper eligibility. Declaration calls
-// and whole-file references are separate traversals because package initializers
-// cannot become lexical helper clusters.
 type callGraph struct {
 	engine     *engine
 	counts     map[*declaration]int
@@ -161,7 +158,6 @@ func interfaceHasMethod(iface *types.Interface, name string) bool {
 	return false
 }
 
-// Callee resolution is shared with helper clustering and forwarding receipts.
 func calleeBase(e ast.Expr) ast.Expr {
 	e = ast.Unparen(e)
 	switch x := e.(type) {

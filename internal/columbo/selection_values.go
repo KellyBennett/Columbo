@@ -10,8 +10,6 @@ import (
 
 const selectionSmell = "selection-use-coupling"
 
-// Values are immutable snapshots. Copying a local preserves the selected value,
-// even when the original variable is subsequently overwritten.
 type selectedValue struct {
 	origins map[ast.Expr]string
 	traces  map[*selectionSite][]ast.Node

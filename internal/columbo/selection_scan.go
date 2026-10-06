@@ -7,8 +7,6 @@ import (
 	"reflect"
 )
 
-// Each scan is confined to one named declaration. Unsupported indirect writes
-// invalidate affected locals; no callee body or closure supplies origins.
 type selectionScan struct {
 	dynamicLocals map[types.Object]bool
 	probing       bool
@@ -225,8 +223,6 @@ func interfaceReceiver(call *ast.CallExpr, kind types.SelectionKind) ast.Expr {
 }
 func selectionMethod(selection *types.Selection) *types.Func { return selection.Obj().(*types.Func) }
 
-// A use is an observation of one receiver value, with its physical invocation
-// and alias route. The site retains only the origins supporting that observation.
 type selectedUse struct {
 	call    *ast.CallExpr
 	message string

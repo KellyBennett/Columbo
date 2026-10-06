@@ -93,8 +93,6 @@ func load(dir string, patterns []string, c Config) (*engine, error) {
 	return a, nil
 }
 
-// Loading a universe establishes physical declarations before classifying their
-// type references and calls; no analysis runs on a partially loaded engine.
 func (a *engine) loadUniverse(patterns []string) error {
 	pkgs, err := a.loadPackages(patterns)
 	if err != nil {
@@ -459,15 +457,26 @@ func (d *declaration) declReceipt() Source {
 	return d.source("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
 func (a *engine) newCase(d *declaration, smell, key string) (*Case, error) {
-	severity := a.config.Severity[smell]
-	if severity == "off" {
+	if a.config.Severity[smell] == "off" {
 		return nil, nil
 	}
-	id, raw := identity(smell, d.file.rel, d.symbol, key)
+	return a.identifiedCase(a.sourceCase(smell, d.declReceipt()), key)
+}
+func (a *engine) sourceCase(smell string, source Source) *Case {
+	severity := a.config.Severity[smell]
+	if severity == "off" {
+		return nil
+	}
+	return caseFromSource(smell, severity, source)
+}
+func (a *engine) identifiedCase(c *Case, key string) (*Case, error) {
+	if c == nil {
+		return nil, nil
+	}
+	id, raw := identity(c.Smell, c.File, c.Symbol, key)
 	if err := a.claimIdentity(id, raw); err != nil {
 		return nil, err
 	}
-	c := caseFromSource(smell, severity, d.declReceipt())
 	c.ID = id
 	return c, nil
 }
@@ -494,7 +503,6 @@ func stripPointer(t types.Type) types.Type {
 	}
 }
 
-// Test variants contain distinct type-checker objects for the same physical declaration.
 func (a *engine) target(obj *types.Func) *declaration {
 	if obj == nil {
 		return nil
@@ -513,7 +521,7 @@ func (a *engine) target(obj *types.Func) *declaration {
 }
 
 func (a *engine) Analyze() (Report, error) {
-	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.selectionUses, a.suppressions} {
+	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.selectionUses, a.comments, a.suppressions} {
 		if e := stage(); e != nil {
 			return Report{}, e
 		}
@@ -547,7 +555,6 @@ func Analyze(dir string, patterns []string, c Config) (Report, error) {
 	return a.Analyze()
 }
 
-// Physical source owns token and parameter ranges used by metric receipts.
 func (d *declaration) bodyRange() (token.Pos, token.Pos) {
 	if d.fn.Body == nil {
 		return 0, 0
@@ -613,7 +620,6 @@ func (a *engine) typeKey(obj *types.TypeName) string {
 	return fmt.Sprintf("%s:%d", p.Filename, p.Offset)
 }
 
-// Physical identity, rather than pointer equality, joins normal/test type objects.
 func (d *declaration) matchesObject(obj *types.Func, pos token.Position) bool {
 	return d.obj != nil && d.obj.Name() == obj.Name() && d.file.path == pos.Filename && d.file.tf.Offset(d.obj.Pos()) == pos.Offset
 }
@@ -659,8 +665,6 @@ func (d *declaration) ref() DeclarationRef {
 	return DeclarationRef{File: d.file.rel, Symbol: d.symbol}
 }
 
-// Keep declarations only when analysis emitted evidence involving them. The
-// evidence is intentionally not a complete program graph.
 type evidenceSelection map[DeclarationRef]bool
 
 func (a *engine) collectDeclarationEvidence() {
@@ -669,7 +673,7 @@ func (a *engine) collectDeclarationEvidence() {
 		selection.addCase(c)
 	}
 	selection.addRoles(a.report.Roles)
-	a.report.Declarations = selection.declarations(a.declarations)
+	a.report.Declarations = append(selection.declarations(a.declarations), selection.packageClauses(a.files)...)
 }
 func (selection evidenceSelection) addCase(c Case) {
 	for _, support := range c.SupportingDeclarations {
@@ -728,4 +732,14 @@ func (d *declaration) memberReference(clusterKey string, site Site) MemberRef {
 }
 func (d *declaration) rootExpansion() expansion {
 	return expansion{names: []string{d.symbol}, sites: []Site{}, declarations: []DeclarationRef{d.ref()}}
+}
+
+func (selection evidenceSelection) packageClauses(files []*file) []DeclarationEvidence {
+	out := []DeclarationEvidence{}
+	for _, f := range files {
+		if selection[f.packageClauseRef()] {
+			out = append(out, f.packageClauseEvidence())
+		}
+	}
+	return out
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-// RoleCandidate is evidence, never an independently enforceable case.
 type RoleCandidate struct {
 	ID                   string
 	Implementations      []string
@@ -230,7 +229,6 @@ func (r RoleCandidate) selectDeclarations(selection evidenceSelection) {
 	}
 }
 
-// Unlike selection counting, role identity preserves pointer/value distinctions.
 func roleImplementation(t types.Type) string {
 	if selectedImplementation(t) == "" {
 		return ""

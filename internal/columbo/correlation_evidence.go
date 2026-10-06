@@ -6,8 +6,6 @@ import (
 	"slices"
 )
 
-// SelectionContext preserves semantic joins while syntax and type information
-// are available. Receipt keys point back to evidence owned by the SUC case.
 type SelectionContext struct {
 	CaseID, Domain, Surface string
 	Players, Messages       []string

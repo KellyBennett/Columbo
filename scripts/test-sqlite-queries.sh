@@ -37,7 +37,7 @@ def statements(content):
 require(connection.execute('PRAGMA application_id').fetchone()[0] == 0x434C4D42,
         'not a Columbo snapshot')
 version = connection.execute('PRAGMA user_version').fetchone()[0]
-require(version == 3, 'unsupported schema version')
+require(version == 4, 'unsupported schema version')
 report = connection.execute('SELECT id, schema_version, columbo_version FROM report').fetchall()
 require(len(report) == 1 and report[0][:2] == (1, version), 'invalid report metadata')
 require(connection.execute('PRAGMA integrity_check').fetchall() == [('ok',)], 'integrity check failed')

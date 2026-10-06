@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 3),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 4),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -24,7 +24,7 @@ CREATE TABLE cases (
  id TEXT PRIMARY KEY,
  ordinal INTEGER NOT NULL UNIQUE CHECK (ordinal >= 0),
  primary_declaration_id INTEGER NOT NULL REFERENCES declarations(id),
- smell TEXT NOT NULL CHECK (smell IN ('long-function','long-parameter-list','high-cognitive-complexity','excessive-dependencies','feature-envy','data-clump','cosmetic-extraction','duplicate-code','repeated-variant-decision','selection-use-coupling')),
+ smell TEXT NOT NULL CHECK (smell IN ('long-function','long-parameter-list','high-cognitive-complexity','excessive-dependencies','feature-envy','data-clump','cosmetic-extraction','duplicate-code','repeated-variant-decision','selection-use-coupling','prose-comment')),
  verdict TEXT NOT NULL CHECK (verdict IN ('FAIL','WARN')),
  suppressed INTEGER NOT NULL CHECK (suppressed IN (0, 1)),
  start_line INTEGER NOT NULL CHECK (start_line > 0),

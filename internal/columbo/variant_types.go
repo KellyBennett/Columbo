@@ -5,8 +5,6 @@ import (
 	"go/types"
 )
 
-// variantTypeFacts owns eligibility and canonical identities derived from Go's
-// semantic information; syntax scanners never choose a representation of types.
 type variantTypeFacts struct{ info *types.Info }
 
 func (f variantTypeFacts) role(expr ast.Expr) string { return typeVariantDomain(f.info.TypeOf(expr)) }

@@ -1,4 +1,3 @@
-// releasecheck is the public-release gate; ordinary dogfooding builds remain valid.
 package main
 
 import (

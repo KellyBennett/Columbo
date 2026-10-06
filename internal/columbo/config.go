@@ -82,7 +82,6 @@ func configRoot(document *yaml.Node) (*yaml.Node, error) {
 	return document.Content[0], nil
 }
 
-// The section schema dispatches assignment without changing validation order.
 type configSetter func(*Config, *yaml.Node) error
 
 func mappingSetter(set func(*Config, string, *yaml.Node) error) configSetter {

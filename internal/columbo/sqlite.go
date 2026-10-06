@@ -9,8 +9,6 @@ import (
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
-// WriteSnapshot publishes a complete sibling database at a new output path.
-// Atomic no-clobber creation preserves every existing destination.
 func WriteSnapshot(path string, report Report, version string) error {
 	return writeSnapshotWithIO(path, snapshotContents{report: report, version: version}, snapshotFilesystem{})
 }
@@ -25,8 +23,6 @@ func writeSnapshotWithIO(path string, contents snapshotContents, operations snap
 	return publication.run()
 }
 
-// The publication seam permits bounded storage-failure tests without changing
-// the production transaction or weakening destination validation.
 type snapshotIO interface {
 	Build(string, snapshotContents) error
 	Sync(string) error
@@ -44,8 +40,7 @@ func (snapshotFilesystem) Build(path string, contents snapshotContents) error {
 func (snapshotFilesystem) Sync(path string) error                         { return syncSnapshot(path) }
 func (snapshotFilesystem) Publish(target snapshotPublicationTarget) error { return target.publish() }
 func (target snapshotPublicationTarget) publish() error {
-	// Linking atomically requires an absent destination at the actual publication.
-	// The deferred temporary cleanup removes the other name of this same inode.
+
 	return os.Link(target.from, target.to)
 }
 func (snapshotFilesystem) SyncDirectory(path string) error { return syncSnapshotDirectory(path) }
@@ -106,8 +101,6 @@ func newSnapshotTemporary(directory string) (string, error) {
 	return name, nil
 }
 
-// OpenSnapshot validates and opens an immutable, read-only Columbo snapshot.
-// Immutable readers do not create journals, WAL files, or shared-memory files.
 func OpenSnapshot(path string) (*snapshotdb.Snapshot, error) {
 	name, err := validateSnapshotPath(path)
 	if err != nil {

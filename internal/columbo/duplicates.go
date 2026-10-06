@@ -9,8 +9,6 @@ import (
 	"github.com/mibk/dupl/syntax/golang"
 )
 
-// dupl owns structural matching. Columbo owns scope, deterministic groups and
-// evidence; no subprocess or independently installed detector is required.
 type duplicateIndex struct {
 	engine    *engine
 	tree      *suffixtree.STree
@@ -86,9 +84,6 @@ func (index *duplicateIndex) source(fragment []*syntax.Node) (Source, bool) {
 	return owner.source("duplicate-fragment", f.tf.Pos(first.Pos), f.tf.Pos(last.End), Detail{Subject: owner.symbol, Value: tokens}), true
 }
 
-// A case must have a typed primary declaration. Package-level matches without
-// any function declaration are outside the current findings contract. A match
-// spanning functions retains its entire source range, anchored at the first.
 func (index *duplicateIndex) owner(f *file, start, end int) *declaration {
 	for _, d := range index.engine.declarations {
 		if d.file == f && f.tf.Offset(d.fn.Pos()) < end && f.tf.Offset(d.fn.End()) > start {

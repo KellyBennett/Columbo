@@ -16,8 +16,6 @@ type snapshotMemberKey struct {
 }
 type snapshotReceiptKey struct{ caseID, key string }
 
-// A snapshotWriter owns the transaction and the first error. Once an operation
-// fails, subsequent inserts become no-ops and the transaction is rolled back.
 type snapshotWriter struct {
 	queries      snapshotdb.Querier
 	err          error
@@ -552,7 +550,6 @@ func snapshotNullableText(value any) (*string, error) {
 	return &text, nil
 }
 
-// snapshotNesting has already validated a supported signed integer kind.
 func snapshotIntegerPointer(value any) *int64 {
 	integer := reflect.ValueOf(value).Int()
 	return &integer

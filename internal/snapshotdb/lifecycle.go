@@ -14,17 +14,12 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// SchemaVersion and SQLiteApplicationID identify the only supported snapshot.
-const SchemaVersion = 3
+const SchemaVersion = 4
 const SQLiteApplicationID = 0x434c4d42
 
-// The embedded file is also sqlc's schema input. Do not maintain a second DDL.
-//
 //go:embed schema.sql
 var sqliteSchema string
 
-// Snapshot owns a validated immutable read-only database. Only generated
-// operations escape the boundary; no database handle or SQL callback does.
 type Snapshot struct {
 	db      *sql.DB
 	queries Querier
@@ -47,8 +42,6 @@ func Open(path string) (*Snapshot, error) {
 func (s *Snapshot) Queries() Querier { return s.queries }
 func (s *Snapshot) Close() error     { return s.db.Close() }
 
-// Writer owns one unpublished database and transaction. A failed write is
-// rolled back on Close; Complete validates the contents before committing.
 type Writer struct {
 	db      *sql.DB
 	tx      *sql.Tx
@@ -177,8 +170,6 @@ func validateSnapshotData(db snapshotQuery) error {
 	return check.foreignKeys()
 }
 
-// Validation cursors own their individual PRAGMA contracts and always close
-// rows before another operation can reuse the single database connection.
 type snapshotValidation struct{ db snapshotQuery }
 
 func (v *snapshotValidation) integrity() error {

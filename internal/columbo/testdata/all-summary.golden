@@ -36,6 +36,9 @@ CASE C-5522b4859c fixture.Parent all.go:50-53
   parameter-overlap all.go:826:member:fixture.stepTwo: 1.000000
   Policy CE-001: This rule deliberately rejects some decompositions that may represent meaningful responsibilities. This is a provisional dogfooding policy; its review note does not change the case verdict.
   Review: Show the human the parent and qualifying helpers, forwarded inputs, shared dependencies, overlap values and thresholds, and original versus expanded line and complexity metrics. Discuss whether the failure reflects the intended policy before changing code or requesting a suppression.
+CASE C-bd6e66f9ad fixture.<package-clause> comments.go:3-3
+  prose-comment: FAIL
+  prose-comments fixture.<package-clause>: 1 (limit > 0)
 CASE C-b06ec7d1d9 fixture.Deliver selection.go:16-27
   selection-use-coupling: FAIL
   selected-implementation-count selection.go:358: 2 (limit >= 2)
@@ -84,5 +87,5 @@ CORRELATION MPR-62fc8a57f021a4f14e846c371619c0a48b2c8e5db45e1b8882f48486779aa2cb
   lead: Review the linked selection sites, observed messages, and variant mappings before choosing a role or centralizing selection.
   Policy MPR-001 (provisional): This diagnosis is derived by correlating independently enforced evidence. The correlation itself does not add a CI failure.
   Review: Review whether the linked cases genuinely point to one role and one selection boundary. Pay particular attention to the variant-to-implementation mapping and inferred message surface.
-Columbo: 10 failed, 0 warned, 0 suppressed
+Columbo: 11 failed, 0 warned, 0 suppressed
 Database: report.sqlite

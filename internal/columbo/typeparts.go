@@ -2,8 +2,6 @@ package columbo
 
 import "go/types"
 
-// Structural components are shared by dependency collection and interface discovery.
-// Named types and interfaces remain policy decisions for those investigations.
 type elementType interface{ Elem() types.Type }
 type mapType interface {
 	Key() types.Type
@@ -39,8 +37,6 @@ func fieldComponents(t fieldType) []types.Type {
 	return out
 }
 
-// callResultComponents expands multi-value expressions. Single results are
-// already recorded directly by the dependency collector.
 func callResultComponents(t types.Type) []types.Type {
 	if tuple, ok := t.(*types.Tuple); ok {
 		return tupleComponents(tuple)

@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision", selectionSmell}
+var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision", selectionSmell, commentSmell}
 
 type Summary struct {
 	Failed     int `json:"failed"`
@@ -19,8 +19,6 @@ type Summary struct {
 	Suppressed int `json:"suppressed"`
 }
 
-// DeclarationRef is a physical declaration identity. Display subjects are never
-// used to reconstruct this identity or any evidence relationship.
 type DeclarationRef struct {
 	File   string
 	Symbol string
@@ -332,8 +330,6 @@ func (s Source) withExpansion(trace *expansion) Source {
 	return s
 }
 
-// Case construction belongs to the report model; physical coordinates arrive
-// as an existing declaration receipt, preserving the same exclusive byte range.
 func emptyCase() *Case {
 	return &Case{Clues: []Clue{}, Clusters: []Cluster{}, Leads: []string{}, Avoid: []string{}, Receipts: []any{}, PolicyReviews: []PolicyReview{}}
 }
@@ -364,8 +360,6 @@ func (d Detail) withoutExpansion() Detail {
 	return d
 }
 
-// sourceEvidenceKey uses the same private canonical encoding as receipt
-// normalization. Only aggregate contributions omit their pre-summed value.
 func sourceEvidenceKey(s Source) string {
 	if s.AggregateContributions {
 		s.Detail.Value = nil
@@ -381,7 +375,6 @@ func (q Clue) forDeclaration(ref *DeclarationRef) Clue {
 	return q
 }
 
-// clueSupport owns one clue's explicit, de-duplicated receipt references.
 type clueSupport struct {
 	clue *Clue
 	seen map[string]bool
