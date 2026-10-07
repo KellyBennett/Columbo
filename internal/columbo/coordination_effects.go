@@ -3,7 +3,6 @@ package columbo
 import (
 	"fmt"
 	"go/ast"
-	"go/token"
 	"go/types"
 )
 
@@ -50,14 +49,11 @@ func (e *coordinationEffects) readAll(expressions []ast.Expr) {
 func (e *coordinationEffects) write(expr ast.Expr) {
 	e.access(expr, "variant-effect-write", e.writes)
 }
-func (e *coordinationEffects) assignment(n *ast.AssignStmt) bool {
-	for _, lhs := range n.Lhs {
-		e.write(lhs)
-		if n.Tok != token.ASSIGN && n.Tok != token.DEFINE {
-			e.read(lhs)
-		}
+func (e *coordinationEffects) mutation(m statementMutation) bool {
+	for _, target := range m.targets {
+		e.write(target)
 	}
-	e.readAll(n.Rhs)
+	e.readAll(m.reads)
 	return false
 }
 func (e *coordinationEffects) declaration(n *ast.ValueSpec) bool {
@@ -74,14 +70,10 @@ func (e *coordinationEffects) visit(node ast.Node) bool {
 	return e.statement(node)
 }
 func (e *coordinationEffects) statement(node ast.Node) bool {
-	switch n := node.(type) {
-	case *ast.AssignStmt:
-		return e.assignment(n)
-	case *ast.IncDecStmt:
-		e.write(n.X)
-		e.read(n.X)
-		return false
-	case *ast.ValueSpec:
+	if m, ok := mutationOf(node); ok {
+		return e.mutation(m)
+	}
+	if n, ok := node.(*ast.ValueSpec); ok {
 		return e.declaration(n)
 	}
 	return e.expressionStatement(node)
@@ -134,13 +126,9 @@ func (u *coordinationUncertainty) visit(node ast.Node) bool {
 	return true
 }
 func (u *coordinationUncertainty) writes(node ast.Node) {
-	switch n := node.(type) {
-	case *ast.AssignStmt:
-		for _, target := range n.Lhs {
-			u.target(target, node)
-		}
-	case *ast.IncDecStmt:
-		u.target(n.X, node)
+	m, _ := mutationOf(node)
+	for _, target := range m.targets {
+		u.target(target, node)
 	}
 }
 func (u *coordinationUncertainty) target(expr ast.Expr, node ast.Node) {
