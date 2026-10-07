@@ -281,9 +281,11 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 - **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
 - **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
 
-## Experimental choice-set evidence
+## Advisory evidence
 
-The opt-in `--choice-sets-output PATH` collector records repeated typed collection-construction recipes in a separate, versioned JSON evidence file. This is an experimental evidence channel, not a replacement report format or SQLite projection. It leaves all existing case, snapshot, annotation, severity, and exit-verdict semantics unchanged; evidence publication errors exit 2. It is disabled by default. Its bounded recognition contract, non-atomic two-file publication, source receipts and limitations are specified in [choice-set evidence](docs/choice-set-evidence.md).
+Every analysis MUST collect choice-set and nested field-decision evidence and persist it in the same SQLite transaction as other findings. The recognition contracts are [choice-set evidence](docs/choice-set-evidence.md) and [nested field-decision evidence](docs/tangle-evidence.md). No collector-specific enablement or output flags, JSON sidecars, or alternative publication path exist.
+
+Schema version 5 adds normalized advisory collector coverage, groups, group values, declaration-linked sites, ordered site seed values and source receipts. Full condition/initializer/loop/write excerpts and physical ranges MUST survive a snapshot round trip. Collector coverage MUST distinguish a completed zero-finding analysis from absent evidence. CLI and GitHub summaries MUST read the saved database. Advisory groups MUST NOT independently introduce FAIL/WARN cases, severities, suppressions, correlations or annotations, or alter verdict totals. Normal atomic snapshot publication and database access boundaries MUST apply.
 
 ## CLI and exit codes
 

@@ -16,7 +16,6 @@ const usage = `Usage: columbo [flags] [packages...]
 Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
-  --choice-sets-output PATH  experimental choice-set evidence JSON (opt-in)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -27,7 +26,7 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, output, choiceSets                        string
+	config, output                                    string
 	noHistory, showVersion, help, shortHelp, explicit bool
 	patterns                                          []string
 }
@@ -35,7 +34,6 @@ type command struct {
 	invocation Invocation
 	options    commandOptions
 	config     Config
-	choices    *ChoiceSetReport
 }
 
 func Run(args []string, invocation Invocation) int {
@@ -66,9 +64,9 @@ func (o *commandOptions) parse(args []string) error {
 		return e
 	}
 	o.arguments(fs)
-	if o.choiceSets == "-" {
-		return fmt.Errorf("choice-sets-output must name a fresh JSON file, not stdout")
-	}
+	return o.validateOutputs()
+}
+func (o *commandOptions) validateOutputs() error {
 	if o.output == "" || o.output == "-" {
 		return fmt.Errorf("output must name a SQLite file, not stdout")
 	}
@@ -85,7 +83,6 @@ func (o *commandOptions) arguments(fs *flag.FlagSet) {
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
 	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
-	fs.StringVar(&o.choiceSets, "choice-sets-output", "", "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
@@ -134,7 +131,7 @@ func (c *command) analyze() int {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	r, e := c.investigate(patterns)
+	r, e := Analyze(c.invocation.Dir, patterns, c.config)
 	if e != nil {
 		return c.fatal(e)
 	}
@@ -149,9 +146,6 @@ func (c *command) snapshotPath() string {
 func (c *command) publish(report Report) int {
 	path := c.snapshotPath()
 	if e := WriteSnapshot(path, report, c.invocation.buildVersion()); e != nil {
-		return c.fatal(e)
-	}
-	if e := c.publishChoices(); e != nil {
 		return c.fatal(e)
 	}
 	snapshot, e := OpenSnapshot(path)

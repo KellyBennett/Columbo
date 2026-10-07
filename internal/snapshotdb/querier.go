@@ -9,7 +9,17 @@ import (
 )
 
 type Querier interface {
+	AdvisoryCoverage(ctx context.Context) ([]AdvisoryCollector, error)
+	AdvisoryReceipts(ctx context.Context, arg AdvisoryReceiptsParams) ([]AdvisoryReceiptsRow, error)
+	AdvisorySites(ctx context.Context, arg AdvisorySitesParams) ([]AdvisorySitesRow, error)
+	AdvisoryValues(ctx context.Context, arg AdvisoryValuesParams) ([]AdvisoryValuesRow, error)
 	DependencyScored(ctx context.Context, arg DependencyScoredParams) (int64, error)
+	InsertAdvisoryCollector(ctx context.Context, arg InsertAdvisoryCollectorParams) error
+	InsertAdvisoryGroup(ctx context.Context, arg InsertAdvisoryGroupParams) error
+	InsertAdvisoryReceipt(ctx context.Context, arg InsertAdvisoryReceiptParams) error
+	InsertAdvisorySite(ctx context.Context, arg InsertAdvisorySiteParams) error
+	InsertAdvisorySiteValue(ctx context.Context, arg InsertAdvisorySiteValueParams) error
+	InsertAdvisoryValue(ctx context.Context, arg InsertAdvisoryValueParams) error
 	InsertCase(ctx context.Context, arg InsertCaseParams) error
 	InsertClue(ctx context.Context, arg InsertClueParams) (int64, error)
 	InsertClueValue(ctx context.Context, arg InsertClueValueParams) error
@@ -46,6 +56,7 @@ type Querier interface {
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
+	SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
 	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
 	SummaryCorrelationCases(ctx context.Context, arg SummaryCorrelationCasesParams) ([]SummaryCorrelationCasesRow, error)

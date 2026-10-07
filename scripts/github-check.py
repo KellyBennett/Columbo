@@ -44,10 +44,10 @@ class Snapshot:
     def validate(self):
         if self.db.execute("PRAGMA application_id").fetchone()[0] != 0x434C4D42:
             raise ValueError("not a Columbo snapshot")
-        if self.db.execute("PRAGMA user_version").fetchone()[0] != 4:
+        if self.db.execute("PRAGMA user_version").fetchone()[0] != 5:
             raise ValueError("unsupported Columbo snapshot schema")
         reports = self.db.execute("SELECT id,schema_version FROM report").fetchall()
-        if [tuple(row) for row in reports] != [(1, 4)]:
+        if [tuple(row) for row in reports] != [(1, 5)]:
             raise ValueError("invalid Columbo report metadata")
         if [tuple(row) for row in self.db.execute("PRAGMA integrity_check")] != [("ok",)]:
             raise ValueError("snapshot integrity check failed")
@@ -150,7 +150,22 @@ class Snapshot:
         warnings = [row[0] for row in self.db.execute("SELECT message FROM warnings ORDER BY ordinal")]
         if warnings:
             text += "\n\nAnalysis warnings:\n" + "\n".join(warnings)
+        text += self.advisory_summary()
         return limited(text)
+
+    def advisory_summary(self):
+        lines = []
+        for group in self.db.execute("SELECT id,kind,subject,lead FROM advisory_groups ORDER BY kind,id"):
+            lines.append(f'Evidence {group["id"]} {group["kind"]}: {group["subject"]}\n{group["lead"]}')
+            for site in self.db.execute("""
+                SELECT d.symbol,f.path,min(r.start_line) AS line
+                FROM advisory_sites s JOIN declarations d ON d.id=s.declaration_id
+                JOIN files f ON f.id=d.file_id
+                JOIN advisory_receipts r ON r.group_id=s.group_id AND r.site_ordinal=s.ordinal
+                WHERE s.group_id=? GROUP BY s.ordinal ORDER BY s.ordinal
+            """, (group["id"],)):
+                lines.append(f'  {site["path"]}:{site["line"]} {site["symbol"]}')
+        return "\n\n" + "\n".join(lines) if lines else ""
 
 
 def read_snapshot(path, exit_code):

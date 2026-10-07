@@ -1,10 +1,6 @@
 package columbo
 
 import (
-	"bytes"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -119,27 +115,4 @@ func TestChoiceSetsExcludeGeneratedAndTests(t *testing.T) {
 	a, err := load(dir, []string{"./..."}, quiet())
 	require.NoError(t, err)
 	require.Empty(t, a.choiceSets().Groups)
-}
-func TestChoiceSetsCLIAndFreshOutput(t *testing.T) {
-	h := &testHarness{T: t}
-	dir := h.fixture(choicePrelude + choiceMap + choiceSlice)
-	var out, stderr bytes.Buffer
-	args := []string{"--no-history", "--output", "report.sqlite", "--choice-sets-output", "choices.json"}
-	code := Run(args, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
-	require.NotEqual(t, 2, code, stderr.String())
-	data, err := os.ReadFile(filepath.Join(dir, "choices.json"))
-	require.NoError(t, err)
-	var report ChoiceSetReport
-	require.NoError(t, json.Unmarshal(data, &report))
-	require.Len(t, report.Groups, 1)
-	require.Contains(t, out.String(), "1 groups; no verdict")
-	err = writeChoiceSets(filepath.Join(dir, "choices.json"), ChoiceSetReport{})
-	require.Error(t, err)
-	again, err := os.ReadFile(filepath.Join(dir, "choices.json"))
-	require.NoError(t, err)
-	require.Equal(t, data, again)
-	var normal, normalErr bytes.Buffer
-	without := Run([]string{"--no-history", "--output", "normal.sqlite"}, Invocation{Dir: dir, Stdout: &normal, Stderr: &normalErr})
-	require.Equal(t, code, without)
-	require.NotContains(t, normal.String(), "Choice-set evidence")
 }

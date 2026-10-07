@@ -1,3 +1,17 @@
+[advisory_collectors] kind | files_analyzed | declarations_analyzed
+"choice-set" | 1 | 11
+"nested-field-decision" | 1 | 11
+
+[advisory_groups] id | kind | subject | lead | limits
+
+[advisory_receipts] group_id | site_ordinal | ordinal | kind | subject | start_line | end_line | start_offset | end_offset | spelling
+
+[advisory_site_values] group_id | site_ordinal | ordinal | identity | value
+
+[advisory_sites] group_id | ordinal | declaration_id | representation | input_expression
+
+[advisory_values] group_id | kind | ordinal | identity | value
+
 [case_declarations] case_id | declaration_id | role
 
 [case_guidance] case_id | kind | ordinal | item
@@ -49,7 +63,7 @@
 [receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
 
 [report] id | schema_version | columbo_version
-1 | 4 | "test"
+1 | 5 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 

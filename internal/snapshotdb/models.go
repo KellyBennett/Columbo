@@ -4,6 +4,57 @@
 
 package snapshotdb
 
+type AdvisoryCollector struct {
+	Kind                 string
+	FilesAnalyzed        int64
+	DeclarationsAnalyzed int64
+}
+
+type AdvisoryGroup struct {
+	ID      string
+	Kind    string
+	Subject string
+	Lead    string
+	Limits  string
+}
+
+type AdvisoryReceipt struct {
+	GroupID     string
+	SiteOrdinal int64
+	Ordinal     int64
+	Kind        string
+	Subject     string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Spelling    string
+}
+
+type AdvisorySite struct {
+	GroupID         string
+	Ordinal         int64
+	DeclarationID   int64
+	Representation  string
+	InputExpression string
+}
+
+type AdvisorySiteValue struct {
+	GroupID     string
+	SiteOrdinal int64
+	Ordinal     int64
+	Identity    string
+	Value       string
+}
+
+type AdvisoryValue struct {
+	GroupID  string
+	Kind     string
+	Ordinal  int64
+	Identity string
+	Value    string
+}
+
 type Case struct {
 	ID                   string
 	Ordinal              int64

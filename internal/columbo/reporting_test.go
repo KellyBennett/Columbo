@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -646,4 +647,53 @@ func (t *testHarness) TestStoredSummaryReadFailure() {
 	t.hasError(err)
 	t.equal(2, exitCode)
 	t.empty(summary, "failed readers must not return a partial analysis summary")
+}
+
+func TestAdvisorySnapshotRoundTrip(t *testing.T) {
+	h := &testHarness{T: t}
+	source := choicePrelude + choiceMap + choiceSlice + strings.TrimPrefix(tanglePrelude, "package fixture\n") + tangleBody
+	dir := h.fixture(source)
+	report, err := Analyze(dir, []string{"./..."}, quiet())
+	require.NoError(t, err)
+	db := h.snapshot(report)
+	require.Equal(t, 2, h.sqlCount(db, "SELECT count(*) FROM advisory_collectors"))
+	require.Equal(t, 2, h.sqlCount(db, "SELECT count(*) FROM advisory_groups"))
+	require.Equal(t, 5, h.sqlCount(db, "SELECT count(*) FROM advisory_sites"))
+	require.Equal(t, 4, h.sqlCount(db, "SELECT count(*) FROM advisory_site_values"))
+	require.Equal(t, 0, h.sqlCount(db, "SELECT count(*) FROM cases"))
+	require.NotEmpty(t, h.sqlStrings(db, "SELECT spelling FROM advisory_receipts WHERE kind='variant-condition'"))
+	require.Equal(t, []string{"fixture.Item.Quality", "fixture.Item.SellIn"}, h.sqlStrings(db, "SELECT identity FROM advisory_values WHERE kind='written-field' ORDER BY ordinal"))
+	require.NoError(t, os.RemoveAll(dir))
+	rendered, code, err := RenderSnapshot(testDatabaseQueries(db), "saved.sqlite")
+	require.NoError(t, err)
+	require.Zero(t, code)
+	require.Contains(t, string(rendered), "nested-field-decision")
+	require.Contains(t, string(rendered), "choice-set")
+	require.Contains(t, string(rendered), "x.SellIn--")
+	require.Contains(t, string(rendered), choiceSetLead)
+}
+func TestAdvisoryPublicationIsAtomic(t *testing.T) {
+	h := &testHarness{T: t}
+	dir := h.fixture(choicePrelude + choiceMap + choiceSlice)
+	report, err := Analyze(dir, []string{"./..."}, quiet())
+	require.NoError(t, err)
+	report.Choices.Groups[0].Sites[0].Symbol = "missing"
+	path := filepath.Join(t.TempDir(), "bad.sqlite")
+	require.Error(t, WriteSnapshot(path, report, "test"))
+	_, err = os.Stat(path)
+	require.True(t, os.IsNotExist(err))
+}
+func TestAdvisoryCLIUsesOneSnapshot(t *testing.T) {
+	h := &testHarness{T: t}
+	dir := h.fixture(tanglePrelude + tangleBody)
+	result := h.runCLI(dir, "--no-history", "--output=report.sqlite")
+	require.NotEqual(t, 2, result.code, result.stderr)
+	require.Contains(t, string(result.stdout), "nested-field-decision")
+	entries, err := filepath.Glob(filepath.Join(dir, "report.sqlite*"))
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.Join(dir, "report.sqlite")}, entries)
+	for _, flag := range []string{"--tangles-output", "--choice-sets-output"} {
+		rejected := h.runCLI(dir, flag, "unused.json")
+		require.Equal(t, 2, rejected.code)
+	}
 }
