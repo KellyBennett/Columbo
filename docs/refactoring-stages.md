@@ -115,45 +115,72 @@ can clear this gate without introducing any new type. Preserve default and no-op
 behavior when considering any restructuring; static compatibility alone does not
 prove the callees implement the same operation or that the existing design is wrong.
 
-## Repeated guarded updates (advisory, no new stage)
+## Repeated guarded mutations (advisory, no new stage)
 
-`repeated-guarded-update` runs in ordinary and staged analysis. Two or more
-occurrences of the same resolved declared integer field, normalized constant
-bound value/type, strict comparison direction and update operator form one group.
-V1 supports `if x.Field < constant { x.Field++ }` and
-`if x.Field > constant { x.Field-- }`, including reversed comparisons and named
-integer types. Parentheses and compile-time constant expressions (including typed constant
-conversions) are normalized; constant subexpressions are atomic values.
-Guard and update must resolve to the same variable object and direct field within
-each occurrence. Separate parameters/receivers can share an operation schema;
-this does not assert they are the same runtime object. Identifier spelling and
-function names do not establish identity or membership.
+The existing `repeated-guarded-update` collector identifier now describes a broader
+operation schema: read a resolved field in a comparison, then write that same
+field on the same resolved subject. Two or more occurrences group only when the
+field identity, normalized comparison and normalized mutation match. Examples:
 
-Pure `&&` trees can contain the bound guard, including
-`if item.SellIn < 0 && item.Quality < 50 { item.Quality++ }`. Full conditions,
-bound comparisons, updates and enclosing if conditions are retained as source
-receipts. The collector never rearranges or strips context, and a shared bound is
-not proof of a universal invariant, safe extraction or safe unconditional clamping.
-Other comparisons can narrow the operation further; preserve their order and
-branch context. Enclosing conditions may themselves have effects.
+```go
+if account.Balance >= amount { account.Balance -= amount }
+if job.Status == Pending { job.Status = Running }
+```
 
-Conservative exclusions: init/else, multi-statement guarded bodies (including an
-initial increment followed by nested decisions), OR clauses, calls or other effectful candidate conditions, aliases between guard
-and update subjects, closures, indexed/dereferenced/nested/promoted fields,
-nonconstant bounds, noninteger fields, inclusive/equality guards and assignments
-(including `+= 1`). Only integer `++`/`--` is supported; no sequence or algorithm
-recognition is attempted. No alias or interprocedural analysis is performed.
+Supported subjects are direct declared integer, string or boolean fields, including
+named types. Checks use `==`, `!=`, `<`, `<=`, `>`, `>=`, subject to Go type checking.
+A selected comparison can read the field within scalar arithmetic expressions.
+Each candidate body contains one assignment, compound assignment or `++`/`--`.
+Integer arithmetic/bitwise operations, string concatenation and unary `+`, `-`,
+`^`, `!` retain their structure, operand order and types. No general algebraic
+simplification or commutative reordering is attempted.
 
-The category collector's direct-execution facts do not establish membership for a
-function-returning selector. V1 does not infer behavior families: it reports only
-the common operation schema, including when no family facts exist. Existing
-category-selected behavior eligibility remains unchanged; factories stay clear.
-Historical reports and naming conventions are never used as substitute evidence.
+Normalization removes parentheses and reverses direct-field comparisons (`amount
+<= account.Balance` matches `account.Balance >= amount`). It expands compound
+assignments to their corresponding binary write expression. Integer `field++`,
+`field += 1` and `field = field + 1` match; subtraction keeps operand order.
+Literal constants retain checked value/type. Named constants retain their resolved
+declaration identity as well as value/type, so different enum labels are not
+conflated merely because they share a value. Constant arithmetic retains its
+syntax; it is not folded across named constants. Literal constant conversions can
+normalize to their checked constant; other constant conversions retain the operand
+schema. Runtime calls/conversions are excluded.
 
-Neither existing gate changes and no third gate is defined. Ordinary CLI/GitHub
-summaries display this advisory without changing verdicts or exit status. Staged
-summaries remain gate-focused; inspect the same snapshot with
-[the advisory queries](sqlite/advisories.sql), filtering `advisory_groups.kind =
-'repeated-guarded-update'`, or run ordinary analysis to a new output path. Schema
-8 adds the collector to the normalized advisory tables; thresholds and suppressions
-are unchanged.
+Scalar parameters become typed input roles in first-use order within the selected
+comparison, then the write. That same mapping is used throughout each occurrence:
+checking `amount` and subtracting `amount` differs from checking `amount` and
+subtracting `fee`. Corresponding parameters in different declarations may have
+different names or positions. Local aliases, shadowed local inputs and global
+variable inputs do not receive parameter roles. Direct sibling fields on the same
+subject retain their resolved field identity. Inputs through other subject objects
+are excluded. Distinct parameters/receivers can share a schema without denoting the
+same runtime object; identifier spelling never establishes identity.
+
+Pure-syntax conjunction context is supported, including `item.SellIn < 0 &&
+item.Quality < 50`. The first comparison reading the mutated field is the selected
+check; other conjuncts remain context, not part of its group identity. Receipts
+retain the full condition, selected check, write, input-role bindings and enclosing
+if conditions. Full condition order and branch context must be preserved. Scalar
+reads/arithmetic can still panic, enclosing conditions can have effects, and this
+is not concurrency/effect analysis or proof that extraction is safe. The collector
+never asserts a universal domain invariant or safe unconditional clamping.
+
+Conservative exclusions: init/else, multiple body statements, OR clauses, runtime
+calls, pointer/indexed/promoted/nested target fields, closures, unclear aliases
+between guard/write subjects, unsupported input expressions, floating-point,
+complex, interface or aggregate mutation types, and conditions without a supported
+comparison. A multi-statement guard beginning with an increment remains excluded.
+No sequence/algorithm recognition, alias analysis or interprocedural inference is
+attempted. Short-circuit context is never stripped to claim an unconditional write.
+
+The direct-action category collector does not establish membership for a
+function-returning selector. This collector does not infer behavior families;
+names and historical reports are not substitute evidence. Existing ownership
+eligibility remains unchanged and factories stay clear.
+
+No third gate is defined. Ordinary CLI/GitHub summaries display this advisory
+without changing verdicts/exit status. Staged summaries remain gate-focused;
+inspect either snapshot with [the advisory queries](sqlite/advisories.sql), filtering
+`advisory_groups.kind = 'repeated-guarded-update'`, or run ordinary analysis to a new
+output path. Schema 8 is unchanged; normalized-check/normalized-write values and
+mutation-input receipts use the existing tables. Thresholds/suppressions are unchanged.

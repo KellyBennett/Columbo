@@ -8,25 +8,25 @@ import (
 )
 
 const guardedUpdateKind = "repeated-guarded-update"
-const guardedUpdateLead = "These locations repeat the same guarded update schema. Consider a shared operation while preserving surrounding conditions, evaluation order and effects. Distinct parameters need not denote the same runtime object."
-const guardedUpdateLimits = "Lexical evidence only, not a universal domain invariant or proof that extraction or unconditional clamping is safe. Direct resolved integer fields, strict constant bound, ++/--, single-statement body, no init/else; pure conjunctions only. No alias, promoted/nested field, call, OR, closure or interprocedural inference. No behavior-family membership inferred from names or historical reports."
+const guardedUpdateLead = "These locations repeat the same guarded mutation schema. Consider a shared operation while preserving surrounding conditions, evaluation order and effects. Distinct parameters need not denote the same runtime object."
+const guardedUpdateLimits = "Lexical guarded-mutation evidence, not a universal invariant or proof of safe extraction. Direct resolved integer/string/bool fields; scalar comparisons, single assignment/compound/++/-- body, no init/else; conjunction context retained. Consistent typed parameter roles across check and write; named constants retain identity. No alias, promoted/nested field, effectful expression, OR clause, closure or interprocedural inference. No behavior-family inference."
 
 type guardedUpdateKey struct {
-	field            *types.Var
-	bound, boundType string
-	operation        token.Token
+	field        *types.Var
+	check, write string
 }
 type guardedUpdateScan struct {
 	owner     *declaration
 	groups    map[guardedUpdateKey][]advisorySite
 	ancestors []ast.Node
+	fset      *token.FileSet
 }
 
 func (a *engine) guardedUpdateAdvisories() []advisoryGroup {
 	sites := map[guardedUpdateKey][]advisorySite{}
 	for _, owner := range a.declarations {
 		if owner.file.included {
-			scan := guardedUpdateScan{owner: owner, groups: sites}
+			scan := guardedUpdateScan{owner: owner, groups: sites, fset: a.fset}
 			owner.inspectBody(scan.visit)
 		}
 	}
@@ -57,20 +57,16 @@ func (scan *guardedUpdateScan) visit(node ast.Node) bool {
 	return true
 }
 func (scan *guardedUpdateScan) collect(node *ast.IfStmt) {
-	update := guardedStatement(node)
-	if update == nil {
+	mutation := guardedStatement(node)
+	if mutation == nil {
 		return
 	}
 	facts := guardedFacts{scan.owner.file.typeInfo()}
-	key, guard := facts.match(node.Cond, update)
-	if guard != nil {
-		scan.groups[key] = append(scan.groups[key], scan.site(node, update, guard))
+	match := facts.match(node.Cond, mutation, scan.normalizer())
+	if match != nil {
+		scan.groups[match.key] = append(scan.groups[match.key], scan.site(node, mutation, match))
 	}
 }
-func guardedStatement(node *ast.IfStmt) *ast.IncDecStmt {
-	if node.Init != nil || node.Else != nil || len(node.Body.List) != 1 {
-		return nil
-	}
-	update, _ := node.Body.List[0].(*ast.IncDecStmt)
-	return update
+func (scan *guardedUpdateScan) normalizer() *guardedNormalizer {
+	return &guardedNormalizer{owner: scan.owner, fset: scan.fset}
 }

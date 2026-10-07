@@ -194,6 +194,7 @@ legacy mode. This build follows the existing single-version reader contract and
 requires schema 8.
 
 `repeated-guarded-update` is registered in ordinary and staged snapshots. Its
-resolved field, typed bound and update operator use `advisory_values`; conditions
-and updates use `advisory_receipts`. It is deliberately absent from
+resolved field and structurally normalized check/write expressions use
+`advisory_values`; conditions, writes and typed input-role bindings use
+`advisory_receipts`. It is deliberately absent from
 `stage_collectors`, and does not affect legacy verdicts.

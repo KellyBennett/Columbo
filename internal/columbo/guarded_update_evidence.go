@@ -9,9 +9,10 @@ import (
 	"strconv"
 )
 
-func (scan *guardedUpdateScan) site(node *ast.IfStmt, update *ast.IncDecStmt, guard ast.Expr) advisorySite {
-	site := scan.owner.guardedSite(node.Cond, update, guard)
+func (scan *guardedUpdateScan) site(node *ast.IfStmt, mutation *guardedMutation, match *guardedMatch) advisorySite {
+	site := scan.owner.guardedSite(node.Cond, mutation.node, match.guard)
 	site.receipts = append(scan.surroundingConditions(), site.receipts...)
+	site.receipts = append(site.receipts, scan.owner.guardedInputs(match.inputs)...)
 	return site
 }
 func (owner *declaration) guardedSite(condition, update, guard ast.Node) advisorySite {
@@ -33,16 +34,20 @@ func (scan *guardedUpdateScan) surroundingConditions() []Source {
 func (key guardedUpdateKey) group(fset *token.FileSet, sites []advisorySite) advisoryGroup {
 	sortGuardedSites(sites)
 	fieldID := key.fieldIdentity(guardedFieldLocation(fset, key.field))
-	id, _ := identity(guardedUpdateKind, fieldID, key.boundType, key.bound+key.operationText())
+	id, _ := identity(guardedUpdateKind, fieldID, key.check, key.write)
 	return advisoryGroup{id: id, kind: guardedUpdateKind, subject: key.subject(), lead: guardedUpdateLead, limits: guardedUpdateLimits, values: key.values(fieldID), sites: sites}
 }
 func (key guardedUpdateKey) values(fieldID string) []advisoryValue {
-	return []advisoryValue{{"resolved-field", fieldID, types.TypeString(key.field.Type(), nil)}, {"bound", key.boundType, key.bound}, {"update", "", key.operationText()}}
+	return []advisoryValue{{"resolved-field", fieldID, types.TypeString(key.field.Type(), nil)}, {"normalized-check", "", key.check}, {"normalized-write", "", key.write}}
 }
-func (key guardedUpdateKey) subject() string {
-	return key.field.Name() + " " + guardedComparison(key.operation).String() + " " + key.bound + "; " + key.operationText()
+func (key guardedUpdateKey) subject() string { return key.field.Name() + ": repeated guarded mutation" }
+func (owner *declaration) guardedInputs(inputs []guardedInput) []Source {
+	receipts := []Source{}
+	for _, input := range inputs {
+		receipts = append(receipts, owner.categoryReceipt("mutation-input", input.node, Detail{Subject: input.role}))
+	}
+	return receipts
 }
-func (key guardedUpdateKey) operationText() string { return key.operation.String() + " 1" }
 func (key guardedUpdateKey) fieldIdentity(location string) string {
 	return key.field.Pkg().Path() + "." + key.field.Name() + "@" + location
 }
@@ -62,5 +67,10 @@ func sortGuardedSites(sites []advisorySite) {
 	})
 }
 func guardedUpdateOffset(site advisorySite) int {
-	return site.receipts[len(site.receipts)-1].StartOffset
+	for _, receipt := range site.receipts {
+		if receipt.Kind == "guarded-update" {
+			return receipt.StartOffset
+		}
+	}
+	return 0
 }

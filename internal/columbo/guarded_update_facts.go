@@ -8,34 +8,32 @@ import (
 )
 
 type guardedFacts struct{ info *types.Info }
+type guardedMatch struct {
+	key    guardedUpdateKey
+	guard  ast.Expr
+	inputs []guardedInput
+}
 type guardedPredicate struct {
-	facts      guardedFacts
-	subject    resolvedValuePath
-	comparison token.Token
+	facts   guardedFacts
+	subject resolvedValuePath
 }
 
-func (facts guardedFacts) match(condition ast.Expr, update *ast.IncDecStmt) (guardedUpdateKey, ast.Expr) {
-	subject := facts.path(update.X)
+func (facts guardedFacts) match(condition ast.Expr, mutation *guardedMutation, normalizer *guardedNormalizer) *guardedMatch {
+	subject := facts.path(mutation.target)
 	if !subject.valid() || !facts.pure(condition) {
-		return guardedUpdateKey{}, nil
+		return nil
 	}
-	predicate := guardedPredicate{facts, subject, guardedComparison(update.Tok)}
-	guard, bound := predicate.bound(condition)
+	predicate := guardedPredicate{facts, subject}
+	guard := predicate.comparison(condition)
 	if guard == nil {
-		return guardedUpdateKey{}, nil
+		return nil
 	}
-	return facts.key(subject, update.Tok, bound), guard
-}
-func (facts guardedFacts) key(subject resolvedValuePath, operation token.Token, bound ast.Expr) guardedUpdateKey {
-	value, typ := guardedConstant(facts.info.Types[bound])
-	return guardedUpdateKey{subject.fields[0], value, typ, operation}
-}
-func guardedConstant(value types.TypeAndValue) (string, string) {
-	return value.Value.ExactString(), types.TypeString(value.Type, nil)
+	normalizer.subject = subject
+	return normalizer.match(guard, mutation)
 }
 func (facts guardedFacts) path(expr ast.Expr) resolvedValuePath {
 	field, ok := unparen(expr).(*ast.SelectorExpr)
-	if !ok || !directGuardedField(field) || !facts.integerField(field) {
+	if !ok || !directGuardedField(field) || !facts.scalarField(field) {
 		return resolvedValuePath{}
 	}
 	return categoryPath(facts.info, field)
@@ -44,16 +42,19 @@ func directGuardedField(field *ast.SelectorExpr) bool {
 	_, ok := unparen(field.X).(*ast.Ident)
 	return ok
 }
-func (facts guardedFacts) integerField(field *ast.SelectorExpr) bool {
+func (facts guardedFacts) scalarField(field *ast.SelectorExpr) bool {
 	selection := facts.info.Selections[field]
 	if selection == nil || len(selection.Index()) != 1 {
 		return false
 	}
-	return guardedInteger(facts.info.TypeOf(field))
+	return guardedScalar(facts.info.TypeOf(field))
 }
-func guardedInteger(typ types.Type) bool {
+func guardedScalar(typ types.Type) bool {
+	if typ == nil {
+		return false
+	}
 	basic, ok := typ.Underlying().(*types.Basic)
-	return ok && basic.Info()&types.IsInteger != 0
+	return ok && basic.Info()&(types.IsInteger|types.IsString|types.IsBoolean) != 0
 }
 func (facts guardedFacts) pure(expr ast.Expr) bool {
 	expr = unparen(expr)
@@ -70,49 +71,53 @@ func (facts guardedFacts) pure(expr ast.Expr) bool {
 	return guardedPureOperator(binary.Op) && facts.pure(binary.X) && facts.pure(binary.Y)
 }
 func (facts guardedFacts) pureValue(expr ast.Expr) bool {
-	return facts.info.Types[expr].Value != nil || categoryPath(facts.info, expr).valid()
+	return facts.info.Types[expr].Value != nil || categoryPath(facts.info, expr).valid() || facts.pureUnary(expr)
 }
 func guardedPureOperator(op token.Token) bool {
-	return slices.Contains([]token.Token{token.LAND, token.EQL, token.NEQ, token.LSS, token.GTR, token.LEQ, token.GEQ}, op)
+	return op == token.LAND || guardedComparison(op) || guardedArithmetic(op)
 }
-func (predicate guardedPredicate) bound(expr ast.Expr) (ast.Expr, ast.Expr) {
+func guardedComparison(op token.Token) bool {
+	return slices.Contains([]token.Token{token.EQL, token.NEQ, token.LSS, token.GTR, token.LEQ, token.GEQ}, op)
+}
+func guardedArithmetic(op token.Token) bool {
+	return slices.Contains([]token.Token{token.ADD, token.SUB, token.MUL, token.QUO, token.REM, token.AND, token.OR, token.XOR, token.SHL, token.SHR, token.AND_NOT}, op)
+}
+func (predicate guardedPredicate) comparison(expr ast.Expr) *ast.BinaryExpr {
 	binary, ok := unparen(expr).(*ast.BinaryExpr)
 	if !ok {
-		return nil, nil
+		return nil
 	}
 	if binary.Op == token.LAND {
 		return predicate.conjunction(binary)
 	}
-	return predicate.comparisonBound(binary)
-}
-func (predicate guardedPredicate) conjunction(binary *ast.BinaryExpr) (ast.Expr, ast.Expr) {
-	if guard, bound := predicate.bound(binary.X); guard != nil {
-		return guard, bound
+	if guardedComparison(binary.Op) && predicate.readsSubject(binary) {
+		return binary
 	}
-	return predicate.bound(binary.Y)
+	return nil
 }
-func (predicate guardedPredicate) comparisonBound(binary *ast.BinaryExpr) (ast.Expr, ast.Expr) {
-	left, right, op := binary.X, binary.Y, binary.Op
-	if op == predicate.comparison && predicate.operands(left, right) {
-		return binary, right
+func (predicate guardedPredicate) conjunction(binary *ast.BinaryExpr) *ast.BinaryExpr {
+	if comparison := predicate.comparison(binary.X); comparison != nil {
+		return comparison
 	}
-	if op == reversedGuard(predicate.comparison) && predicate.operands(right, left) {
-		return binary, left
-	}
-	return nil, nil
+	return predicate.comparison(binary.Y)
 }
-func (predicate guardedPredicate) operands(subject, bound ast.Expr) bool {
-	return predicate.subject.same(predicate.facts.path(subject)) && predicate.facts.info.Types[bound].Value != nil
+func (predicate guardedPredicate) readsSubject(binary *ast.BinaryExpr) bool {
+	return predicate.reads(binary.X) || predicate.reads(binary.Y)
 }
-func guardedComparison(operation token.Token) token.Token {
-	if operation == token.DEC {
-		return token.GTR
-	}
-	return token.LSS
+
+func (facts guardedFacts) pureUnary(expr ast.Expr) bool {
+	node, ok := unparen(expr).(*ast.UnaryExpr)
+	return ok && guardedUnary(node.Op) && facts.pure(node.X)
 }
-func reversedGuard(op token.Token) token.Token {
-	if op == token.LSS {
-		return token.GTR
+func (predicate guardedPredicate) reads(expr ast.Expr) bool {
+	if predicate.subject.same(predicate.facts.path(expr)) {
+		return true
 	}
-	return token.LSS
+	if binary, ok := unparen(expr).(*ast.BinaryExpr); ok {
+		return predicate.readsSubject(binary)
+	}
+	if unary, ok := unparen(expr).(*ast.UnaryExpr); ok {
+		return predicate.reads(unary.X)
+	}
+	return false
 }

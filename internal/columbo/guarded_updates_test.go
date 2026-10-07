@@ -17,7 +17,7 @@ func TestGuardedUpdateBoundaries(t *testing.T) {
 		count        int
 	}{
 		{"same schema distinct parameter", `func another(x *Item){if x.Quality<50{x.Quality++}}`, 1},
-		{"normalized bound", `const limit=25*2;func another(x *Item){if limit>x.Quality{x.Quality++}}`, 1},
+		{"named constant identity", `const limit=25*2;func another(x *Item){if limit>x.Quality{x.Quality++}}`, 0},
 		{"compound before", `func another(x *Item){if x.SellIn<0 && x.Quality<50{x.Quality++}}`, 1},
 		{"compound after", `func another(x *Item){if x.Quality<50 && x.SellIn<0{x.Quality++}}`, 1},
 		{"receiver", `func(x *Item) another(){if x.Quality<50{x.Quality++}}`, 1},
@@ -42,7 +42,7 @@ func TestGuardedUpdateBoundaries(t *testing.T) {
 		{"closure", `func another(x *Item){_=func(){if x.Quality<50{x.Quality++}}}`, 0},
 		{"promoted field", `type Wrap struct{Item};func another(x *Wrap){if x.Quality<50{x.Quality++}}`, 0},
 		{"nested field", `type Wrap struct{Child *Item};func another(x *Wrap){if x.Child.Quality<50{x.Child.Quality++}}`, 0},
-		{"assignment exclusion", `func another(x *Item){if x.Quality<50{x.Quality+=1}}`, 0},
+		{"compound assignment normalization", `func another(x *Item){if x.Quality<50{x.Quality+=1}}`, 1},
 		{"same name local scalar", `func another(){Quality:=0;if Quality<50{Quality++}}`, 0},
 	}
 	for _, test := range tests {
