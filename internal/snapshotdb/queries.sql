@@ -112,7 +112,7 @@ ORDER BY f.path, r.start_offset, r.end_offset;
 -- name: SummaryClueSets :many
 SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
 FROM clues c JOIN clue_values v ON v.clue_id=c.id
-WHERE c.case_id=sqlc.arg(case_id) AND c.kind IN ('variant-set','repeated-variant-set','selected-role','selected-implementation-set','selected-message-set')
+WHERE c.case_id=sqlc.arg(case_id) AND c.kind IN ('variant-set','repeated-variant-set','variant-shared-write','variant-write-read','selected-role','selected-implementation-set','selected-message-set')
 ORDER BY c.ordinal,v.ordinal;
 
 -- name: SummaryVariantDecisions :many

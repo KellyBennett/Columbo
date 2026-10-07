@@ -51,6 +51,14 @@ func (f tangleFacts) field(expr ast.Expr) (string, string) {
 	return choiceFieldKey(f.info.Selections[selector]), f.path(selector.X)
 }
 func (f tangleFacts) comparisons(expr ast.Expr) []tangleComparison {
+	var comparisons []tangleComparison
+	walkBooleanLeaves(expr, func(leaf ast.Expr) bool {
+		comparisons = append(comparisons, f.comparisonLeaf(leaf)...)
+		return true
+	})
+	return comparisons
+}
+func (f tangleFacts) comparisonLeaf(expr ast.Expr) []tangleComparison {
 	expr = unparen(expr)
 	if n, ok := expr.(*ast.UnaryExpr); ok && n.Op == token.NOT {
 		return f.comparisons(n.X)
@@ -63,9 +71,6 @@ func (f tangleFacts) comparisons(expr ast.Expr) []tangleComparison {
 }
 func (f tangleFacts) binary(n *ast.BinaryExpr) []tangleComparison {
 	op := n.Op
-	if op == token.LAND || op == token.LOR {
-		return append(f.comparisons(n.X), f.comparisons(n.Y)...)
-	}
 	if op == token.EQL || op == token.NEQ {
 		return f.comparison(n)
 	}

@@ -76,6 +76,7 @@ type fileReferences struct {
 	info  *types.Info
 }
 
+//columbo:ignore repeated-variant-decision -- [dogfood] Independent AST analyses share syntax kinds without an established common policy; revisit RVD-001 enforcement.
 func (s *fileReferences) visit(n ast.Node) bool {
 	switch n := n.(type) {
 	case *ast.CallExpr:

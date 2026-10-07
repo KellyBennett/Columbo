@@ -34,6 +34,13 @@ func TestTanglesBooleanContextAndDeterminism(t *testing.T) {
 	require.Contains(t, a.Groups[0].Sites[0].Condition.Spelling, `!(x.Name == "B")`)
 	require.Equal(t, []string{`"A"`, `"B"`}, a.Groups[0].Values)
 }
+
+func TestTanglesKeepRecognizedComparisonsBesideUnsupportedLeaves(t *testing.T) {
+	source := strings.Replace(tangleBody, `x.Name != "A"`, `x.Quality > 0 && x.Name != "A"`, 1)
+	report := tanglesFixture(t, tanglePrelude+source)
+	require.Len(t, report.Groups, 1)
+	require.Len(t, report.Groups[0].Values, 2)
+}
 func TestTanglesCounterexamples(t *testing.T) {
 	cases := map[string]string{
 		"return-validation":    `func f(x *Item) bool { if x.Name!="A" && x.Name!="B" { if x.Name!="B" { return false } };if x.Name=="A" { return true };return false }`,
