@@ -63,10 +63,6 @@ columbo ./...
 
 No configuration is required. Columbo currently analyzes production code; test files are excluded.
 
-Prose comments fail by default; recognized machine directives are allowed. Protect intentional omissions with regression tests. See the [comment policy](docs/prose-comments.md).
-
-[Configuration and rules](SPEC.md) · [Evidence query guide](docs/sqlite-schema.md) · [Development](docs/development.md)
-
 ## Supported Languages
 
 - Go
