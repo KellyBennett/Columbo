@@ -63,6 +63,26 @@ class PublisherTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stored stage issues"):
                 publisher.read_snapshot(path, 1)
 
+    def test_all_configured_stages_clear(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleared.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO refactoring_stages VALUES ('untangle',0,'Untangle Behavior','Gather behavior','cleared',0,0)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('ownership',1,'Assign Ownership','Initial bounded ownership gate','cleared',0,0)")
+                db.execute("INSERT INTO advisory_collectors VALUES ('category-selected-behavior',1,1)")
+                db.execute("INSERT INTO stage_collectors VALUES ('ownership',0,'category-selected-behavior',0)")
+            annotations, summary = publisher.read_snapshot(path, 0)
+            self.assertEqual([], annotations)
+            self.assertIn("Assign Ownership: cleared", summary)
+            self.assertIn("does not prove architectural ownership", summary)
+            with self.assertRaisesRegex(ValueError, "stored stage issues"):
+                publisher.read_snapshot(path, 1)
+            with sqlite3.connect(path) as db:
+                db.execute("UPDATE refactoring_stages SET state='locked' WHERE id='ownership'")
+            with self.assertRaisesRegex(ValueError, "invalid active refactoring stage"):
+                publisher.read_snapshot(path, 0)
+
     def test_advisories_appear_in_summary_without_annotations(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "advisories.sqlite"

@@ -595,7 +595,7 @@
 [refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
 
 [report] id | schema_version | columbo_version
-1 | 6 | "test"
+1 | 7 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2" | "C-b06ec7d1d9"

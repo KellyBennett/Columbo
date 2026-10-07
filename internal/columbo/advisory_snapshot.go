@@ -10,6 +10,7 @@ func (report Report) writeAdvisories(w *snapshotWriter) {
 	w.advisoryCoverage("nested-field-decision", report.Tangles.Files, report.Tangles.Declarations)
 	if report.Stages != nil {
 		w.advisoryCoverage("variant-coordination", report.Tangles.Files, report.Tangles.Declarations)
+		w.advisoryCoverage(categoryBehaviorKind, report.Tangles.Files, report.Tangles.Declarations)
 	}
 	for _, group := range report.advisories() {
 		group.writeSnapshot(w)

@@ -44,10 +44,10 @@ class Snapshot:
     def validate(self):
         if self.db.execute("PRAGMA application_id").fetchone()[0] != 0x434C4D42:
             raise ValueError("not a Columbo snapshot")
-        if self.db.execute("PRAGMA user_version").fetchone()[0] != 6:
+        if self.db.execute("PRAGMA user_version").fetchone()[0] != 7:
             raise ValueError("unsupported Columbo snapshot schema")
         reports = self.db.execute("SELECT id,schema_version FROM report").fetchall()
-        if [tuple(row) for row in reports] != [(1, 6)]:
+        if [tuple(row) for row in reports] != [(1, 7)]:
             raise ValueError("invalid Columbo report metadata")
         if [tuple(row) for row in self.db.execute("PRAGMA integrity_check")] != [("ok",)]:
             raise ValueError("snapshot integrity check failed")
@@ -178,11 +178,11 @@ class Snapshot:
     def stage_summary(self, exit_code):
         stages = self.stages()
         active = [stage for stage in stages if stage["state"] == "active"]
-        if len(active) != 1:
+        if len(active) > 1 or (not active and any(stage["state"] != "cleared" for stage in stages)):
             raise ValueError("invalid active refactoring stage")
-        if exit_code != (1 if active[0]["issue_count"] else 0):
+        if exit_code != (1 if active and active[0]["issue_count"] else 0):
             raise ValueError("analysis exit code disagrees with stored stage issues")
-        lines = ["Refactoring mode: staged. Legacy verdicts remain in SQLite and are not enforced."]
+        lines = ["Refactoring mode: staged. Legacy verdicts remain in SQLite and are not enforced.", "Cleared means only that configured collectors found no issues; it does not prove architectural ownership or correctness."]
         for stage in stages:
             lines.append(f'Stage {stage["name"]}: {stage["state"]}')
             if stage["state"] == "active":

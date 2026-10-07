@@ -165,7 +165,7 @@
 [refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
 
 [report] id | schema_version | columbo_version
-1 | 6 | "test"
+1 | 7 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 

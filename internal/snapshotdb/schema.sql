@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 6),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 7),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -342,7 +342,7 @@ CREATE TABLE correlation_guidance (
 ) STRICT;
 
 CREATE TABLE advisory_collectors (
- kind TEXT PRIMARY KEY CHECK (kind IN ('choice-set','nested-field-decision','variant-coordination')),
+ kind TEXT PRIMARY KEY CHECK (kind IN ('choice-set','nested-field-decision','variant-coordination','category-selected-behavior')),
  files_analyzed INTEGER NOT NULL CHECK (files_analyzed >= 0),
  declarations_analyzed INTEGER NOT NULL CHECK (declarations_analyzed >= 0)
 ) STRICT;

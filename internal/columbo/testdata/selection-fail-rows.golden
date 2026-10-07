@@ -140,7 +140,7 @@
 [refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
 
 [report] id | schema_version | columbo_version
-1 | 6 | "test"
+1 | 7 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-13c7183a8f36ed220d942e71d72b3d4c70ae26913b36591c2ecf7a54fc1bac91" | "C-92ebcdd20a"

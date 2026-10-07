@@ -24,6 +24,7 @@ func (stage stageResult) writeCollectors(w *snapshotWriter) {
 }
 func (r *snapshotRenderer) staged(stages []snapshotdb.RefactoringStage) error {
 	r.emit("Refactoring mode: staged (legacy verdicts retained in SQLite; not enforced)\n")
+	r.emit("Cleared means only that configured collectors found no issues; it does not prove architectural ownership or correctness.\n")
 	for _, stage := range stages {
 		r.stageHeader(stage)
 		if err := r.stageCollectors(stage.ID); err != nil {

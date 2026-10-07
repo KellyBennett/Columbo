@@ -16,12 +16,12 @@ func refactoringStages() []stageDefinition {
 	return []stageDefinition{
 		{id: "untangle-behavior", name: "Untangle Behavior", task: untangleTask,
 			collectors: []string{"nested-field-decision", "variant-coordination"}},
-		{id: "assign-ownership", name: "Assign Ownership", task: ownershipTask, pending: true, contextSmells: []string{variantSmell, selectionSmell}},
+		{id: "assign-ownership", name: "Assign Ownership", task: ownershipTask, collectors: []string{categoryBehaviorKind}, contextSmells: []string{variantSmell, selectionSmell}},
 	}
 }
 
 const untangleTask = "Gather each behavioral category into coherent paths or methods, preserving behavior, ordering and boundaries. Temporary duplication is acceptable. Do only enough to remove the current collector findings, then rerun Columbo for fresh evidence. Defer ownership, sharing and deduplication decisions."
-const ownershipTask = "Assign appropriate owners to the gathered behaviors; consider sharing and common roles here. This stage is pending definition: no collectors or completion condition are defined, so Columbo cannot clear it."
+const ownershipTask = "Assign an explicit owner to category-selected behavior and separate category selection from invocation. Functions and objects can both express ownership. Preserve default and no-op behavior. Clearing this initial bounded collector is not proof that all architectural ownership is correct."
 
 type stageEvaluation struct {
 	groups []advisoryGroup
@@ -74,5 +74,6 @@ func (a *engine) collectStages() {
 		return
 	}
 	a.report.Coordination = a.coordinationAdvisories()
+	a.report.CategoryBehavior = a.categoryBehaviorAdvisories()
 	a.report.Stages = evaluateStages(a.report.stageDefinitions(), a.report.advisories())
 }
