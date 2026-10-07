@@ -1,3 +1,5 @@
+[active_stage_issues] id | kind | subject | lead | limits
+
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
 "choice-set" | 1 | 11
 "nested-field-decision" | 1 | 11
@@ -135,8 +137,10 @@
 
 [receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
 
+[refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
+
 [report] id | schema_version | columbo_version
-1 | 5 | "test"
+1 | 6 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-13c7183a8f36ed220d942e71d72b3d4c70ae26913b36591c2ecf7a54fc1bac91" | "C-92ebcdd20a"
@@ -181,6 +185,8 @@
 13 | "C-92ebcdd20a" | 12 | "role-message" | 1 | 16 | 16 | 705 | 719 | "*fixture.Email" | NULL | NULL | NULL | 1 | ""
 14 | "C-92ebcdd20a" | 13 | "role-message" | 1 | 16 | 16 | 705 | 719 | "*fixture.SMS" | NULL | NULL | NULL | 1 | ""
 15 | "C-92ebcdd20a" | 14 | "selected-message" | 1 | 16 | 16 | 705 | 719 | "Close() error" | NULL | NULL | NULL | 1 | ""
+
+[stage_collectors] stage_id | ordinal | collector | issue_count
 
 [summary] failed | warned | suppressed
 0 | 1 | 0

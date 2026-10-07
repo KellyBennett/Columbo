@@ -28,7 +28,7 @@ type TangleSite struct {
 	Writes      []Source `json:"writes"`
 }
 
-const tangleLead = "Repeated field decisions are nested and lexically guard updates to multiple fields on the same receiver expression. Review whether each variant should own its update behavior, leaving a common operation at the caller. Preserve ordering and boundary behavior; duplication alone does not justify a hierarchy."
+const tangleLead = "Repeated field decisions are nested and lexically guard updates to multiple fields on the same receiver expression. Gather each behavioral category into coherent paths or methods. Preserve ordering and boundary behavior, tolerate temporary duplication, and rerun for fresh evidence before assigning ownership or deduplicating."
 const tangleLimits = "Syntactic evidence, not path feasibility or proof of entanglement. Receiver paths resolve variables, direct fields and simple indexes; aliases, mutation between checks, runtime index identity and call effects are not analyzed. Writes may be nested in either branch and are not necessarily executed. Return-only validation, switches, helper-mediated updates and single-output behavior are outside this collector's scope."
 
 func (a *engine) tangles() TangleReport {

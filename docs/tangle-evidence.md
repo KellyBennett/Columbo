@@ -21,7 +21,7 @@ Receiver paths resolve variable objects, direct named-struct fields, pointer der
 
 ## Interpretation and limits
 
-The lead suggests reviewing whether variants should own their update behavior. It does not prove that polymorphism is appropriate, that conditions are feasible, that the same runtime object is accessed, or that a write executes. No alias, mutation-between-checks, control-flow, interval, or call-effect analysis is performed. A constant under NOT is only a mentioned comparison value, not an asserted allowed variant.
+The lead suggests gathering each behavioral category into coherent paths or methods before assigning ownership, while preserving behavior and tolerating temporary duplication. It does not prove that polymorphism is appropriate, that conditions are feasible, that the same runtime object is accessed, or that a write executes. No alias, mutation-between-checks, control-flow, interval, or call-effect analysis is performed. A constant under NOT is only a mentioned comparison value, not an asserted allowed variant.
 
 Return-only validation, checks on unrelated receivers, single-output updates, switches and helper-mediated behavior are intentionally outside v1. A validator that mutates several fields can still qualify: this heuristic cannot distinguish every reasonable validation routine from entanglement. There is no claim of general precision or recall.
 

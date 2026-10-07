@@ -43,6 +43,8 @@ type MemberRef struct {
 }
 
 type Report struct {
+	Stages       []stageResult         `json:"-"`
+	Coordination []advisoryGroup       `json:"-"`
 	Choices      ChoiceSetReport       `json:"-"`
 	Tangles      TangleReport          `json:"-"`
 	Correlations []Correlation         `json:"correlations,omitempty"`

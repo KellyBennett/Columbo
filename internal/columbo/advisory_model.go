@@ -13,7 +13,7 @@ type advisoryGroup struct {
 }
 
 func (report Report) advisories() []advisoryGroup {
-	groups := []advisoryGroup{}
+	groups := append([]advisoryGroup{}, report.Coordination...)
 	for _, group := range report.Choices.Groups {
 		groups = append(groups, group.advisory())
 	}

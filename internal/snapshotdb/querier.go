@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	ActiveStageAdvisories(ctx context.Context) ([]AdvisoryGroup, error)
 	AdvisoryCoverage(ctx context.Context) ([]AdvisoryCollector, error)
 	AdvisoryReceipts(ctx context.Context, arg AdvisoryReceiptsParams) ([]AdvisoryReceiptsRow, error)
 	AdvisorySites(ctx context.Context, arg AdvisorySitesParams) ([]AdvisorySitesRow, error)
@@ -46,6 +47,8 @@ type Querier interface {
 	InsertRoleMessage(ctx context.Context, arg InsertRoleMessageParams) error
 	InsertRoleReceipt(ctx context.Context, arg InsertRoleReceiptParams) error
 	InsertSourceReceipt(ctx context.Context, arg InsertSourceReceiptParams) (int64, error)
+	InsertStage(ctx context.Context, arg InsertStageParams) error
+	InsertStageCollector(ctx context.Context, arg InsertStageCollectorParams) error
 	InsertSuppression(ctx context.Context, arg InsertSuppressionParams) error
 	InsertWarning(ctx context.Context, arg InsertWarningParams) error
 	LinkCaseDeclaration(ctx context.Context, arg LinkCaseDeclarationParams) error
@@ -56,6 +59,7 @@ type Querier interface {
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
+	StageCollectors(ctx context.Context, arg StageCollectorsParams) ([]StageCollector, error)
 	SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
 	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
@@ -71,6 +75,7 @@ type Querier interface {
 	SummaryRoleInterfaces(ctx context.Context, arg SummaryRoleInterfacesParams) ([]SummaryRoleInterfacesRow, error)
 	SummaryRoles(ctx context.Context) ([]RoleCandidate, error)
 	SummarySelectionReceipts(ctx context.Context, arg SummarySelectionReceiptsParams) ([]SummarySelectionReceiptsRow, error)
+	SummaryStages(ctx context.Context) ([]RefactoringStage, error)
 	SummarySuppressions(ctx context.Context, arg SummarySuppressionsParams) ([]SummarySuppressionsRow, error)
 	SummaryTotals(ctx context.Context) (SummaryTotalsRow, error)
 	SummaryVariantDecisions(ctx context.Context, arg SummaryVariantDecisionsParams) ([]SummaryVariantDecisionsRow, error)

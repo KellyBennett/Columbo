@@ -15,6 +15,11 @@ if CGO_ENABLED=0 go -C "$GITHUB_ACTION_PATH" build -o "$evidence/columbo" ./cmd/
   cd "$GITHUB_WORKSPACE/$COLUMBO_WORKING_DIRECTORY"
   args=(--output "$evidence/report.sqlite")
   if [[ -n "$COLUMBO_CONFIG" ]]; then args+=(--config "$COLUMBO_CONFIG"); fi
+  case "${COLUMBO_STAGED:-false}" in
+    true) args+=(--staged) ;;
+    false) ;;
+    *) printf 'staged must be true or false\n' >&2; exit 2 ;;
+  esac
   status=0
   "$evidence/columbo" "${args[@]}" ./... 2>&1 | tee "$evidence/report.txt" || status=$?
 else

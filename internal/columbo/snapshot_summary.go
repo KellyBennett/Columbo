@@ -27,12 +27,28 @@ func (r *snapshotRenderer) emit(format string, args ...any) {
 	fmt.Fprintf(&r.buffer, format, args...)
 }
 func (r *snapshotRenderer) render(path string) error {
-	for _, stage := range []func() error{r.cases, r.advisories, r.roles, r.correlations, r.warnings, r.totals} {
-		if err := stage(); err != nil {
+	if err := r.reportBody(); err != nil {
+		return err
+	}
+	r.emit("Database: %s\n", path)
+	return nil
+}
+func (r *snapshotRenderer) reportBody() error {
+	stages, err := r.queries.SummaryStages(context.Background())
+	if err != nil {
+		return err
+	}
+	if len(stages) > 0 {
+		return r.staged(stages)
+	}
+	return r.legacyBody()
+}
+func (r *snapshotRenderer) legacyBody() error {
+	for _, section := range []func() error{r.cases, r.advisories, r.roles, r.correlations, r.warnings, r.totals} {
+		if err := section(); err != nil {
 			return err
 		}
 	}
-	r.emit("Database: %s\n", path)
 	return nil
 }
 func (r *snapshotRenderer) exitCode() int {

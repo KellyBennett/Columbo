@@ -1,3 +1,5 @@
+[active_stage_issues] id | kind | subject | lead | limits
+
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
 "choice-set" | 1 | 1
 "nested-field-decision" | 1 | 1
@@ -75,8 +77,10 @@
 
 [receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
 
+[refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
+
 [report] id | schema_version | columbo_version
-1 | 5 | "test"
+1 | 6 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 
@@ -97,6 +101,8 @@
 4 | "C-89406fe185" | 3 | "parameter" | 1 | 2 | 2 | 23 | 36 | "2:int" | "integer" | 5 | NULL | 1 | ""
 5 | "C-89406fe185" | 4 | "parameter" | 1 | 2 | 2 | 23 | 36 | "3:int" | "integer" | 5 | NULL | 1 | ""
 6 | "C-89406fe185" | 5 | "parameter" | 1 | 2 | 2 | 23 | 36 | "4:int" | "integer" | 5 | NULL | 1 | ""
+
+[stage_collectors] stage_id | ordinal | collector | issue_count
 
 [summary] failed | warned | suppressed
 1 | 0 | 0

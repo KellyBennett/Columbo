@@ -9,6 +9,39 @@ import (
 	"context"
 )
 
+const activeStageAdvisories = `-- name: ActiveStageAdvisories :many
+SELECT g.id, g.kind, g.subject, g.lead, g.limits FROM advisory_groups g JOIN active_stage_issues a ON a.id=g.id ORDER BY g.kind,g.id
+`
+
+func (q *Queries) ActiveStageAdvisories(ctx context.Context) ([]AdvisoryGroup, error) {
+	rows, err := q.db.QueryContext(ctx, activeStageAdvisories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisoryGroup
+	for rows.Next() {
+		var i AdvisoryGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Subject,
+			&i.Lead,
+			&i.Limits,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const advisoryCoverage = `-- name: AdvisoryCoverage :many
 SELECT kind,files_analyzed,declarations_analyzed FROM advisory_collectors ORDER BY kind
 `
@@ -907,6 +940,54 @@ func (q *Queries) InsertSourceReceipt(ctx context.Context, arg InsertSourceRecei
 	return result.LastInsertId()
 }
 
+const insertStage = `-- name: InsertStage :exec
+INSERT INTO refactoring_stages (id,ordinal,name,task,state,pending_definition,issue_count) VALUES (?,?,?,?,?,?,?)
+`
+
+type InsertStageParams struct {
+	ID                string
+	Ordinal           int64
+	Name              string
+	Task              string
+	State             string
+	PendingDefinition int64
+	IssueCount        int64
+}
+
+func (q *Queries) InsertStage(ctx context.Context, arg InsertStageParams) error {
+	_, err := q.db.ExecContext(ctx, insertStage,
+		arg.ID,
+		arg.Ordinal,
+		arg.Name,
+		arg.Task,
+		arg.State,
+		arg.PendingDefinition,
+		arg.IssueCount,
+	)
+	return err
+}
+
+const insertStageCollector = `-- name: InsertStageCollector :exec
+INSERT INTO stage_collectors (stage_id,ordinal,collector,issue_count) VALUES (?,?,?,?)
+`
+
+type InsertStageCollectorParams struct {
+	StageID    string
+	Ordinal    int64
+	Collector  string
+	IssueCount int64
+}
+
+func (q *Queries) InsertStageCollector(ctx context.Context, arg InsertStageCollectorParams) error {
+	_, err := q.db.ExecContext(ctx, insertStageCollector,
+		arg.StageID,
+		arg.Ordinal,
+		arg.Collector,
+		arg.IssueCount,
+	)
+	return err
+}
+
 const insertSuppression = `-- name: InsertSuppression :exec
 INSERT INTO suppressions(ordinal,smell,symbol,file_id,line,justification,applied,case_id) VALUES (?,?,?,?,?,?,?,?)
 `
@@ -1075,6 +1156,42 @@ func (q *Queries) ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	var i ReportIdentityRow
 	err := row.Scan(&i.ReportCount, &i.SchemaVersion)
 	return i, err
+}
+
+const stageCollectors = `-- name: StageCollectors :many
+SELECT stage_id, ordinal, collector, issue_count FROM stage_collectors WHERE stage_id=? ORDER BY ordinal
+`
+
+type StageCollectorsParams struct {
+	StageID string
+}
+
+func (q *Queries) StageCollectors(ctx context.Context, arg StageCollectorsParams) ([]StageCollector, error) {
+	rows, err := q.db.QueryContext(ctx, stageCollectors, arg.StageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StageCollector
+	for rows.Next() {
+		var i StageCollector
+		if err := rows.Scan(
+			&i.StageID,
+			&i.Ordinal,
+			&i.Collector,
+			&i.IssueCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const summaryAdvisories = `-- name: SummaryAdvisories :many
@@ -1652,6 +1769,41 @@ func (q *Queries) SummarySelectionReceipts(ctx context.Context, arg SummarySelec
 			&i.EndLine,
 			&i.StartOffset,
 			&i.EndOffset,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryStages = `-- name: SummaryStages :many
+SELECT id, ordinal, name, task, state, pending_definition, issue_count FROM refactoring_stages ORDER BY ordinal
+`
+
+func (q *Queries) SummaryStages(ctx context.Context) ([]RefactoringStage, error) {
+	rows, err := q.db.QueryContext(ctx, summaryStages)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RefactoringStage
+	for rows.Next() {
+		var i RefactoringStage
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ordinal,
+			&i.Name,
+			&i.Task,
+			&i.State,
+			&i.PendingDefinition,
+			&i.IssueCount,
 		); err != nil {
 			return nil, err
 		}

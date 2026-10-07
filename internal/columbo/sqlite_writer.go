@@ -38,9 +38,7 @@ func (w *snapshotWriter) write(report Report, version string) error {
 	for ordinal, c := range report.Cases {
 		w.writeCase(c, ordinal)
 	}
-	report.writeAdvisories(w)
-	report.writeRoles(w)
-	report.writeCorrelations(w)
+	report.writeEvidence(w)
 	w.writeSuppressions(report.Suppressions)
 	w.writeWarnings(report.Warnings)
 	return w.err
@@ -554,4 +552,11 @@ func snapshotNullableText(value any) (*string, error) {
 func snapshotIntegerPointer(value any) *int64 {
 	integer := reflect.ValueOf(value).Int()
 	return &integer
+}
+
+func (report Report) writeEvidence(w *snapshotWriter) {
+	report.writeAdvisories(w)
+	report.writeStages(w)
+	report.writeRoles(w)
+	report.writeCorrelations(w)
 }

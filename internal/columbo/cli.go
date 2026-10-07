@@ -16,6 +16,7 @@ const usage = `Usage: columbo [flags] [packages...]
 Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
+  --staged            enforce only the current refactoring stage
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -26,9 +27,9 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, output                                    string
-	noHistory, showVersion, help, shortHelp, explicit bool
-	patterns                                          []string
+	config, output                                            string
+	noHistory, showVersion, help, shortHelp, explicit, staged bool
+	patterns                                                  []string
 }
 type command struct {
 	invocation Invocation
@@ -83,6 +84,7 @@ func (o *commandOptions) arguments(fs *flag.FlagSet) {
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
 	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
+	fs.BoolVar(&o.staged, "staged", false, "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
@@ -117,9 +119,8 @@ func (c *command) loadConfig() error {
 	if e != nil {
 		return e
 	}
-	if c.options.noHistory {
-		cfg.History = false
-	}
+	cfg.History = cfg.History && !c.options.noHistory
+	cfg.Staged = c.options.staged
 	c.config = cfg
 	return nil
 }

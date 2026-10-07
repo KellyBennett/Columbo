@@ -9,7 +9,7 @@ RUNNER = Path(__file__).with_name('run-action.sh').resolve()
 
 
 class ActionRunnerTests(unittest.TestCase):
-    def run_case(self, analysis_exit, build_exit=0):
+    def run_case(self, analysis_exit, build_exit=0, staged=False):
         with tempfile.TemporaryDirectory(prefix='columbo action ') as directory:
             root = Path(directory)
             (root / 'module').mkdir()
@@ -17,6 +17,7 @@ class ActionRunnerTests(unittest.TestCase):
             analyzer.write_text('#!/bin/bash\n'
                                 'test "$PWD" = "$GITHUB_WORKSPACE/module" || exit 2\n'
                                 'test "$4" = "settings with spaces.yml" || exit 2\n'
+                                'test "${COLUMBO_STAGED}" != true || test "$5" = --staged || exit 2\n'
                                 'printf evidence > "$2"\n'
                                 'echo "analysis completed"\n'
                                 f'exit {analysis_exit}\n')
@@ -32,7 +33,7 @@ class ActionRunnerTests(unittest.TestCase):
                        RUNNER_TEMP=str(root), GITHUB_OUTPUT=str(output),
                        GITHUB_SHA='abc', GITHUB_ACTION_PATH=str(root),
                        GITHUB_WORKSPACE=str(root), COLUMBO_WORKING_DIRECTORY='module',
-                       COLUMBO_CONFIG='settings with spaces.yml', FAKE_ANALYZER=str(analyzer))
+                       COLUMBO_CONFIG='settings with spaces.yml', FAKE_ANALYZER=str(analyzer), COLUMBO_STAGED=str(staged).lower())
             result = subprocess.run(['bash', str(RUNNER)], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             outputs = dict(line.split('=', 1) for line in output.read_text().splitlines())
@@ -45,6 +46,9 @@ class ActionRunnerTests(unittest.TestCase):
             self.assertEqual((evidence / 'report.sqlite').exists(), build_exit == 0)
             if not build_exit:
                 self.assertIn('analysis completed', (evidence / 'report.txt').read_text())
+
+    def test_staged_mode_is_forwarded(self):
+        self.run_case(1, staged=True)
 
     def test_clean_analysis(self):
         self.run_case(0)

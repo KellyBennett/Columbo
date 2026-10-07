@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 5),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 6),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -342,7 +342,7 @@ CREATE TABLE correlation_guidance (
 ) STRICT;
 
 CREATE TABLE advisory_collectors (
- kind TEXT PRIMARY KEY CHECK (kind IN ('choice-set','nested-field-decision')),
+ kind TEXT PRIMARY KEY CHECK (kind IN ('choice-set','nested-field-decision','variant-coordination')),
  files_analyzed INTEGER NOT NULL CHECK (files_analyzed >= 0),
  declarations_analyzed INTEGER NOT NULL CHECK (declarations_analyzed >= 0)
 ) STRICT;
@@ -392,3 +392,27 @@ CREATE TABLE advisory_receipts (
  PRIMARY KEY (group_id,site_ordinal,ordinal),
  FOREIGN KEY (group_id,site_ordinal) REFERENCES advisory_sites(group_id,ordinal)
 ) STRICT;
+
+CREATE TABLE refactoring_stages (
+ id TEXT PRIMARY KEY,
+ ordinal INTEGER NOT NULL UNIQUE CHECK (ordinal >= 0),
+ name TEXT NOT NULL,
+ task TEXT NOT NULL,
+ state TEXT NOT NULL CHECK (state IN ('cleared','active','locked')),
+ pending_definition INTEGER NOT NULL CHECK (pending_definition IN (0,1)),
+ issue_count INTEGER NOT NULL CHECK (issue_count >= 0),
+ CHECK (state <> 'cleared' OR (pending_definition = 0 AND issue_count = 0))
+) STRICT;
+CREATE UNIQUE INDEX one_active_stage ON refactoring_stages(state) WHERE state='active';
+CREATE TABLE stage_collectors (
+ stage_id TEXT NOT NULL REFERENCES refactoring_stages(id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ collector TEXT NOT NULL REFERENCES advisory_collectors(kind),
+ issue_count INTEGER NOT NULL CHECK (issue_count >= 0),
+ PRIMARY KEY (stage_id, collector),
+ UNIQUE (stage_id, ordinal)
+) STRICT;
+CREATE VIEW active_stage_issues AS
+ SELECT g.* FROM advisory_groups g
+ JOIN stage_collectors m ON m.collector=g.kind
+ JOIN refactoring_stages s ON s.id=m.stage_id WHERE s.state='active';

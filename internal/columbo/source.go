@@ -536,6 +536,7 @@ func (a *engine) finishReport() Report {
 	a.report.finishRoles()
 	a.report.correlate()
 	a.report.Choices, a.report.Tangles = a.choiceSets(), a.tangles()
+	a.collectStages()
 	a.collectDeclarationEvidence()
 	return a.report
 }
