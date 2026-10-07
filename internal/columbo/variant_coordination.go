@@ -123,12 +123,12 @@ func (p *coordinationPredicate) constant(expr ast.Expr, op string) bool {
 	return true
 }
 func (p *coordinationPredicate) condition(expr ast.Expr) bool {
+	return walkBooleanLeaves(expr, p.conditionLeaf)
+}
+func (p *coordinationPredicate) conditionLeaf(expr ast.Expr) bool {
 	n, ok := ast.Unparen(expr).(*ast.BinaryExpr)
 	if !ok {
 		return false
-	}
-	if n.Op == token.LOR || n.Op == token.LAND {
-		return p.condition(n.X) && p.condition(n.Y)
 	}
 	return p.comparison(n)
 }

@@ -22,6 +22,8 @@ func TestVariantCoordination(t *testing.T) {
 		{"shadowed outputs", `if x==A {n:=1;_ = n}; if x==B {n:=2;_=n}`, 0, 0},
 		{"closure boundary", `n:=0; if x==A {n++}; _=func(){if x==B {n++}}; _=n`, 0, 0},
 		{"boolean capabilities", `a,b:=true,false;n:=0;if a {n++};if b {n++};_=n`, 0, 0},
+		{"unsupported leaf rejects decision", `n:=0;if x==A && len(x)>0 {n++};if x==B {n++};_=n`, 0, 0},
+		{"negation remains unsupported", `n:=0;if !(x==A) {n++};if x==B {n++};_=n`, 0, 0},
 		{"switch and comparison", `n:=0;switch x {case A:n++;case B:n+=2};if x!=C {n++};_=n`, 1, 1},
 	}
 	for _, tt := range cases {
