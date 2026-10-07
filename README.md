@@ -78,3 +78,5 @@ For an opt-in, non-enforcing investigation of repeated choice-set construction, 
 - JavaScript
 - Python
 - Ruby
+
+For an opt-in investigation of nested decisions over the same field, see [experimental nested field-decision evidence](docs/tangle-evidence.md).

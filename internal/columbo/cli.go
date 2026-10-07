@@ -17,6 +17,7 @@ Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
   --choice-sets-output PATH  experimental choice-set evidence JSON (opt-in)
+  --tangles-output PATH  experimental nested field-decision evidence JSON (opt-in)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -27,7 +28,7 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, output, choiceSets                        string
+	config, output, choiceSets, tangles               string
 	noHistory, showVersion, help, shortHelp, explicit bool
 	patterns                                          []string
 }
@@ -36,6 +37,7 @@ type command struct {
 	options    commandOptions
 	config     Config
 	choices    *ChoiceSetReport
+	tangles    *TangleReport
 }
 
 func Run(args []string, invocation Invocation) int {
@@ -66,6 +68,12 @@ func (o *commandOptions) parse(args []string) error {
 		return e
 	}
 	o.arguments(fs)
+	return o.validateOutputs()
+}
+func (o *commandOptions) validateOutputs() error {
+	if o.tangles == "-" {
+		return fmt.Errorf("tangles-output must name a fresh JSON file, not stdout")
+	}
 	if o.choiceSets == "-" {
 		return fmt.Errorf("choice-sets-output must name a fresh JSON file, not stdout")
 	}
@@ -86,6 +94,7 @@ func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
 	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
 	fs.StringVar(&o.choiceSets, "choice-sets-output", "", "")
+	fs.StringVar(&o.tangles, "tangles-output", "", "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
@@ -151,7 +160,7 @@ func (c *command) publish(report Report) int {
 	if e := WriteSnapshot(path, report, c.invocation.buildVersion()); e != nil {
 		return c.fatal(e)
 	}
-	if e := c.publishChoices(); e != nil {
+	if e := c.publishEvidence(); e != nil {
 		return c.fatal(e)
 	}
 	snapshot, e := OpenSnapshot(path)

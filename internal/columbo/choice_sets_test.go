@@ -133,7 +133,7 @@ func TestChoiceSetsCLIAndFreshOutput(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &report))
 	require.Len(t, report.Groups, 1)
 	require.Contains(t, out.String(), "1 groups; no verdict")
-	err = writeChoiceSets(filepath.Join(dir, "choices.json"), ChoiceSetReport{})
+	err = writeEvidenceJSON(filepath.Join(dir, "choices.json"), ChoiceSetReport{})
 	require.Error(t, err)
 	again, err := os.ReadFile(filepath.Join(dir, "choices.json"))
 	require.NoError(t, err)

@@ -15,6 +15,10 @@ func (c *command) investigate(patterns []string) (Report, error) {
 		report := a.choiceSets()
 		c.choices = &report
 	}
+	if c.options.tangles != "" {
+		report := a.tangles()
+		c.tangles = &report
+	}
 	return a.Analyze()
 }
 func (c *command) publishChoices() error {
@@ -22,7 +26,7 @@ func (c *command) publishChoices() error {
 		return nil
 	}
 	path := c.choiceSetPath()
-	if err := writeChoiceSets(path, *c.choices); err != nil {
+	if err := writeEvidenceJSON(path, *c.choices); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintf(c.invocation.Stdout, "Choice-set evidence: %s (%d groups; no verdict)\n", path, len(c.choices.Groups))
@@ -34,7 +38,7 @@ func (c *command) choiceSetPath() string {
 	}
 	return filepath.Join(c.invocation.Dir, c.options.choiceSets)
 }
-func writeChoiceSets(path string, report ChoiceSetReport) error {
+func writeEvidenceJSON(path string, report any) error {
 	data, err := encodeCanonicalJSON(report)
 	if err != nil {
 		return err

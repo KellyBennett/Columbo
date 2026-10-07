@@ -285,6 +285,10 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 
 The opt-in `--choice-sets-output PATH` collector records repeated typed collection-construction recipes in a separate, versioned JSON evidence file. This is an experimental evidence channel, not a replacement report format or SQLite projection. It leaves all existing case, snapshot, annotation, severity, and exit-verdict semantics unchanged; evidence publication errors exit 2. It is disabled by default. Its bounded recognition contract, non-atomic two-file publication, source receipts and limitations are specified in [choice-set evidence](docs/choice-set-evidence.md).
 
+## Experimental nested field-decision evidence
+
+`--tangles-output PATH` MAY publish an opt-in version-1 JSON sidecar described in [the evidence contract](docs/tangle-evidence.md). It MUST NOT introduce cases, severities, suppressions, correlations, annotations, or verdict changes. Existing production-source exclusions MUST apply. The collector groups resolved field/receiver comparisons within a declaration, preserving complete boolean context and lexical guarded-write receipts. Its fixed eligibility criteria require repeated values, multiple decision sites, genuine block nesting and updates to multiple other fields. These establish a review lead, not semantic equivalence or proof of a missing role. Sidecar paths MUST be fresh and MUST NOT be stdout. Completed SQLite/earlier sidecars MAY remain if a later output fails. The GitHub Action does not auto-enable this evidence channel.
+
 ## CLI and exit codes
 
 ```bash
