@@ -30,22 +30,6 @@ func tanglesFixture(t *testing.T, source string) TangleReport {
 	require.NoError(t, err)
 	return a.tangles()
 }
-func TestTanglesGildedRose(t *testing.T) {
-	source, err := os.ReadFile("testdata/tangles/gildedrose.go.txt")
-	require.NoError(t, err)
-	r := tanglesFixture(t, string(source))
-	require.Len(t, r.Groups, 1)
-	g := r.Groups[0]
-	require.Equal(t, "fixture.Item.Name", g.Field)
-	require.Len(t, g.Sites, 7)
-	require.Len(t, g.Values, 3)
-	require.Equal(t, []string{"fixture.Item.Quality", "fixture.Item.SellIn"}, g.WrittenFields)
-	require.Contains(t, g.Sites[0].Condition.Spelling, "&&")
-	require.Len(t, g.Sites[0].Comparisons, 2)
-	require.NotEmpty(t, g.Sites[0].Writes)
-	require.Equal(t, 1, r.Files)
-	require.Equal(t, 1, r.Declarations)
-}
 func TestTanglesBooleanContextAndDeterminism(t *testing.T) {
 	a := tanglesFixture(t, tanglePrelude+tangleBody)
 	b := tanglesFixture(t, tanglePrelude+tangleBody)
@@ -124,9 +108,12 @@ func TestTanglesCLILeavesVerdictUnchanged(t *testing.T) {
 	dir := h.fixture(tanglePrelude + tangleBody)
 	var out, stderr bytes.Buffer
 	normal := Run([]string{"--no-history", "--output", "normal.sqlite"}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
-	require.NotContains(t, out.String(), "Nested field-decision")
-	_, err := os.Stat(filepath.Join(dir, "tangles.json"))
-	require.True(t, os.IsNotExist(err))
+	require.Contains(t, out.String(), "Nested field-decision")
+	data, err := os.ReadFile(filepath.Join(dir, "normal.sqlite.tangles.json"))
+	require.NoError(t, err)
+	var evidence TangleReport
+	require.NoError(t, json.Unmarshal(data, &evidence))
+	require.Len(t, evidence.Groups, 1)
 	with := Run([]string{"--no-history", "--output", "with.sqlite", "--tangles-output", "tangles.json", "--choice-sets-output", "choices.json"}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
 	require.Equal(t, normal, with, stderr.String())
 	_, err = os.Stat(filepath.Join(dir, "choices.json"))

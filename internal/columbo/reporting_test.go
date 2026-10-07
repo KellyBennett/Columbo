@@ -261,7 +261,7 @@ func (t *testHarness) checkPublishedSummary(path string, stdout []byte) {
 	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), path)
 	t.noError(err)
 	t.equal(1, exitCode)
-	t.equal(summary, stdout)
+	t.equal(withEmptyEvidenceSummary(path, summary), stdout)
 	t.contains(string(stdout), path)
 	t.checkPublishedManifest(db)
 }
@@ -646,4 +646,9 @@ func (t *testHarness) TestStoredSummaryReadFailure() {
 	t.hasError(err)
 	t.equal(2, exitCode)
 	t.empty(summary, "failed readers must not return a partial analysis summary")
+}
+
+func withEmptyEvidenceSummary(path string, summary []byte) []byte {
+	header := fmt.Sprintf("Choice-set evidence: %s.choices.json (0 groups; no verdict)\nNested field-decision evidence: %s.tangles.json (0 groups; no verdict)\n", path, path)
+	return append([]byte(header), summary...)
 }

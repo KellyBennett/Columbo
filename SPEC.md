@@ -281,13 +281,15 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 - **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
 - **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
 
-## Experimental choice-set evidence
+## Choice-set evidence
 
-The opt-in `--choice-sets-output PATH` collector records repeated typed collection-construction recipes in a separate, versioned JSON evidence file. This is an experimental evidence channel, not a replacement report format or SQLite projection. It leaves all existing case, snapshot, annotation, severity, and exit-verdict semantics unchanged; evidence publication errors exit 2. It is disabled by default. Its bounded recognition contract, non-atomic two-file publication, source receipts and limitations are specified in [choice-set evidence](docs/choice-set-evidence.md).
+Every analysis MUST collect repeated typed collection-construction recipes and publish a version-1 JSON evidence file at `<snapshot-path>.choices.json` by default. `--choice-sets-output PATH` overrides the destination. The recognition contract and source receipts are specified in [choice-set evidence](docs/choice-set-evidence.md). This evidence does not introduce independently enforced cases or alter existing case, snapshot, annotation, severity or verdict semantics.
 
-## Experimental nested field-decision evidence
+## Nested field-decision evidence
 
-`--tangles-output PATH` MAY publish an opt-in version-1 JSON sidecar described in [the evidence contract](docs/tangle-evidence.md). It MUST NOT introduce cases, severities, suppressions, correlations, annotations, or verdict changes. Existing production-source exclusions MUST apply. The collector groups resolved field/receiver comparisons within a declaration, preserving complete boolean context and lexical guarded-write receipts. Its fixed eligibility criteria require repeated values, multiple decision sites, genuine block nesting and updates to multiple other fields. These establish a review lead, not semantic equivalence or proof of a missing role. Sidecar paths MUST be fresh and MUST NOT be stdout. Completed SQLite/earlier sidecars MAY remain if a later output fails. The GitHub Action does not auto-enable this evidence channel.
+Every analysis MUST collect the nested field-decision evidence described in [the evidence contract](docs/tangle-evidence.md) and publish version-1 JSON at `<snapshot-path>.tangles.json` by default. `--tangles-output PATH` overrides the destination. Existing production-source exclusions MUST apply. Grouped resolved field/receiver comparisons MUST preserve full boolean context and lexical guarded-write receipts. This evidence MUST NOT introduce independent FAIL/WARN cases, severities, suppressions, correlations or annotations.
+
+Both collectors run without enablement flags. Their JSON files are separate from the SQLite snapshot and MUST be retained automatically by the GitHub Action's evidence artifact. Output paths MUST be fresh and MUST NOT be stdout. Evidence publication failures exit 2; completed SQLite/earlier JSON files MAY remain if a later output fails.
 
 ## CLI and exit codes
 

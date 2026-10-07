@@ -24,6 +24,9 @@ func (c *command) publishTangles() error {
 }
 
 func (c *command) tanglePath() string {
+	if c.options.tangles == "" {
+		return c.snapshotPath() + ".tangles.json"
+	}
 	if filepath.IsAbs(c.options.tangles) {
 		return c.options.tangles
 	}

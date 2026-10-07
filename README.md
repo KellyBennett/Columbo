@@ -65,7 +65,7 @@ No configuration is required. Columbo currently analyzes production code; test f
 
 Prose comments fail by default; recognized machine directives are allowed. Protect intentional omissions with regression tests. See the [comment policy](docs/prose-comments.md).
 
-For an opt-in, non-enforcing investigation of repeated choice-set construction, see [experimental choice-set evidence](docs/choice-set-evidence.md).
+Every analysis also collects [repeated choice-set construction](docs/choice-set-evidence.md) and [nested field decisions](docs/tangle-evidence.md). Their JSON evidence files sit beside the SQLite snapshot and are included automatically in the GitHub Action artifact. These leads do not independently affect the CI verdict.
 
 [Configuration and rules](SPEC.md) · [Evidence query guide](docs/sqlite-schema.md) · [Development](docs/development.md)
 
@@ -79,4 +79,3 @@ For an opt-in, non-enforcing investigation of repeated choice-set construction, 
 - Python
 - Ruby
 
-For an opt-in investigation of nested decisions over the same field, see [experimental nested field-decision evidence](docs/tangle-evidence.md).

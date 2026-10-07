@@ -11,14 +11,8 @@ func (c *command) investigate(patterns []string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	if c.options.choiceSets != "" {
-		report := a.choiceSets()
-		c.choices = &report
-	}
-	if c.options.tangles != "" {
-		report := a.tangles()
-		c.tangles = &report
-	}
+	choices, tangles := a.choiceSets(), a.tangles()
+	c.choices, c.tangles = &choices, &tangles
 	return a.Analyze()
 }
 func (c *command) publishChoices() error {
@@ -33,6 +27,9 @@ func (c *command) publishChoices() error {
 	return err
 }
 func (c *command) choiceSetPath() string {
+	if c.options.choiceSets == "" {
+		return c.snapshotPath() + ".choices.json"
+	}
 	if filepath.IsAbs(c.options.choiceSets) {
 		return c.options.choiceSets
 	}

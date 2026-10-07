@@ -16,8 +16,8 @@ const usage = `Usage: columbo [flags] [packages...]
 Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
-  --choice-sets-output PATH  experimental choice-set evidence JSON (opt-in)
-  --tangles-output PATH  experimental nested field-decision evidence JSON (opt-in)
+  --choice-sets-output PATH  choice-set JSON path (default <output>.choices.json)
+  --tangles-output PATH  nested field-decision JSON path (default <output>.tangles.json)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage

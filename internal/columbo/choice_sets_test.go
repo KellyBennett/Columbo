@@ -141,5 +141,8 @@ func TestChoiceSetsCLIAndFreshOutput(t *testing.T) {
 	var normal, normalErr bytes.Buffer
 	without := Run([]string{"--no-history", "--output", "normal.sqlite"}, Invocation{Dir: dir, Stdout: &normal, Stderr: &normalErr})
 	require.Equal(t, code, without)
-	require.NotContains(t, normal.String(), "Choice-set evidence")
+	require.Contains(t, normal.String(), "Choice-set evidence")
+	defaultData, err := os.ReadFile(filepath.Join(dir, "normal.sqlite.choices.json"))
+	require.NoError(t, err)
+	require.JSONEq(t, string(data), string(defaultData))
 }

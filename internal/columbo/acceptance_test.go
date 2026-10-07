@@ -376,7 +376,7 @@ func (t *testHarness) requireSeveritySnapshot(path string, stdout []byte, want i
 	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), path)
 	t.noError(err)
 	t.equal(want, exitCode, "exit did not follow stored outcomes")
-	t.equal(summary, stdout, "CLI summary disagrees with snapshot")
+	t.equal(withEmptyEvidenceSummary(path, summary), stdout, "CLI summary disagrees with snapshot and evidence outputs")
 }
 func (t *testHarness) malformedPackageExit(dir string) {
 	t.write(dir, "bad.go", "package fixture\nvar x = missing\n")
