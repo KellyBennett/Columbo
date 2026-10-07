@@ -298,8 +298,7 @@ func (a *engine) reportVariants(domain string, group variantGroup) error {
 	c := caseFromSource(variantSmell, a.config.Severity[variantSmell], group.sites[0].owner.declReceipt())
 	c.ID = id
 	c.Receipts = []any{}
-	group.evidence(c, domain, a.config)
-	a.variantRoles(c, group)
+	a.variantCaseEvidence(c, domain, group)
 	a.report.Cases = append(a.report.Cases, *c)
 	return nil
 }

@@ -124,6 +124,21 @@ class PublisherTests(unittest.TestCase):
         self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
         self.assertNotIn("Dependency origins", finding["message"])
 
+    def test_coordination_clues_are_projected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "coordination.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                case_id = db.execute("SELECT id FROM cases WHERE smell='repeated-variant-decision' LIMIT 1").fetchone()[0]
+                ordinal = db.execute("SELECT MAX(ordinal)+1 FROM clues WHERE case_id=?", (case_id,)).fetchone()[0]
+                for offset, kind in enumerate(("variant-shared-write", "variant-write-read")):
+                    clue = db.execute("INSERT INTO clues(case_id,ordinal,kind,subject,value_type) VALUES (?,?,?,?,'list')", (case_id, ordinal+offset, kind, "source.go:10:20:n")).lastrowid
+                    db.execute("INSERT INTO clue_values(clue_id,ordinal,value) VALUES (?,0,?)", (clue, "lexical evidence only; selector x; roots 10 -> 20"))
+            annotations, _ = publisher.read_snapshot(path, 1)
+        finding = next(item for item in annotations if "repeated-variant-decision" in item["title"] and "variant-shared-write" in item["message"])
+        self.assertIn("variant-write-read", finding["message"])
+        self.assertIn("lexical evidence only", finding["message"])
+
     def test_duplicate_locations_are_projected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "duplicates.sqlite"

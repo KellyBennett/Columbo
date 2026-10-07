@@ -56,6 +56,16 @@ A primary-anchor directive suppresses the entire domain. Directives attached onl
 
 ## Guidance and pressure
 
+### Coordination evidence
+
+For an emitted value-domain case, Columbo also examines separate decisions over the same resolved variable or field path within each included function. It adds `variant-shared-write` clues when two decisions lexically write the same location, and `variant-write-read` clues when an earlier decision writes a location read by a later decision. Each clue links both decision roots and the two accesses through the existing SQLite clue/receipt tables; compact reports display the links and their qualifications.
+
+This supplementary scan accepts constant equality/inequality comparisons, AND/OR combinations over one selector, and constant value switches. It can therefore connect a qualifying switch to nearby single-variant checks. Nested decisions over the same selector, including else-if refinements, belong to their outer decision rather than being counted as independent roots. Closures, decisions with initializers, indexed or indirect paths, type switches, and mixed-selector predicates are excluded. Different variables or receivers are not merged merely because they have the same type. No clues are emitted solely for repeated boolean capability or presence checks.
+
+The links describe lexical accesses, not proven reaching definitions or runtime coordination. They retain comparison operators and constants, with exact source ranges for the full decision; a flattened comparison list is not a normalized truth table. Else/default may include undeclared values because Go's named integer and string types are open. Accesses are aggregated across branches, so mutually exclusive paths and writes of identical expressions can produce links. Calls, conversions, possible selector writes across the pair, and writes to the linked location between decisions are counted as explicit uncertainty. Aliasing, call effects, loops, helper-mediated flows, and mutation through pointers are not resolved. A shared rendering or logging call alone does not establish a link.
+
+Use these clues to ask whether the decisions independently reconstruct one policy and should share a calculation or mapping. Inspect the source receipts and uncertainty before acting; a link does not establish that refactoring or polymorphism would help. Absence of links does not establish independence. Coordination evidence does not change case eligibility, thresholds, identity, suppression, or verdict.
+
 Why: Repeated decisions over the same variant domain distribute knowledge of that taxonomy. Adding or changing a variant may require coordinated edits across otherwise unrelated code.
 
 Diagnosis: Multiple decision sites repeatedly distinguish variants of the same typed domain. This may indicate distributed variant knowledge, a missing behavioral role, or a decision that should be centralized.

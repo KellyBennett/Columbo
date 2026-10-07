@@ -115,7 +115,7 @@ class Snapshot:
 
     def variant_evidence(self, case_id):
         evidence = []
-        for clue in self.db.execute("SELECT id,kind,subject FROM clues WHERE case_id=? AND kind IN ('variant-set','repeated-variant-set') ORDER BY ordinal", (case_id,)):
+        for clue in self.db.execute("SELECT id,kind,subject FROM clues WHERE case_id=? AND kind IN ('variant-set','repeated-variant-set','variant-shared-write','variant-write-read') ORDER BY ordinal", (case_id,)):
             values = [row[0] for row in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
             evidence.append(f'{clue["kind"]} {clue["subject"]}: ' + ", ".join(values))
         for row in self.db.execute("""
