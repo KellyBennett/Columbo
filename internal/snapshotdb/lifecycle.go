@@ -14,7 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const SchemaVersion = 4
+const SchemaVersion = 5
 const SQLiteApplicationID = 0x434c4d42
 
 //go:embed schema.sql

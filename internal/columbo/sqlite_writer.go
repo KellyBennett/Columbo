@@ -38,6 +38,7 @@ func (w *snapshotWriter) write(report Report, version string) error {
 	for ordinal, c := range report.Cases {
 		w.writeCase(c, ordinal)
 	}
+	report.writeAdvisories(w)
 	report.writeRoles(w)
 	report.writeCorrelations(w)
 	w.writeSuppressions(report.Suppressions)

@@ -281,15 +281,11 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 - **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
 - **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
 
-## Choice-set evidence
+## Advisory evidence
 
-Every analysis MUST collect repeated typed collection-construction recipes and publish a version-1 JSON evidence file at `<snapshot-path>.choices.json` by default. `--choice-sets-output PATH` overrides the destination. The recognition contract and source receipts are specified in [choice-set evidence](docs/choice-set-evidence.md). This evidence does not introduce independently enforced cases or alter existing case, snapshot, annotation, severity or verdict semantics.
+Every analysis MUST collect choice-set and nested field-decision evidence and persist it in the same SQLite transaction as other findings. The recognition contracts are [choice-set evidence](docs/choice-set-evidence.md) and [nested field-decision evidence](docs/tangle-evidence.md). No collector-specific enablement or output flags, JSON sidecars, or alternative publication path exist.
 
-## Nested field-decision evidence
-
-Every analysis MUST collect the nested field-decision evidence described in [the evidence contract](docs/tangle-evidence.md) and publish version-1 JSON at `<snapshot-path>.tangles.json` by default. `--tangles-output PATH` overrides the destination. Existing production-source exclusions MUST apply. Grouped resolved field/receiver comparisons MUST preserve full boolean context and lexical guarded-write receipts. This evidence MUST NOT introduce independent FAIL/WARN cases, severities, suppressions, correlations or annotations.
-
-Both collectors run without enablement flags. Their JSON files are separate from the SQLite snapshot and MUST be retained automatically by the GitHub Action's evidence artifact. Output paths MUST be fresh and MUST NOT be stdout. Evidence publication failures exit 2; completed SQLite/earlier JSON files MAY remain if a later output fails.
+Schema version 5 adds normalized advisory collector coverage, groups, group values, declaration-linked sites, ordered site seed values and source receipts. Full condition/initializer/loop/write excerpts and physical ranges MUST survive a snapshot round trip. Collector coverage MUST distinguish a completed zero-finding analysis from absent evidence. CLI and GitHub summaries MUST read the saved database. Advisory groups MUST NOT independently introduce FAIL/WARN cases, severities, suppressions, correlations or annotations, or alter verdict totals. Normal atomic snapshot publication and database access boundaries MUST apply.
 
 ## CLI and exit codes
 

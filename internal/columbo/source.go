@@ -526,14 +526,18 @@ func (a *engine) Analyze() (Report, error) {
 			return Report{}, e
 		}
 	}
+	return a.finishReport(), nil
+}
+func (a *engine) finishReport() Report {
 	if a.config.History {
 		a.history()
 	}
 	a.report.finish()
 	a.report.finishRoles()
 	a.report.correlate()
+	a.report.Choices, a.report.Tangles = a.choiceSets(), a.tangles()
 	a.collectDeclarationEvidence()
-	return a.report, nil
+	return a.report
 }
 func (a *engine) inspectDeclarations() error {
 	for _, d := range a.declarations {
@@ -673,6 +677,7 @@ func (a *engine) collectDeclarationEvidence() {
 		selection.addCase(c)
 	}
 	selection.addRoles(a.report.Roles)
+	selection.addAdvisories(a.report)
 	a.report.Declarations = append(selection.declarations(a.declarations), selection.packageClauses(a.files)...)
 }
 func (selection evidenceSelection) addCase(c Case) {

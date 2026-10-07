@@ -1,10 +1,6 @@
 package columbo
 
 import (
-	"bytes"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -66,29 +62,6 @@ func TestTanglesDistinctReceiversStaySeparate(t *testing.T) {
 	require.Len(t, report.Groups, 2)
 	require.NotEqual(t, report.Groups[0].ID, report.Groups[1].ID)
 }
-func TestTanglesCLI(t *testing.T) {
-	h := &testHarness{T: t}
-	dir := h.fixture(tanglePrelude + tangleBody)
-	var out, stderr bytes.Buffer
-	args := []string{"--no-history", "--output", "snapshot.sqlite", "--tangles-output", "tangles.json"}
-	code := Run(args, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
-	require.NotEqual(t, 2, code, stderr.String())
-	data, err := os.ReadFile(filepath.Join(dir, "tangles.json"))
-	require.NoError(t, err)
-	var report TangleReport
-	require.NoError(t, json.Unmarshal(data, &report))
-	require.Len(t, report.Groups, 1)
-	require.Contains(t, out.String(), "no verdict")
-	args[2] = "second.sqlite"
-	require.Equal(t, 2, Run(args, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr}))
-	unchanged, err := os.ReadFile(filepath.Join(dir, "tangles.json"))
-	require.NoError(t, err)
-	require.Equal(t, data, unchanged)
-}
-func TestTanglesRejectStdout(t *testing.T) {
-	var options commandOptions
-	require.Error(t, options.parse([]string{"--tangles-output", "-"}))
-}
 
 func TestTanglesDispatchLadderIsNotNesting(t *testing.T) {
 	body := `func f(x *Item){if x.Name=="A" || x.Name=="B" {x.Quality--} else if x.Name=="A" || x.Name=="B" {x.SellIn--} else if x.Name=="A" || x.Name=="B" {x.Quality++}}`
@@ -102,20 +75,4 @@ func TestTanglesExcludeGeneratedTestsAndClosures(t *testing.T) {
 	a, err := load(dir, []string{"./..."}, quiet())
 	require.NoError(t, err)
 	require.Empty(t, a.tangles().Groups)
-}
-func TestTanglesCLILeavesVerdictUnchanged(t *testing.T) {
-	h := &testHarness{T: t}
-	dir := h.fixture(tanglePrelude + tangleBody)
-	var out, stderr bytes.Buffer
-	normal := Run([]string{"--no-history", "--output", "normal.sqlite"}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
-	require.Contains(t, out.String(), "Nested field-decision")
-	data, err := os.ReadFile(filepath.Join(dir, "normal.sqlite.tangles.json"))
-	require.NoError(t, err)
-	var evidence TangleReport
-	require.NoError(t, json.Unmarshal(data, &evidence))
-	require.Len(t, evidence.Groups, 1)
-	with := Run([]string{"--no-history", "--output", "with.sqlite", "--tangles-output", "tangles.json", "--choice-sets-output", "choices.json"}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
-	require.Equal(t, normal, with, stderr.String())
-	_, err = os.Stat(filepath.Join(dir, "choices.json"))
-	require.NoError(t, err)
 }

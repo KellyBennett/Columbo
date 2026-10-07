@@ -43,6 +43,8 @@ type MemberRef struct {
 }
 
 type Report struct {
+	Choices      ChoiceSetReport       `json:"-"`
+	Tangles      TangleReport          `json:"-"`
 	Correlations []Correlation         `json:"correlations,omitempty"`
 	Selections   []SelectionContext    `json:"-"`
 	Roles        []RoleCandidate       `json:"role_candidates,omitempty"`

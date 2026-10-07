@@ -9,6 +9,165 @@ import (
 	"context"
 )
 
+const advisoryCoverage = `-- name: AdvisoryCoverage :many
+SELECT kind,files_analyzed,declarations_analyzed FROM advisory_collectors ORDER BY kind
+`
+
+func (q *Queries) AdvisoryCoverage(ctx context.Context) ([]AdvisoryCollector, error) {
+	rows, err := q.db.QueryContext(ctx, advisoryCoverage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisoryCollector
+	for rows.Next() {
+		var i AdvisoryCollector
+		if err := rows.Scan(&i.Kind, &i.FilesAnalyzed, &i.DeclarationsAnalyzed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const advisoryReceipts = `-- name: AdvisoryReceipts :many
+SELECT kind,subject,start_line,end_line,start_offset,end_offset,spelling FROM advisory_receipts WHERE group_id=? AND site_ordinal=? ORDER BY ordinal
+`
+
+type AdvisoryReceiptsParams struct {
+	GroupID     string
+	SiteOrdinal int64
+}
+
+type AdvisoryReceiptsRow struct {
+	Kind        string
+	Subject     string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Spelling    string
+}
+
+func (q *Queries) AdvisoryReceipts(ctx context.Context, arg AdvisoryReceiptsParams) ([]AdvisoryReceiptsRow, error) {
+	rows, err := q.db.QueryContext(ctx, advisoryReceipts, arg.GroupID, arg.SiteOrdinal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisoryReceiptsRow
+	for rows.Next() {
+		var i AdvisoryReceiptsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.Subject,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Spelling,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const advisorySites = `-- name: AdvisorySites :many
+SELECT s.ordinal,s.representation,s.input_expression,d.symbol,f.path FROM advisory_sites s JOIN declarations d ON d.id=s.declaration_id JOIN files f ON f.id=d.file_id WHERE s.group_id=? ORDER BY s.ordinal
+`
+
+type AdvisorySitesParams struct {
+	GroupID string
+}
+
+type AdvisorySitesRow struct {
+	Ordinal         int64
+	Representation  string
+	InputExpression string
+	Symbol          string
+	Path            string
+}
+
+func (q *Queries) AdvisorySites(ctx context.Context, arg AdvisorySitesParams) ([]AdvisorySitesRow, error) {
+	rows, err := q.db.QueryContext(ctx, advisorySites, arg.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisorySitesRow
+	for rows.Next() {
+		var i AdvisorySitesRow
+		if err := rows.Scan(
+			&i.Ordinal,
+			&i.Representation,
+			&i.InputExpression,
+			&i.Symbol,
+			&i.Path,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const advisoryValues = `-- name: AdvisoryValues :many
+SELECT kind,identity,value FROM advisory_values WHERE group_id=? ORDER BY kind,ordinal
+`
+
+type AdvisoryValuesParams struct {
+	GroupID string
+}
+
+type AdvisoryValuesRow struct {
+	Kind     string
+	Identity string
+	Value    string
+}
+
+func (q *Queries) AdvisoryValues(ctx context.Context, arg AdvisoryValuesParams) ([]AdvisoryValuesRow, error) {
+	rows, err := q.db.QueryContext(ctx, advisoryValues, arg.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisoryValuesRow
+	for rows.Next() {
+		var i AdvisoryValuesRow
+		if err := rows.Scan(&i.Kind, &i.Identity, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dependencyScored = `-- name: DependencyScored :one
 SELECT scored FROM declaration_dependencies WHERE declaration_id=? AND dependency_id=?
 `
@@ -23,6 +182,146 @@ func (q *Queries) DependencyScored(ctx context.Context, arg DependencyScoredPara
 	var scored int64
 	err := row.Scan(&scored)
 	return scored, err
+}
+
+const insertAdvisoryCollector = `-- name: InsertAdvisoryCollector :exec
+INSERT INTO advisory_collectors(kind,files_analyzed,declarations_analyzed) VALUES (?,?,?)
+`
+
+type InsertAdvisoryCollectorParams struct {
+	Kind                 string
+	FilesAnalyzed        int64
+	DeclarationsAnalyzed int64
+}
+
+func (q *Queries) InsertAdvisoryCollector(ctx context.Context, arg InsertAdvisoryCollectorParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisoryCollector, arg.Kind, arg.FilesAnalyzed, arg.DeclarationsAnalyzed)
+	return err
+}
+
+const insertAdvisoryGroup = `-- name: InsertAdvisoryGroup :exec
+INSERT INTO advisory_groups(id,kind,subject,lead,limits) VALUES (?,?,?,?,?)
+`
+
+type InsertAdvisoryGroupParams struct {
+	ID      string
+	Kind    string
+	Subject string
+	Lead    string
+	Limits  string
+}
+
+func (q *Queries) InsertAdvisoryGroup(ctx context.Context, arg InsertAdvisoryGroupParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisoryGroup,
+		arg.ID,
+		arg.Kind,
+		arg.Subject,
+		arg.Lead,
+		arg.Limits,
+	)
+	return err
+}
+
+const insertAdvisoryReceipt = `-- name: InsertAdvisoryReceipt :exec
+INSERT INTO advisory_receipts(group_id,site_ordinal,ordinal,kind,subject,start_line,end_line,start_offset,end_offset,spelling) VALUES (?,?,?,?,?,?,?,?,?,?)
+`
+
+type InsertAdvisoryReceiptParams struct {
+	GroupID     string
+	SiteOrdinal int64
+	Ordinal     int64
+	Kind        string
+	Subject     string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Spelling    string
+}
+
+func (q *Queries) InsertAdvisoryReceipt(ctx context.Context, arg InsertAdvisoryReceiptParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisoryReceipt,
+		arg.GroupID,
+		arg.SiteOrdinal,
+		arg.Ordinal,
+		arg.Kind,
+		arg.Subject,
+		arg.StartLine,
+		arg.EndLine,
+		arg.StartOffset,
+		arg.EndOffset,
+		arg.Spelling,
+	)
+	return err
+}
+
+const insertAdvisorySite = `-- name: InsertAdvisorySite :exec
+INSERT INTO advisory_sites(group_id,ordinal,declaration_id,representation,input_expression) VALUES (?,?,?,?,?)
+`
+
+type InsertAdvisorySiteParams struct {
+	GroupID         string
+	Ordinal         int64
+	DeclarationID   int64
+	Representation  string
+	InputExpression string
+}
+
+func (q *Queries) InsertAdvisorySite(ctx context.Context, arg InsertAdvisorySiteParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisorySite,
+		arg.GroupID,
+		arg.Ordinal,
+		arg.DeclarationID,
+		arg.Representation,
+		arg.InputExpression,
+	)
+	return err
+}
+
+const insertAdvisorySiteValue = `-- name: InsertAdvisorySiteValue :exec
+INSERT INTO advisory_site_values(group_id,site_ordinal,ordinal,identity,value) VALUES (?,?,?,?,?)
+`
+
+type InsertAdvisorySiteValueParams struct {
+	GroupID     string
+	SiteOrdinal int64
+	Ordinal     int64
+	Identity    string
+	Value       string
+}
+
+func (q *Queries) InsertAdvisorySiteValue(ctx context.Context, arg InsertAdvisorySiteValueParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisorySiteValue,
+		arg.GroupID,
+		arg.SiteOrdinal,
+		arg.Ordinal,
+		arg.Identity,
+		arg.Value,
+	)
+	return err
+}
+
+const insertAdvisoryValue = `-- name: InsertAdvisoryValue :exec
+INSERT INTO advisory_values(group_id,kind,ordinal,identity,value) VALUES (?,?,?,?,?)
+`
+
+type InsertAdvisoryValueParams struct {
+	GroupID  string
+	Kind     string
+	Ordinal  int64
+	Identity string
+	Value    string
+}
+
+func (q *Queries) InsertAdvisoryValue(ctx context.Context, arg InsertAdvisoryValueParams) error {
+	_, err := q.db.ExecContext(ctx, insertAdvisoryValue,
+		arg.GroupID,
+		arg.Kind,
+		arg.Ordinal,
+		arg.Identity,
+		arg.Value,
+	)
+	return err
 }
 
 const insertCase = `-- name: InsertCase :exec
@@ -776,6 +1075,39 @@ func (q *Queries) ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	var i ReportIdentityRow
 	err := row.Scan(&i.ReportCount, &i.SchemaVersion)
 	return i, err
+}
+
+const summaryAdvisories = `-- name: SummaryAdvisories :many
+SELECT id,kind,subject,lead,limits FROM advisory_groups ORDER BY kind,id
+`
+
+func (q *Queries) SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error) {
+	rows, err := q.db.QueryContext(ctx, summaryAdvisories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdvisoryGroup
+	for rows.Next() {
+		var i AdvisoryGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Subject,
+			&i.Lead,
+			&i.Limits,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const summaryCases = `-- name: SummaryCases :many

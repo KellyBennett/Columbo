@@ -1,14 +1,13 @@
 # Choice-set evidence
 
-Every Columbo analysis collects repeated collection construction and writes a version-1 JSON evidence file beside the SQLite snapshot. For `--output report.sqlite`, its default path is `report.sqlite.choices.json`. Use `--choice-sets-output PATH` to choose a different destination; no flag is required to enable collection.
+Every Columbo analysis collects repeated collection construction into the normal SQLite snapshot. No collector-specific flags or extra output files are needed.
 
 ```sh
 columbo --output report.sqlite ./...
+sqlite3 -readonly report.sqlite < docs/sqlite/advisories.sql
 ```
 
-The JSON contains source receipts and refactoring leads. It adds no independent FAIL/WARN case, correlation or check annotation. The SQLite snapshot continues to store enforced findings; it does not contain this JSON evidence. The GitHub Action retains the JSON files automatically with the ordinary evidence artifact.
-
-Destinations must be fresh files. Explicit paths are relative to the invocation directory unless absolute; `-` is not supported. Evidence write failures exit 2. A completed SQLite snapshot or earlier JSON file can remain if a subsequent output fails. Successful evidence publication does not change the normal analysis verdict.
+The snapshot stores group identities, constants, projection fields, declaration-linked sites, seed ordering, input expressions, source excerpts and refactoring leads. The CLI and GitHub summary read this saved evidence. Advisory groups do not independently add FAIL/WARN cases or alter the normal analysis verdict. See [SQLite evidence snapshots](sqlite-schema.md) for the relational schema and publication guarantees.
 
 ## Evidence collected
 

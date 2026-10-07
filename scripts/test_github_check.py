@@ -32,6 +32,17 @@ class PublisherTests(unittest.TestCase):
     def setUp(self):
         self.snapshot = Path(os.environ["COLUMBO_TEST_SNAPSHOT"])
 
+    def test_advisories_appear_in_summary_without_annotations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "advisories.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO advisory_groups VALUES ('test-evidence','choice-set','fixture.Context.Items','Review ownership','Bounded evidence')")
+            annotations, summary = publisher.read_snapshot(path, 1)
+            self.assertEqual(11, len(annotations))
+            self.assertIn("test-evidence", summary)
+            self.assertIn("Review ownership", summary)
+
     def test_real_snapshot_preserves_findings_and_policy(self):
         before = self.snapshot.read_bytes()
         annotations, summary = publisher.read_snapshot(self.snapshot, 1)

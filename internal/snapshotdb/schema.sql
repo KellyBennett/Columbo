@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 4),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 5),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -339,4 +339,56 @@ CREATE TABLE correlation_guidance (
  ordinal INTEGER NOT NULL CHECK(ordinal>=0),
  text TEXT NOT NULL,
  PRIMARY KEY(correlation_id,kind,ordinal)
+) STRICT;
+
+CREATE TABLE advisory_collectors (
+ kind TEXT PRIMARY KEY CHECK (kind IN ('choice-set','nested-field-decision')),
+ files_analyzed INTEGER NOT NULL CHECK (files_analyzed >= 0),
+ declarations_analyzed INTEGER NOT NULL CHECK (declarations_analyzed >= 0)
+) STRICT;
+CREATE TABLE advisory_groups (
+ id TEXT PRIMARY KEY,
+ kind TEXT NOT NULL REFERENCES advisory_collectors(kind),
+ subject TEXT NOT NULL,
+ lead TEXT NOT NULL,
+ limits TEXT NOT NULL
+) STRICT;
+CREATE TABLE advisory_values (
+ group_id TEXT NOT NULL REFERENCES advisory_groups(id),
+ kind TEXT NOT NULL,
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ identity TEXT NOT NULL,
+ value TEXT NOT NULL,
+ PRIMARY KEY (group_id,kind,ordinal)
+) STRICT;
+CREATE TABLE advisory_sites (
+ group_id TEXT NOT NULL REFERENCES advisory_groups(id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ declaration_id INTEGER NOT NULL REFERENCES declarations(id),
+ representation TEXT NOT NULL,
+ input_expression TEXT NOT NULL,
+ PRIMARY KEY (group_id,ordinal)
+) STRICT;
+CREATE TABLE advisory_site_values (
+ group_id TEXT NOT NULL,
+ site_ordinal INTEGER NOT NULL,
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ identity TEXT NOT NULL,
+ value TEXT NOT NULL,
+ PRIMARY KEY (group_id,site_ordinal,ordinal),
+ FOREIGN KEY (group_id,site_ordinal) REFERENCES advisory_sites(group_id,ordinal)
+) STRICT;
+CREATE TABLE advisory_receipts (
+ group_id TEXT NOT NULL,
+ site_ordinal INTEGER NOT NULL,
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ kind TEXT NOT NULL,
+ subject TEXT NOT NULL,
+ start_line INTEGER NOT NULL CHECK (start_line > 0),
+ end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+ start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+ end_offset INTEGER NOT NULL CHECK (end_offset >= start_offset),
+ spelling TEXT NOT NULL,
+ PRIMARY KEY (group_id,site_ordinal,ordinal),
+ FOREIGN KEY (group_id,site_ordinal) REFERENCES advisory_sites(group_id,ordinal)
 ) STRICT;

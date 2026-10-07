@@ -1,8 +1,8 @@
 # Nested field-decision evidence
 
-Every Columbo analysis collects nested field decisions and writes a version-1 JSON file beside the SQLite snapshot. For `--output report.sqlite`, its default path is `report.sqlite.tangles.json`. `--tangles-output PATH` overrides the destination; it does not enable collection. The GitHub Action retains the file automatically.
+Every Columbo analysis collects nested field decisions into the normal SQLite snapshot. Run `columbo --output report.sqlite ./...`; no collector-specific flags or extra files are needed. The CLI and GitHub summaries read the saved findings, and agents can query their full source receipts using [advisories.sql](sqlite/advisories.sql).
 
-The evidence supplies source receipts and a refactoring lead. It does not add independent FAIL/WARN cases, correlations or annotations, and does not change normal smell verdicts. The JSON is separate from the SQLite snapshot.
+The evidence supplies source receipts and a refactoring lead. It does not independently add FAIL/WARN cases or alter normal smell verdicts.
 
 ## Evidence contract
 
@@ -25,6 +25,6 @@ The lead suggests reviewing whether variants should own their update behavior. I
 
 Return-only validation, checks on unrelated receivers, single-output updates, switches and helper-mediated behavior are intentionally outside v1. A validator that mutates several fields can still qualify: this heuristic cannot distinguish every reasonable validation routine from entanglement. There is no claim of general precision or recall.
 
-## Files and failure behavior
+## Snapshot publication
 
-The output path must be fresh; stdout (`-`) and overwrites are rejected. Sidecars use exclusive creation with mode 0600. Ordinary SQLite publication occurs first, then choice-set output, then tangle output. A subsequent write failure returns exit 2 and can leave earlier completed outputs in place; publication is not transactional across files. Normal smell verdicts are unchanged when evidence publication succeeds.
+Groups, values, declaration-linked sites and full source receipts are written in the same SQLite transaction as other findings. Publication is atomic and refuses an existing output path. No JSON sidecar or collector-specific output flag exists. See [SQLite evidence snapshots](sqlite-schema.md).

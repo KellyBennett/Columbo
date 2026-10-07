@@ -167,3 +167,26 @@ SELECT DISTINCT p.identity FROM correlation_role_candidates cr JOIN role_candida
 SELECT DISTINCT r.subject AS variant,r.spelling AS implementation FROM correlation_evidence ce JOIN source_receipts r ON r.id=ce.receipt_id AND r.case_id=ce.case_id WHERE ce.correlation_id=sqlc.arg(correlation_id) AND r.kind='selection-variant-mapping' ORDER BY r.subject,r.spelling;
 -- name: SummaryCorrelationGuidance :many
 SELECT kind,text FROM correlation_guidance WHERE correlation_id=sqlc.arg(correlation_id) ORDER BY kind,ordinal;
+
+-- name: InsertAdvisoryCollector :exec
+INSERT INTO advisory_collectors(kind,files_analyzed,declarations_analyzed) VALUES (?,?,?);
+-- name: InsertAdvisoryGroup :exec
+INSERT INTO advisory_groups(id,kind,subject,lead,limits) VALUES (?,?,?,?,?);
+-- name: InsertAdvisoryValue :exec
+INSERT INTO advisory_values(group_id,kind,ordinal,identity,value) VALUES (?,?,?,?,?);
+-- name: InsertAdvisorySite :exec
+INSERT INTO advisory_sites(group_id,ordinal,declaration_id,representation,input_expression) VALUES (?,?,?,?,?);
+-- name: InsertAdvisorySiteValue :exec
+INSERT INTO advisory_site_values(group_id,site_ordinal,ordinal,identity,value) VALUES (?,?,?,?,?);
+-- name: InsertAdvisoryReceipt :exec
+INSERT INTO advisory_receipts(group_id,site_ordinal,ordinal,kind,subject,start_line,end_line,start_offset,end_offset,spelling) VALUES (?,?,?,?,?,?,?,?,?,?);
+-- name: SummaryAdvisories :many
+SELECT id,kind,subject,lead,limits FROM advisory_groups ORDER BY kind,id;
+-- name: AdvisoryValues :many
+SELECT kind,identity,value FROM advisory_values WHERE group_id=? ORDER BY kind,ordinal;
+-- name: AdvisorySites :many
+SELECT s.ordinal,s.representation,s.input_expression,d.symbol,f.path FROM advisory_sites s JOIN declarations d ON d.id=s.declaration_id JOIN files f ON f.id=d.file_id WHERE s.group_id=? ORDER BY s.ordinal;
+-- name: AdvisoryReceipts :many
+SELECT kind,subject,start_line,end_line,start_offset,end_offset,spelling FROM advisory_receipts WHERE group_id=? AND site_ordinal=? ORDER BY ordinal;
+-- name: AdvisoryCoverage :many
+SELECT kind,files_analyzed,declarations_analyzed FROM advisory_collectors ORDER BY kind;
