@@ -3,6 +3,7 @@
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
 "choice-set" | 1 | 1
 "nested-field-decision" | 1 | 1
+"repeated-guarded-update" | 1 | 1
 
 [advisory_groups] id | kind | subject | lead | limits
 
@@ -80,7 +81,7 @@
 [refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
 
 [report] id | schema_version | columbo_version
-1 | 7 | "test"
+1 | 8 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 

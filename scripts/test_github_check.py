@@ -94,6 +94,17 @@ class PublisherTests(unittest.TestCase):
             self.assertIn("test-evidence", summary)
             self.assertIn("Review ownership", summary)
 
+    def test_guarded_update_is_advisory_in_ordinary_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "guarded.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO advisory_groups VALUES ('guarded','repeated-guarded-update','Quality < 50; ++ 1','Preserve surrounding conditions','Not proof of safe extraction')")
+            annotations, summary = publisher.read_snapshot(path, 1)
+            self.assertEqual(11, len(annotations))
+            self.assertIn("repeated-guarded-update", summary)
+            self.assertIn("Preserve surrounding conditions", summary)
+
     def test_real_snapshot_preserves_findings_and_policy(self):
         before = self.snapshot.read_bytes()
         annotations, summary = publisher.read_snapshot(self.snapshot, 1)

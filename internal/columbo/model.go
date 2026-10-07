@@ -43,6 +43,7 @@ type MemberRef struct {
 }
 
 type Report struct {
+	GuardedUpdates   []advisoryGroup       `json:"-"`
 	CategoryBehavior []advisoryGroup       `json:"-"`
 	Stages           []stageResult         `json:"-"`
 	Coordination     []advisoryGroup       `json:"-"`

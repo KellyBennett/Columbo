@@ -14,7 +14,7 @@ The writer builds a temporary sibling file in a transaction, validates integrity
 
 ## Identity and discovery
 
-Schema version 7 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
+Schema version 8 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
 
 The authoritative DDL is [internal/snapshotdb/schema.sql](../internal/snapshotdb/schema.sql). SQLite introspection discovers tables, columns, declared foreign keys, indexes, and views without Columbo or Go:
 
@@ -163,7 +163,7 @@ references case-owned source receipts with a compound ownership foreign key.
 
 ## Schema version 5: advisory evidence
 
-Both collectors run during normal analysis. Their evidence lives in the same database and transaction as cases, without independent verdicts. Older snapshots remain readable with ordinary SQLite tools; this build's reader and GitHub adapter require schema version 7, consistent with the existing single-version contract.
+Ordinary advisory collectors run during normal analysis. Their evidence lives in the same database and transaction as cases, without independent verdicts. Older snapshots remain readable with ordinary SQLite tools; this build's reader and GitHub adapter require schema version 8, consistent with the existing single-version contract.
 
 | Table | Contents |
 | --- | --- |
@@ -184,11 +184,16 @@ advisories. `active_stage_issues` selects only active members. Legacy runs have
 no stage rows. See [stage semantics](refactoring-stages.md); ordinary `summary`
 continues to count legacy verdicts and does not represent the staged exit code.
 
-## Schema version 7: initial ownership gate
+## Schema version 8: guarded-update advisories
 
 Staged advisories admit `category-selected-behavior`; its collector membership,
 counts, candidate callable surface, category mappings and source receipts use the
 existing normalized advisory and stage tables. Both configured stages can now be
 cleared. Legacy severity/enforcement is unchanged; no stage rows are stored in
 legacy mode. This build follows the existing single-version reader contract and
-requires schema 7.
+requires schema 8.
+
+`repeated-guarded-update` is registered in ordinary and staged snapshots. Its
+resolved field, typed bound and update operator use `advisory_values`; conditions
+and updates use `advisory_receipts`. It is deliberately absent from
+`stage_collectors`, and does not affect legacy verdicts.

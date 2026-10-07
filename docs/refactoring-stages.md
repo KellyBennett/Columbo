@@ -70,7 +70,7 @@ the bounded meaning of clearing. Warnings remain visible.
 Use the active task and status as the agent's stopping boundary, not a green check
 as proof that all stages are done.
 
-Schema 7 stores `refactoring_stages` in order, `stage_collectors` with membership
+Schema 8 stores `refactoring_stages` in order, `stage_collectors` with membership
 and issue counts, and an `active_stage_issues` view joining membership to the
 advisory groups and their source receipts. Legacy snapshots have no stage rows.
 See [the stage query](sqlite/stages.sql). Order and membership are centralized in
@@ -114,3 +114,46 @@ A function-valued selection boundary followed by invoking the selected operation
 can clear this gate without introducing any new type. Preserve default and no-op
 behavior when considering any restructuring; static compatibility alone does not
 prove the callees implement the same operation or that the existing design is wrong.
+
+## Repeated guarded updates (advisory, no new stage)
+
+`repeated-guarded-update` runs in ordinary and staged analysis. Two or more
+occurrences of the same resolved declared integer field, normalized constant
+bound value/type, strict comparison direction and update operator form one group.
+V1 supports `if x.Field < constant { x.Field++ }` and
+`if x.Field > constant { x.Field-- }`, including reversed comparisons and named
+integer types. Parentheses and compile-time constant expressions (including typed constant
+conversions) are normalized; constant subexpressions are atomic values.
+Guard and update must resolve to the same variable object and direct field within
+each occurrence. Separate parameters/receivers can share an operation schema;
+this does not assert they are the same runtime object. Identifier spelling and
+function names do not establish identity or membership.
+
+Pure `&&` trees can contain the bound guard, including
+`if item.SellIn < 0 && item.Quality < 50 { item.Quality++ }`. Full conditions,
+bound comparisons, updates and enclosing if conditions are retained as source
+receipts. The collector never rearranges or strips context, and a shared bound is
+not proof of a universal invariant, safe extraction or safe unconditional clamping.
+Other comparisons can narrow the operation further; preserve their order and
+branch context. Enclosing conditions may themselves have effects.
+
+Conservative exclusions: init/else, multi-statement guarded bodies (including an
+initial increment followed by nested decisions), OR clauses, calls or other effectful candidate conditions, aliases between guard
+and update subjects, closures, indexed/dereferenced/nested/promoted fields,
+nonconstant bounds, noninteger fields, inclusive/equality guards and assignments
+(including `+= 1`). Only integer `++`/`--` is supported; no sequence or algorithm
+recognition is attempted. No alias or interprocedural analysis is performed.
+
+The category collector's direct-execution facts do not establish membership for a
+function-returning selector. V1 does not infer behavior families: it reports only
+the common operation schema, including when no family facts exist. Existing
+category-selected behavior eligibility remains unchanged; factories stay clear.
+Historical reports and naming conventions are never used as substitute evidence.
+
+Neither existing gate changes and no third gate is defined. Ordinary CLI/GitHub
+summaries display this advisory without changing verdicts or exit status. Staged
+summaries remain gate-focused; inspect the same snapshot with
+[the advisory queries](sqlite/advisories.sql), filtering `advisory_groups.kind =
+'repeated-guarded-update'`, or run ordinary analysis to a new output path. Schema
+8 adds the collector to the normalized advisory tables; thresholds and suppressions
+are unchanged.

@@ -6,6 +6,7 @@ import (
 )
 
 func (report Report) writeAdvisories(w *snapshotWriter) {
+	w.advisoryCoverage(guardedUpdateKind, report.Tangles.Files, report.Tangles.Declarations)
 	w.advisoryCoverage("choice-set", report.Choices.Files, report.Choices.Declarations)
 	w.advisoryCoverage("nested-field-decision", report.Tangles.Files, report.Tangles.Declarations)
 	if report.Stages != nil {
