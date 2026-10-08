@@ -35,7 +35,7 @@ func (s *coordinationScan) pairEvidence(c *Case, left, right coordinationDecisio
 			p.link(c, coordinationLink{"variant-shared-write", key, target})
 		}
 		if target, ok := right.reads[key]; ok {
-			p.link(c, coordinationLink{"variant-write-read", key, target})
+			p.link(c, coordinationLink{"variant-state-overlap", key, target})
 		}
 	}
 }
@@ -58,6 +58,9 @@ func (p coordinationPair) link(c *Case, link coordinationLink) {
 	from := p.left.writes[link.key]
 	receipts := []Source{first, second, from, link.to}
 	values := p.description(link.key, from.Detail.Subject)
+	if link.kind == "variant-state-overlap" {
+		values = append(values, "access types: earlier write; later read", "These decisions inspect the same variant selector and access the same state. Review whether they distribute behavior that belongs together. This does not establish that a value written by one decision reaches the other.")
+	}
 	subject := coordinationSubject(first, second, from.Detail.Subject)
 	appendSources(c, receipts)
 	c.Clues = append(c.Clues, metric(link.kind, subject, values).forDeclaration(first.Declaration).supportedBy(receipts))
