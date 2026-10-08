@@ -9,7 +9,7 @@ import (
 
 const guardedUpdateKind = "repeated-guarded-update"
 const guardedUpdateLead = "These locations repeat the same guarded mutation schema. Consider a shared operation while preserving surrounding conditions, evaluation order and effects. Distinct parameters need not denote the same runtime object."
-const guardedUpdateLimits = "Lexical guarded-mutation evidence, not a universal invariant or proof of safe extraction. Direct resolved integer/string/bool fields; scalar comparisons, single assignment/compound/++/-- body, no init/else; conjunction context retained. Consistent typed parameter roles across check and write; named constants retain identity. No alias, promoted/nested field, effectful expression, OR clause, closure or interprocedural inference. No behavior-family inference."
+const guardedUpdateLimits = "Lexical guarded-mutation evidence, not a universal invariant or proof of safe extraction. Direct resolved integer/string/bool fields; scalar comparisons, assignment/compound/++/-- in a multi-statement body with an unchanged check and inputs, no init/else; conjunction context retained. Consistent typed parameter roles across check and write; named constants retain identity. Earlier unknown effects/control flow or potentially relevant writes block a candidate; later statements remain context. No whole-if replacement claim. No alias, promoted/nested field, effectful expression, OR clause, closure or interprocedural inference. No behavior-family inference."
 
 type guardedUpdateKey struct {
 	field        *types.Var
@@ -57,10 +57,17 @@ func (scan *guardedUpdateScan) visit(node ast.Node) bool {
 	return true
 }
 func (scan *guardedUpdateScan) collect(node *ast.IfStmt) {
-	mutation := guardedStatement(node)
-	if mutation == nil {
+	if node.Init != nil || node.Else != nil {
 		return
 	}
+	for index, statement := range node.Body.List {
+		mutation := guardedMutationOf(statement)
+		if mutation != nil && scan.owner.guardedPrefix(node, mutation, index) {
+			scan.collectMutation(node, mutation)
+		}
+	}
+}
+func (scan *guardedUpdateScan) collectMutation(node *ast.IfStmt, mutation *guardedMutation) {
 	facts := guardedFacts{scan.owner.file.typeInfo()}
 	match := facts.match(node.Cond, mutation, scan.normalizer())
 	if match != nil {

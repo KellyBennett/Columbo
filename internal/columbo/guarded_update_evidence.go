@@ -12,8 +12,19 @@ import (
 func (scan *guardedUpdateScan) site(node *ast.IfStmt, mutation *guardedMutation, match *guardedMatch) advisorySite {
 	site := scan.owner.guardedSite(node.Cond, mutation.node, match.guard)
 	site.receipts = append(scan.surroundingConditions(), site.receipts...)
-	site.receipts = append(site.receipts, scan.owner.guardedInputs(match.inputs)...)
+	site.receipts = append(site.receipts, scan.owner.guardedContext(node, match.inputs)...)
 	return site
+}
+func (owner *declaration) guardedContext(node *ast.IfStmt, inputs []guardedInput) []Source {
+	receipts := owner.guardedInputs(inputs)
+	if len(node.Body.List) > 1 {
+		receipts = append(receipts, owner.guardedBody(node.Body))
+	}
+	return receipts
+}
+func (owner *declaration) guardedBody(body *ast.BlockStmt) Source {
+	context := Detail{Subject: "guard also controls other statements; preserve complete body and order, not a whole-if replacement"}
+	return owner.categoryReceipt("guarded-body", body, context)
 }
 func (owner *declaration) guardedSite(condition, update, guard ast.Node) advisorySite {
 	return advisorySite{symbol: owner.symbol, representation: "guarded-update", receipts: []Source{

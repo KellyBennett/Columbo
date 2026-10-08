@@ -142,7 +142,8 @@ if job.Status == Pending { job.Status = Running }
 Supported subjects are direct declared integer, string or boolean fields, including
 named types. Checks use `==`, `!=`, `<`, `<=`, `>`, `>=`, subject to Go type checking.
 A selected comparison can read the field within scalar arithmetic expressions.
-Each candidate body contains one assignment, compound assignment or `++`/`--`.
+Each candidate is a direct assignment, compound assignment or `++`/`--` within
+a guarded body, which may contain additional statements.
 Integer arithmetic/bitwise operations, string concatenation and unary `+`, `-`,
 `^`, `!` retain their structure, operand order and types. No general algebraic
 simplification or commutative reordering is attempted.
@@ -172,16 +173,27 @@ Pure-syntax conjunction context is supported, including `item.SellIn < 0 &&
 item.Quality < 50`. The first comparison reading the mutated field is the selected
 check; other conjuncts remain context, not part of its group identity. Receipts
 retain the full condition, selected check, write, input-role bindings and enclosing
-if conditions. Full condition order and branch context must be preserved. Scalar
+if conditions. Multi-statement bodies have a complete `guarded-body` receipt: the
+guard also controls other statements, so a finding does not recommend replacing
+the whole `if`. Full condition order and branch context must be preserved. Scalar
 reads/arithmetic can still panic, enclosing conditions can have effects, and this
 is not concurrency/effect analysis or proof that extraction is safe. The collector
 never asserts a universal domain invariant or safe unconditional clamping.
 
-Conservative exclusions: init/else, multiple body statements, OR clauses, runtime
+Before each candidate, only effect-free scalar local declarations, assignments,
+increments/decrements and empty statements are traversed. Their resolved targets
+must be independent of every value referenced by the full condition and mutation.
+Field/indirect/global writes, subject or input reassignment, calls, aliases and
+control flow conservatively block a later candidate. A prior checked-field write
+invalidates the evidence even if the comparison might still hold. Later statements
+do not invalidate an already-supported candidate. Nested guards are independently
+examined with their own checks; no outer check is propagated through them.
+
+Conservative exclusions: init/else, OR clauses, runtime
 calls, pointer/indexed/promoted/nested target fields, closures, unclear aliases
 between guard/write subjects, unsupported input expressions, floating-point,
 complex, interface or aggregate mutation types, and conditions without a supported
-comparison. A multi-statement guard beginning with an increment remains excluded.
+comparison.
 No sequence/algorithm recognition, alias analysis or interprocedural inference is
 attempted. Short-circuit context is never stripped to claim an unconditional write.
 

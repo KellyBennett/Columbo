@@ -11,12 +11,6 @@ type guardedMutation struct {
 	operator      token.Token
 }
 
-func guardedStatement(node *ast.IfStmt) *guardedMutation {
-	if node.Init != nil || node.Else != nil || len(node.Body.List) != 1 {
-		return nil
-	}
-	return guardedMutationOf(node.Body.List[0])
-}
 func guardedMutationOf(node ast.Stmt) *guardedMutation {
 	switch statement := node.(type) {
 	case *ast.AssignStmt:
