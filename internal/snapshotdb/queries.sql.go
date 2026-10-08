@@ -1162,7 +1162,7 @@ func (q *Queries) SummaryCases(ctx context.Context) ([]SummaryCasesRow, error) {
 const summaryClueSets = `-- name: SummaryClueSets :many
 SELECT c.kind,c.subject,v.value,v.ordinal,c.ordinal AS clue_ordinal
 FROM clues c JOIN clue_values v ON v.clue_id=c.id
-WHERE c.case_id=?1 AND c.kind IN ('variant-set','repeated-variant-set','variant-shared-write','variant-write-read','selected-role','selected-implementation-set','selected-message-set')
+WHERE c.case_id=?1 AND c.kind IN ('variant-set','repeated-variant-set','variant-shared-write','variant-write-read','variant-state-overlap','selected-role','selected-implementation-set','selected-message-set')
 ORDER BY c.ordinal,v.ordinal
 `
 

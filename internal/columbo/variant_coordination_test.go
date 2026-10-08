@@ -13,6 +13,7 @@ func TestVariantCoordination(t *testing.T) {
 		shared, flow int
 	}{
 		{"shared accumulator", `n:=0; if x==A {n++}; if x!=B {n+=2}; _=n`, 1, 1},
+		{"early return retains lexical overlap", `n:=0; if x==A {n=1;return}; if x==B {println(n)}`, 0, 1},
 		{"local calculation", `n,m:=0,0; if x==A {n=1}; if x==B {m=n+1}; _,_=n,m`, 0, 1},
 		{"nested refinement", `n:=0; if x==A {n++; if x!=B {n++}}; _=n`, 0, 0},
 		{"else refinement", `n:=0; if x==A {n++} else if x==B {n+=2}; _=n`, 0, 0},
@@ -34,12 +35,12 @@ func TestVariantCoordination(t *testing.T) {
 			counts := map[string]int{}
 			for _, clue := range c.Clues {
 				counts[clue.Kind]++
-				if strings.HasPrefix(clue.Kind, "variant-shared-") || clue.Kind == "variant-write-read" {
+				if strings.HasPrefix(clue.Kind, "variant-shared-") || clue.Kind == "variant-state-overlap" {
 					require.Len(t, clue.SupportingReceipts, 4)
 				}
 			}
 			require.Equal(t, tt.shared, counts["variant-shared-write"])
-			require.Equal(t, tt.flow, counts["variant-write-read"])
+			require.Equal(t, tt.flow, counts["variant-state-overlap"])
 		})
 	}
 }
@@ -49,7 +50,7 @@ func TestVariantCoordinationUncertainty(t *testing.T) {
 	source := variantPrelude + variantFunction("SeedOne", variantSwitch("A,B")) + variantFunction("SeedTwo", variantSwitch("A,B")) + variantFunction("Operation", `n,m:=0,0;if x==A {n=1}; x=B; n=2; println(n); if x==B {m=n};_,_=n,m`)
 	c := h.one(h.investigate(h.fixture(source), variantConfig()), variantSmell)
 	for _, clue := range c.Clues {
-		if clue.Kind == "variant-write-read" {
+		if clue.Kind == "variant-state-overlap" {
 			require.Contains(t, strings.Join(clue.Value.([]string), "\n"), "1 calls/conversions across span; 1 possible selector writes; 1 intervening location writes")
 			return
 		}
@@ -68,9 +69,11 @@ func TestVariantCoordinationSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, code)
 	require.Contains(t, string(text), "variant-shared-write")
-	require.Contains(t, string(text), "variant-write-read")
+	require.Contains(t, string(text), "variant-state-overlap")
 	require.Contains(t, string(text), "lexical evidence only")
-	require.Equal(t, 2, h.sqlCount(db, "SELECT COUNT(*) FROM clues WHERE kind IN ('variant-shared-write', 'variant-write-read')"))
+	require.Contains(t, string(text), "access types: earlier write; later read")
+	require.Contains(t, string(text), "This does not establish that a value written by one decision reaches the other.")
+	require.Equal(t, 2, h.sqlCount(db, "SELECT COUNT(*) FROM clues WHERE kind IN ('variant-shared-write', 'variant-state-overlap')"))
 	h.write(dir, "source.go", variantPrelude+variantFunction("Operation", `n:=0;switch x {case A:n=1;case B:n=2};switch x {case A:println(1);case B:println(2)};_=n`))
 	other := h.one(h.investigate(dir, variantConfig()), variantSmell)
 	require.Equal(t, r.Cases[0].ID, other.ID)
