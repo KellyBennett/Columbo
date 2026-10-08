@@ -8,14 +8,16 @@ import (
 )
 
 const guardedUpdateKind = "repeated-guarded-update"
-const guardedUpdateLead = "These locations repeat the same guarded mutation schema. Consider a shared operation while preserving surrounding conditions, evaluation order and effects. Distinct parameters need not denote the same runtime object."
-const guardedUpdateLimits = "Lexical guarded-mutation evidence, not a universal invariant or proof of safe extraction. Direct resolved integer/string/bool fields; scalar comparisons, assignment/compound/++/-- in a multi-statement body with an unchanged check and inputs, no init/else; conjunction context retained. Consistent typed parameter roles across check and write; named constants retain identity. Earlier unknown effects/control flow or potentially relevant writes block a candidate; later statements remain context. No whole-if replacement claim. No alias, promoted/nested field, effectful expression, OR clause, closure or interprocedural inference. No behavior-family inference."
+const guardedUpdateLead = "These locations repeat the same guarded mutation schema. Consider a shared operation while preserving surrounding conditions, evaluation order and effects. Caller/helper receipts can expose the same boundary at both locations; the outer guard is not proven redundant. Distinct parameters need not denote the same runtime object."
+const guardedUpdateLimits = "Lexical guarded-mutation evidence, not a universal invariant or proof of safe extraction. Direct resolved integer/string/bool fields; scalar comparisons, assignment/compound/++/-- in a multi-statement body with an unchanged check and inputs, no init/else; conjunction context retained. Consistent typed parameter roles across check and write; named constants retain identity. Earlier unknown effects/control flow or potentially relevant writes block a candidate; later statements remain context. No whole-if replacement claim. One-hop direct free-function calls with one pointer subject parameter and no results can repeat a matching helper guard/mutation; safe prefixes required, no scalar input remapping. No alias, promoted/nested field, effectful expression, OR clause, closure or transitive inference. No behavior-family inference."
 
 type guardedUpdateKey struct {
 	field        *types.Var
 	check, write string
 }
 type guardedUpdateScan struct {
+	helpers   map[string]*declaration
+	engine    *engine
 	owner     *declaration
 	groups    map[guardedUpdateKey][]advisorySite
 	ancestors []ast.Node
@@ -24,12 +26,14 @@ type guardedUpdateScan struct {
 
 func (a *engine) guardedUpdateAdvisories() []advisoryGroup {
 	sites := map[guardedUpdateKey][]advisorySite{}
+	helpers := map[string]*declaration{}
 	for _, owner := range a.declarations {
 		if owner.file.included {
-			scan := guardedUpdateScan{owner: owner, groups: sites, fset: a.fset}
+			scan := guardedUpdateScan{helpers: helpers, engine: a, owner: owner, groups: sites, fset: a.fset}
 			owner.inspectBody(scan.visit)
 		}
 	}
+	guardedHelperDeclarations(sites, helpers)
 	return guardedUpdateGroups(a.fset, sites)
 }
 func guardedUpdateGroups(fset *token.FileSet, sites map[guardedUpdateKey][]advisorySite) []advisoryGroup {
@@ -61,8 +65,9 @@ func (scan *guardedUpdateScan) collect(node *ast.IfStmt) {
 		return
 	}
 	for index, statement := range node.Body.List {
+		scan.collectHelper(node, statement, index)
 		mutation := guardedMutationOf(statement)
-		if mutation != nil && scan.owner.guardedPrefix(node, mutation, index) {
+		if mutation != nil && scan.owner.guardedPrefix(node, mutation.node, index) {
 			scan.collectMutation(node, mutation)
 		}
 	}
@@ -71,7 +76,7 @@ func (scan *guardedUpdateScan) collectMutation(node *ast.IfStmt, mutation *guard
 	facts := guardedFacts{scan.owner.file.typeInfo()}
 	match := facts.match(node.Cond, mutation, scan.normalizer())
 	if match != nil {
-		scan.groups[match.key] = append(scan.groups[match.key], scan.site(node, mutation, match))
+		scan.groups[match.key] = append(scan.groups[match.key], scan.site(node, mutation.node, match))
 	}
 }
 func (scan *guardedUpdateScan) normalizer() *guardedNormalizer {

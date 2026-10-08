@@ -190,11 +190,11 @@ do not invalidate an already-supported candidate. Nested guards are independentl
 examined with their own checks; no outer check is propagated through them.
 
 Conservative exclusions: init/else, OR clauses, runtime
-calls, pointer/indexed/promoted/nested target fields, closures, unclear aliases
+calls inside check/write expressions, pointer/indexed/promoted/nested target fields, closures, unclear aliases
 between guard/write subjects, unsupported input expressions, floating-point,
 complex, interface or aggregate mutation types, and conditions without a supported
 comparison.
-No sequence/algorithm recognition, alias analysis or interprocedural inference is
+No sequence/algorithm recognition, alias analysis or transitive call inference is
 attempted. Short-circuit context is never stripped to claim an unconditional write.
 
 The direct-action category collector does not establish membership for a
@@ -208,3 +208,29 @@ inspect either snapshot with [the advisory queries](sqlite/advisories.sql), filt
 `advisory_groups.kind = 'repeated-guarded-update'`, or run ordinary analysis to a new
 output path. Schema 8 is unchanged; normalized-check/normalized-write values and
 mutation-input receipts use the existing tables. Thresholds/suppressions are unchanged.
+
+### Guard repeated across a helper boundary
+
+The collector also recognizes a direct call to an included free function with
+one pointer parameter and no results. The caller argument must be a resolved
+variable, and the helper mutation must target that exact parameter's direct field.
+The caller check and helper check must normalize to the same typed comparison
+and field identity. Constants and same-subject sibling fields are supported;
+additional scalar parameters, argument expressions, methods, function bindings,
+return/factory calls, external functions and transitive calls are excluded.
+
+The helper guard must be top-level, reached through only independent scalar
+operations. The existing safe-prefix rules apply between the caller guard and
+call and between the helper guard and mutation. Unknown effects, control flow,
+subject reassignment and possibly aliased writes block inference. Init/else,
+closures and nested helper guards are excluded. No recursion is followed.
+The ordinary helper mutation remains one existing site; the caller contributes
+a separate guarded-call site, not a second copy of the helper mutation.
+
+Receipts retain the caller condition, body context, call, helper declaration,
+helper condition and mutation. The persisted call receipt names the resolved
+callee; callee receipts belong to its existing declaration-owned site, including
+when the helper is in a different file. This is evidence of duplicated boundary knowledge,
+not proof that the outer guard is redundant or safe to delete: it may control
+other behavior. Preserve all such work and its order when refactoring. This
+extension is advisory; no stage, threshold, severity or schema changes.

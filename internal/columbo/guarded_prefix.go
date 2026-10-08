@@ -10,16 +10,16 @@ type guardedPrefix struct {
 	reads map[types.Object]bool
 }
 
-func (owner *declaration) guardedPrefix(node *ast.IfStmt, mutation *guardedMutation, index int) bool {
+func (owner *declaration) guardedPrefix(node *ast.IfStmt, update ast.Node, index int) bool {
 	prefix := newGuardedPrefix(owner.file.typeInfo())
-	return prefix.preservesUntil(node, mutation, index)
+	return prefix.preservesUntil(node, update, index)
 }
 func newGuardedPrefix(info *types.Info) guardedPrefix {
 	return guardedPrefix{guardedFacts{info}, map[types.Object]bool{}}
 }
-func (prefix guardedPrefix) preservesUntil(node *ast.IfStmt, mutation *guardedMutation, index int) bool {
+func (prefix guardedPrefix) preservesUntil(node *ast.IfStmt, update ast.Node, index int) bool {
 	prefix.observe(node.Cond)
-	prefix.observe(mutation.node)
+	prefix.observe(update)
 	return prefix.preservesAll(node.Body.List[:index])
 }
 func (prefix guardedPrefix) preservesAll(statements []ast.Stmt) bool {

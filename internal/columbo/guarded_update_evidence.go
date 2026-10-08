@@ -9,8 +9,8 @@ import (
 	"strconv"
 )
 
-func (scan *guardedUpdateScan) site(node *ast.IfStmt, mutation *guardedMutation, match *guardedMatch) advisorySite {
-	site := scan.owner.guardedSite(node.Cond, mutation.node, match.guard)
+func (scan *guardedUpdateScan) site(node *ast.IfStmt, update ast.Node, match *guardedMatch) advisorySite {
+	site := scan.owner.guardedSite(node.Cond, update, match.guard)
 	site.receipts = append(scan.surroundingConditions(), site.receipts...)
 	site.receipts = append(site.receipts, scan.owner.guardedContext(node, match.inputs)...)
 	return site
