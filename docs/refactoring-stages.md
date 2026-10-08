@@ -8,6 +8,7 @@ unchanged. The GitHub Action exposes the same opt-in as `staged: 'true'`.
 | --- | --- | --- |
 | 1 | Untangle Behavior | `nested-field-decision`, `variant-coordination` |
 | 2 | Assign Ownership | `category-selected-behavior` (initial bounded gate) |
+| 3 | Consolidate Shared Behavior | `repeated-guarded-update` |
 
 Every invocation analyzes the current source and evaluates the ordered membership
 list from the top. A defined stage clears only when every member has zero issues.
@@ -20,13 +21,24 @@ Untangle Behavior asks the agent to gather each behavioral category into coheren
 paths or methods, preserving behavior, ordering and boundaries. Temporary
 duplication is acceptable. Do just enough to address the current findings, then
 rerun for fresh evidence. Ownership, common roles, sharing and deduplication belong
-to the later stage. Assign Ownership gives those gathered behaviors appropriate
+to later stages. Assign Ownership gives those gathered behaviors appropriate
 owners. Its initial gate is now defined: zero category-selected-behavior findings.
 Clearing it means only that this bounded gate found no issues, not that all
 architectural ownership is correct. Its task includes available repeated-variant-decision and
 selection-use-coupling case IDs, source locations, diagnoses and refactoring leads
-as review context, never as completion gates. The stage framework still supports pending future definitions; neither current
-stage is pending.
+as review context, never as completion gates.
+
+Consolidate Shared Behavior asks the agent to consolidate repeated responsibilities
+into shared implementations while preserving behavior and the guarantees of earlier
+stages. Resolve current evidence, then rerun. Its completion gate is zero
+`repeated-guarded-update` groups, including supported caller/helper boundary groups.
+Preserve surrounding conditions, evaluation order and effects: evidence is not
+proof of safe extraction or outer-guard removal. Zero groups do not establish that
+all shared responsibilities have been consolidated. Earlier-stage regressions
+reopen the first affected stage and lock consolidation again. Locked-stage evidence
+and counts remain in SQLite; only active-stage issues are presented for action.
+The stage framework supports pending future definitions; none of the three
+configured stages is pending.
 
 ## Collector scope
 
@@ -62,10 +74,10 @@ or the staged exit code. Existing non-staged CI remains strict; adopting staged
 mode is an explicit workflow choice, not an automatic change to existing jobs.
 
 - Exit 1: the active stage has collector issues.
-- Exit 0: both configured stages are cleared; not a claim of architectural completeness.
+- Exit 0: all three configured stages are cleared; not a claim of architectural completeness.
 - Exit 2: analysis, snapshot, or output error.
 
-The GitHub check likewise succeeds when both configured stages clear and states
+The GitHub check likewise succeeds when all three configured stages clear and states
 the bounded meaning of clearing. Warnings remain visible.
 Use the active task and status as the agent's stopping boundary, not a green check
 as proof that all stages are done.
@@ -127,7 +139,7 @@ can clear this gate without introducing any new type. Preserve default and no-op
 behavior when considering any restructuring; static compatibility alone does not
 prove the callees implement the same operation or that the existing design is wrong.
 
-## Repeated guarded mutations (advisory, no new stage)
+## Repeated guarded mutations (third-stage gate; ordinary-mode advisory)
 
 The existing `repeated-guarded-update` collector identifier now describes a broader
 operation schema: read a resolved field in a comparison, then write that same
@@ -202,7 +214,7 @@ function-returning selector. This collector does not infer behavior families;
 names and historical reports are not substitute evidence. Existing ownership
 eligibility remains unchanged and factories stay clear.
 
-No third gate is defined. Ordinary CLI/GitHub summaries display this advisory
+Consolidate Shared Behavior requires zero groups from this collector. Ordinary CLI/GitHub summaries display this advisory
 without changing verdicts/exit status. Staged summaries remain gate-focused;
 inspect either snapshot with [the advisory queries](sqlite/advisories.sql), filtering
 `advisory_groups.kind = 'repeated-guarded-update'`, or run ordinary analysis to a new
@@ -233,4 +245,5 @@ callee; callee receipts belong to its existing declaration-owned site, including
 when the helper is in a different file. This is evidence of duplicated boundary knowledge,
 not proof that the outer guard is redundant or safe to delete: it may control
 other behavior. Preserve all such work and its order when refactoring. This
-extension is advisory; no stage, threshold, severity or schema changes.
+evidence participates in the third-stage gate and remains advisory in ordinary
+mode. Thresholds, legacy severities and schema are unchanged.

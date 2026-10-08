@@ -17,11 +17,14 @@ func refactoringStages() []stageDefinition {
 		{id: "untangle-behavior", name: "Untangle Behavior", task: untangleTask,
 			collectors: []string{"nested-field-decision", "variant-coordination"}},
 		{id: "assign-ownership", name: "Assign Ownership", task: ownershipTask, collectors: []string{categoryBehaviorKind}, contextSmells: []string{variantSmell, selectionSmell}},
+		{id: "consolidate-shared-behavior", name: "Consolidate Shared Behavior", task: consolidationTask, collectors: []string{guardedUpdateKind}},
 	}
 }
 
 const untangleTask = "Gather each behavioral category into coherent paths or methods, preserving behavior, ordering and boundaries. Temporary duplication is acceptable. Do only enough to remove the current collector findings, then rerun Columbo for fresh evidence. Defer ownership, sharing and deduplication decisions."
 const ownershipTask = "Assign an explicit owner to category-selected behavior and separate category selection from invocation. Functions and objects can both express ownership. Preserve default and no-op behavior. Clearing this initial bounded collector is not proof that all architectural ownership is correct."
+
+const consolidationTask = "Consolidate repeated responsibilities into shared implementations while preserving behavior and the guarantees of earlier stages. Resolve the current collector evidence, then rerun Columbo. Preserve surrounding conditions, evaluation order and effects; evidence is not proof of safe extraction or outer-guard removal. Clearing this bounded collector is not proof that all shared responsibilities have been consolidated."
 
 type stageEvaluation struct {
 	groups []advisoryGroup

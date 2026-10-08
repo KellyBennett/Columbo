@@ -82,11 +82,12 @@ func TestGuardedUpdateSnapshotAndStages(t *testing.T) {
 	cfg.Staged = true
 	staged := h.investigate(dir, cfg)
 	require.Len(t, staged.GuardedUpdates, 1)
-	require.Len(t, staged.Stages, 2)
-	for _, stage := range staged.Stages {
+	require.Len(t, staged.Stages, 3)
+	for _, stage := range staged.Stages[:2] {
 		require.Equal(t, "cleared", stage.state)
 	}
-	checkStageSnapshot(t, h, staged, 0, "Stage Assign Ownership: cleared")
+	require.Equal(t, "active", staged.Stages[2].state)
+	checkStageSnapshot(t, h, staged, 1, "Stage Consolidate Shared Behavior: active")
 	cfg.Exclude = append(cfg.Exclude, "source.go")
 	require.Empty(t, h.investigate(dir, cfg).GuardedUpdates)
 }
