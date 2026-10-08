@@ -87,25 +87,37 @@ literals and named string types) and integer category fields are supported. The
 subject is the resolved value path immediately preceding the selected field.
 
 Supported decisions are tagged switches with constant case expressions, and
-`==` if/else chains over the same resolved field (constant on either side). Each
-action branch consists of one direct call expression or one return-call. Every
-action must resolve to an included local declaration with an identical non-generic,
+`==` if/else chains over the same resolved field (constant on either side). An understood
+action branch consists of one direct call expression or one return-call, optionally
+preceded immediately by a single branch-local function binding (`f := action` or
+`var f = action`, including an explicit function type). The binding must resolve
+to a free-function declaration and the invocation must use that exact local
+variable. Reassignment, alias chains, closures and bindings outside the branch
+are not followed. Every contributing action must resolve to an included local declaration with an identical non-generic,
 non-variadic signature and pass the same subject at the same first matching
 argument position. Other arguments must be resolved variable/field paths or
 constants. Zero results and basic scalar results are supported. Empty branches,
 unlabeled break/continue and bare returns are retained as explicit no-op/control
 transfer evidence. An omitted default stays omitted; no exhaustiveness is inferred.
 
+At least two understood actions with distinct compatible callees are required.
+Unsupported branches do not invalidate supported actions; they remain explicit
+unknown context and never count as actions or inferred no-ops. Compatibility is
+checked across all resolved contributing actions, not assumed for unknown branches.
+
 Receipts identify the selector, every branch, category-to-callee mapping, call and
-callee declaration. The candidate callable signature and zero-based subject
+callee declaration. Local bindings have their own source receipts. Unsupported
+branches are marked `category-unknown-branch`. The candidate callable signature and zero-based subject
 argument index are recorded. Resolved parameter-field accesses and direct writes
 in the callees support shared-state evidence; access is not a precise read-effect
 claim. Sharing state is supporting evidence, not a gate or proof of semantics.
 
-Unsupported shapes include aliases, assignments or multiple statements in branches,
+Unsupported shapes include general aliases, assignments or multiple statements
+other than the immediate local binding and call,
 computed arguments, nested decisions within branches, boolean combinations,
-fallthrough, go/defer calls, closures, method/function-variable dispatch and external
-callees. Factory selection returning functions or objects does not trigger: function
+fallthrough, go/defer calls, closures, method dispatch, unresolved function-variable
+dispatch and external callees. These branches are retained as unknown context when
+other branches supply sufficient evidence. Factory selection returning functions or objects does not trigger: function
 values are not direct calls, and calls returning aggregate, pointer, interface or
 callable results are conservatively excluded. This also intentionally misses some
 action functions returning those types. No broad flow or alias analysis is claimed.

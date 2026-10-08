@@ -8,13 +8,14 @@ import (
 
 const categoryBehaviorKind = "category-selected-behavior"
 const categoryBehaviorLead = "This caller appears to select between category-specific implementations of the same operation. Give that operation an explicit owner and separate category selection from invoking the behavior. Functions or objects can express ownership; preserve default and explicit no-op behavior."
-const categoryBehaviorLimits = "Bounded lexical evidence, not proof of a design defect or common semantics. Direct string/integer field switch or equality if/else; single direct free-function call/return per action branch; identical non-generic, non-variadic signatures; same resolved selector subject in the same argument position. No alias, mutation, interprocedural flow or exhaustiveness inference. Returning a selected function/object is not direct execution."
+const categoryBehaviorLimits = "Bounded lexical evidence, not proof of a design defect or common semantics. Direct string/integer field switch or equality if/else; at least two understood action branches, each a direct free-function call/return or an immediately invoked branch-local function binding; identical non-generic, non-variadic signatures; same resolved selector subject in the same argument position. Unsupported branches are retained as unknown context, never no-ops. No general alias, mutation, interprocedural flow or exhaustiveness inference. Returning a selected function/object is not direct execution."
 
 type categoryAction struct {
 	branch   categoryBranch
 	call     *ast.CallExpr
 	target   *declaration
 	position int
+	binding  ast.Node
 }
 type categoryBehaviorScan struct {
 	engine  *engine
@@ -60,47 +61,49 @@ func (scan *categoryBehaviorScan) collect(selection categorySelection) {
 	if !subject.valid() {
 		return
 	}
-	actions, ok := scan.actions(selection, subject)
-	if !ok || !compatibleCategoryActions(actions) {
+	actions := scan.actions(selection, subject)
+	if !compatibleCategoryActions(actions) {
 		return
 	}
 	scan.groups = append(scan.groups, scan.evidence(selection, subject, actions))
 }
-func (scan *categoryBehaviorScan) actions(selection categorySelection, subject resolvedValuePath) ([]categoryAction, bool) {
+func (scan *categoryBehaviorScan) actions(selection categorySelection, subject resolvedValuePath) []categoryAction {
 	actions := []categoryAction{}
 	for _, branch := range selection.branches {
-		action, ok := scan.branchAction(branch, subject)
-		if !ok {
-			return nil, false
+		if !branch.constantLabels(scan.owner.file.typeInfo()) {
+			return nil
 		}
-		if action.call != nil {
+		action, ok := scan.branchAction(branch, subject)
+		if ok && action.call != nil {
 			actions = append(actions, action)
 		}
 	}
-	return actions, true
+	return actions
 }
 func (scan *categoryBehaviorScan) branchAction(branch categoryBranch, subject resolvedValuePath) (categoryAction, bool) {
-	if !branch.constantLabels(scan.owner.file.typeInfo()) {
-		return categoryAction{}, false
-	}
-	call, ok := branch.action()
-	if !ok || call == nil {
+	invocation, ok := branch.invocation(scan.owner.file.typeInfo())
+	if !ok || invocation.call == nil {
 		return categoryAction{}, ok
 	}
-	return scan.resolveAction(branch, call, subject)
-}
-func (scan *categoryBehaviorScan) resolveAction(branch categoryBranch, call *ast.CallExpr, subject resolvedValuePath) (categoryAction, bool) {
-	target := scan.engine.calls[call]
-	if target == nil || !target.file.included || target.hasReceiver() || !target.hasBody() {
+	action := categoryAction{branch: branch, call: invocation.call, target: invocation.declaration(scan.engine), binding: invocation.binding}
+	if !action.valid(scan.owner.file.typeInfo()) {
 		return categoryAction{}, false
+	}
+	return action.onSubject(scan.owner.file.typeInfo(), subject)
+}
+func (action categoryAction) valid(info *types.Info) bool {
+	target := action.target
+	if target == nil || !target.file.included || target.hasReceiver() || !target.hasBody() {
+		return false
 	}
 	signature := target.signature
-	if signature.Variadic() || signature.TypeParams().Len() != 0 || !categoryActionResults(signature) || !categoryArguments(scan.owner.file.typeInfo(), call) {
-		return categoryAction{}, false
-	}
-	for position, argument := range call.Args {
-		if subject.same(categoryPath(scan.owner.file.typeInfo(), argument)) {
-			return categoryAction{branch, call, target, position}, true
+	return !signature.Variadic() && signature.TypeParams().Len() == 0 && categoryActionResults(signature) && categoryArguments(info, action.call)
+}
+func (action categoryAction) onSubject(info *types.Info, subject resolvedValuePath) (categoryAction, bool) {
+	for position, argument := range action.call.Args {
+		if subject.same(categoryPath(info, argument)) {
+			action.position = position
+			return action, true
 		}
 	}
 	return categoryAction{}, false

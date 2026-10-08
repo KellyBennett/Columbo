@@ -19,6 +19,11 @@ func (scan *categoryBehaviorScan) selectionSite(selection categorySelection, act
 		label := categoryLabels(branch, scan.owner.file.typeInfo())
 		site.receipts = append(site.receipts, scan.owner.categoryReceipt("category-branch", branch.node, Detail{Subject: label}))
 		site.receipts = append(site.receipts, scan.branchReceipt(branch, label, actions))
+		for _, action := range actions {
+			if action.branch.node == branch.node && action.binding != nil {
+				site.receipts = append(site.receipts, scan.owner.categoryReceipt("category-function-binding", action.binding, Detail{Subject: action.target.symbol}))
+			}
+		}
 	}
 	return site
 }
@@ -27,6 +32,9 @@ func (scan *categoryBehaviorScan) branchReceipt(branch categoryBranch, label str
 		if action.branch.node == branch.node {
 			return scan.owner.categoryReceipt("category-call", action.call, Detail{Subject: label + " -> " + action.target.symbol})
 		}
+	}
+	if call, ok := branch.action(); !ok || call != nil {
+		return scan.owner.categoryReceipt("category-unknown-branch", branch.node, Detail{Subject: label + " -> unsupported branch; no action or no-op inferred"})
 	}
 	return scan.owner.categoryReceipt("category-no-op", branch.noOpNode(), Detail{Subject: label + " -> explicit no-op/control transfer"})
 }
