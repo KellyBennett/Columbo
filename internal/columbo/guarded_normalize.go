@@ -84,14 +84,9 @@ func (normalizer *guardedNormalizer) resolved(node ast.Expr, object types.Object
 	return normalizer.input(node, variable)
 }
 func (normalizer *guardedNormalizer) parameter(variable *types.Var) bool {
-	parameters := normalizer.owner.signature.Params()
-	for index := 0; index < parameters.Len(); index++ {
-		if parameters.At(index) == variable {
-			return guardedScalar(variable.Type())
-		}
-	}
-	return false
+	return normalizer.owner.hasParameter(variable) && guardedScalar(variable.Type())
 }
+
 func (normalizer *guardedNormalizer) input(node ast.Expr, variable *types.Var) string {
 	for _, input := range normalizer.inputs {
 		if input.variable == variable {

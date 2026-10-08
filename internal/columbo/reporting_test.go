@@ -656,7 +656,7 @@ func TestAdvisorySnapshotRoundTrip(t *testing.T) {
 	report, err := Analyze(dir, []string{"./..."}, quiet())
 	require.NoError(t, err)
 	db := h.snapshot(report)
-	require.Equal(t, 3, h.sqlCount(db, "SELECT count(*) FROM advisory_collectors"))
+	require.Equal(t, 5, h.sqlCount(db, "SELECT count(*) FROM advisory_collectors"))
 	require.Equal(t, 2, h.sqlCount(db, "SELECT count(*) FROM advisory_groups"))
 	require.Equal(t, 5, h.sqlCount(db, "SELECT count(*) FROM advisory_sites"))
 	require.Equal(t, 4, h.sqlCount(db, "SELECT count(*) FROM advisory_site_values"))

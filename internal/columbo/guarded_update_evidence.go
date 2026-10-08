@@ -24,20 +24,20 @@ func (owner *declaration) guardedContext(node *ast.IfStmt, inputs []guardedInput
 }
 func (owner *declaration) guardedBody(body *ast.BlockStmt) Source {
 	context := Detail{Subject: "guard also controls other statements; preserve complete body and order, not a whole-if replacement"}
-	return owner.categoryReceipt("guarded-body", body, context)
+	return owner.nodeSource("guarded-body", body, context)
 }
 func (owner *declaration) guardedSite(condition, update, guard ast.Node) advisorySite {
 	return advisorySite{symbol: owner.symbol, representation: "guarded-update", receipts: []Source{
-		owner.categoryReceipt("guarded-condition", condition, Detail{Subject: "preserve full condition and evaluation order"}),
-		owner.categoryReceipt("bound-guard", guard, Detail{}),
-		owner.categoryReceipt("guarded-update", update, Detail{}),
+		owner.nodeSource("guarded-condition", condition, Detail{Subject: "preserve full condition and evaluation order"}),
+		owner.nodeSource("bound-guard", guard, Detail{}),
+		owner.nodeSource("guarded-update", update, Detail{}),
 	}}
 }
 func (scan *guardedUpdateScan) surroundingConditions() []Source {
 	receipts := []Source{}
 	for _, ancestor := range scan.ancestors {
 		if outer, ok := ancestor.(*ast.IfStmt); ok {
-			receipts = append(receipts, scan.owner.categoryReceipt("surrounding-condition", outer.Cond, Detail{Subject: "preserve branch context"}))
+			receipts = append(receipts, scan.owner.nodeSource("surrounding-condition", outer.Cond, Detail{Subject: "preserve branch context"}))
 		}
 	}
 	return receipts
@@ -55,7 +55,7 @@ func (key guardedUpdateKey) subject() string { return key.field.Name() + ": repe
 func (owner *declaration) guardedInputs(inputs []guardedInput) []Source {
 	receipts := []Source{}
 	for _, input := range inputs {
-		receipts = append(receipts, owner.categoryReceipt("mutation-input", input.node, Detail{Subject: input.role}))
+		receipts = append(receipts, owner.nodeSource("mutation-input", input.node, Detail{Subject: input.role}))
 	}
 	return receipts
 }

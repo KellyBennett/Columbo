@@ -10,7 +10,7 @@ func (helper *guardedHelper) site(guard ast.Expr) advisorySite {
 	return site
 }
 func (helper *guardedHelper) callReceipt() Source {
-	return helper.scan.owner.categoryReceipt("guarded-helper-call", helper.call, Detail{Subject: "caller repeats boundary in " + helper.target.symbol + "; outer guard is not proven redundant"})
+	return helper.scan.owner.nodeSource("guarded-helper-call", helper.call, Detail{Subject: "caller repeats boundary in " + helper.target.symbol + "; outer guard is not proven redundant"})
 }
 
 func guardedHelperDeclarations(groups map[guardedUpdateKey][]advisorySite, helpers map[string]*declaration) {
@@ -18,7 +18,7 @@ func guardedHelperDeclarations(groups map[guardedUpdateKey][]advisorySite, helpe
 		for index := range sites {
 			owner := helpers[sites[index].symbol]
 			if owner != nil && sites[index].representation == "guarded-update" {
-				sites[index].receipts = append(sites[index].receipts, owner.categoryReceipt("guarded-helper-declaration", owner.fn, Detail{Subject: "sole pointer parameter maps to caller subject; one-hop evidence"}))
+				sites[index].receipts = append(sites[index].receipts, owner.nodeSource("guarded-helper-declaration", owner.fn, Detail{Subject: "sole pointer parameter maps to caller subject; one-hop evidence"}))
 			}
 		}
 	}

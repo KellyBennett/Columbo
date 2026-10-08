@@ -43,21 +43,23 @@ type MemberRef struct {
 }
 
 type Report struct {
-	GuardedUpdates   []advisoryGroup       `json:"-"`
-	CategoryBehavior []advisoryGroup       `json:"-"`
-	Stages           []stageResult         `json:"-"`
-	Coordination     []advisoryGroup       `json:"-"`
-	Choices          ChoiceSetReport       `json:"-"`
-	Tangles          TangleReport          `json:"-"`
-	Correlations     []Correlation         `json:"correlations,omitempty"`
-	Selections       []SelectionContext    `json:"-"`
-	Roles            []RoleCandidate       `json:"role_candidates,omitempty"`
-	Version          int                   `json:"version"`
-	Summary          Summary               `json:"summary"`
-	Cases            []Case                `json:"cases"`
-	Suppressions     []Suppression         `json:"suppressions"`
-	Warnings         []Warning             `json:"warnings"`
-	Declarations     []DeclarationEvidence `json:"-"`
+	CategorySplit         []advisoryGroup       `json:"-"`
+	ConditionalOverwrites []advisoryGroup       `json:"-"`
+	GuardedUpdates        []advisoryGroup       `json:"-"`
+	CategoryBehavior      []advisoryGroup       `json:"-"`
+	Stages                []stageResult         `json:"-"`
+	Coordination          []advisoryGroup       `json:"-"`
+	Choices               ChoiceSetReport       `json:"-"`
+	Tangles               TangleReport          `json:"-"`
+	Correlations          []Correlation         `json:"correlations,omitempty"`
+	Selections            []SelectionContext    `json:"-"`
+	Roles                 []RoleCandidate       `json:"role_candidates,omitempty"`
+	Version               int                   `json:"version"`
+	Summary               Summary               `json:"summary"`
+	Cases                 []Case                `json:"cases"`
+	Suppressions          []Suppression         `json:"suppressions"`
+	Warnings              []Warning             `json:"warnings"`
+	Declarations          []DeclarationEvidence `json:"-"`
 }
 type Case struct {
 	ID                     string            `json:"id"`

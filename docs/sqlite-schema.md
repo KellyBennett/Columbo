@@ -198,3 +198,10 @@ resolved field and structurally normalized check/write expressions use
 `advisory_values`; conditions, writes and typed input-role bindings use
 `advisory_receipts`. It is deliberately absent from
 `stage_collectors`, and does not affect legacy verdicts.
+
+`witnessed-conditional-overwrite` is an additive advisory kind within the existing
+schema-8 row contract. It uses `advisory_values` for typed concrete witness inputs
+and earlier/later results; `advisory_receipts` stores both guards and assignments
+plus the evaluated prefix, with source spelling and ranges. It has no
+`stage_collectors` membership and cannot change verdicts or stage counts. See
+[bounded witness contract](witnessed-conditional-overwrite.md).

@@ -1,9 +1,11 @@
 [active_stage_issues] id | kind | subject | lead | limits
 
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
+"category-split-updates" | 1 | 3
 "choice-set" | 1 | 3
 "nested-field-decision" | 1 | 3
 "repeated-guarded-update" | 1 | 3
+"witnessed-conditional-overwrite" | 1 | 3
 
 [advisory_groups] id | kind | subject | lead | limits
 

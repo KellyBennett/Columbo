@@ -15,7 +15,9 @@ type advisoryGroup struct {
 func (report Report) advisories() []advisoryGroup {
 	groups := append([]advisoryGroup{}, report.Coordination...)
 	groups = append(groups, report.CategoryBehavior...)
+	groups = append(groups, report.CategorySplit...)
 	groups = append(groups, report.GuardedUpdates...)
+	groups = append(groups, report.ConditionalOverwrites...)
 	for _, group := range report.Choices.Groups {
 		groups = append(groups, group.advisory())
 	}

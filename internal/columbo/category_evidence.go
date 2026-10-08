@@ -7,21 +7,16 @@ import (
 	"strings"
 )
 
-func (owner *declaration) categoryReceipt(kind string, node ast.Node, detail Detail) Source {
-	receipt := owner.source(kind, node.Pos(), node.End(), detail)
-	receipt.Spelling = string(owner.file.data[receipt.StartOffset:receipt.EndOffset])
-	return receipt
-}
 func (scan *categoryBehaviorScan) selectionSite(selection categorySelection, actions []categoryAction) advisorySite {
 	site := advisorySite{symbol: scan.owner.symbol, representation: "direct-execution"}
-	site.receipts = append(site.receipts, scan.owner.categoryReceipt("category-selector", selection.selector, Detail{Subject: "selector"}))
+	site.receipts = append(site.receipts, scan.owner.nodeSource("category-selector", selection.selector, Detail{Subject: "selector"}))
 	for _, branch := range selection.branches {
 		label := categoryLabels(branch, scan.owner.file.typeInfo())
-		site.receipts = append(site.receipts, scan.owner.categoryReceipt("category-branch", branch.node, Detail{Subject: label}))
+		site.receipts = append(site.receipts, scan.owner.nodeSource("category-branch", branch.node, Detail{Subject: label}))
 		site.receipts = append(site.receipts, scan.branchReceipt(branch, label, actions))
 		for _, action := range actions {
 			if action.branch.node == branch.node && action.binding != nil {
-				site.receipts = append(site.receipts, scan.owner.categoryReceipt("category-function-binding", action.binding, Detail{Subject: action.target.symbol}))
+				site.receipts = append(site.receipts, scan.owner.nodeSource("category-function-binding", action.binding, Detail{Subject: action.target.symbol}))
 			}
 		}
 	}
@@ -30,13 +25,13 @@ func (scan *categoryBehaviorScan) selectionSite(selection categorySelection, act
 func (scan *categoryBehaviorScan) branchReceipt(branch categoryBranch, label string, actions []categoryAction) Source {
 	for _, action := range actions {
 		if action.branch.node == branch.node {
-			return scan.owner.categoryReceipt("category-call", action.call, Detail{Subject: label + " -> " + action.target.symbol})
+			return scan.owner.nodeSource("category-call", action.call, Detail{Subject: label + " -> " + action.target.symbol})
 		}
 	}
 	if call, ok := branch.action(); !ok || call != nil {
-		return scan.owner.categoryReceipt("category-unknown-branch", branch.node, Detail{Subject: label + " -> unsupported branch; no action or no-op inferred"})
+		return scan.owner.nodeSource("category-unknown-branch", branch.node, Detail{Subject: label + " -> unsupported branch; no action or no-op inferred"})
 	}
-	return scan.owner.categoryReceipt("category-no-op", branch.noOpNode(), Detail{Subject: label + " -> explicit no-op/control transfer"})
+	return scan.owner.nodeSource("category-no-op", branch.noOpNode(), Detail{Subject: label + " -> explicit no-op/control transfer"})
 }
 func categoryLabels(branch categoryBranch, info *types.Info) string {
 	if len(branch.labels) == 0 {
@@ -95,7 +90,7 @@ func (scan *categoryStateScan) fieldAccess(field *ast.SelectorExpr) {
 	if !path.valid() {
 		return
 	}
-	receipt := scan.owner.categoryReceipt(scan.accessKind(field), field, Detail{Subject: scan.subjectKey(path)})
+	receipt := scan.owner.nodeSource(scan.accessKind(field), field, Detail{Subject: scan.subjectKey(path)})
 	scan.receipts = append(scan.receipts, receipt)
 }
 func (scan *categoryStateScan) subjectPath(field *ast.SelectorExpr) resolvedValuePath {

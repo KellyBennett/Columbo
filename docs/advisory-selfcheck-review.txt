@@ -1,0 +1,71 @@
+Advisory implementation self-check review
+
+The prototype had 19 effective failures. Responsibility and reuse improvements reduce this to 13 effective failures, with 9 warnings and the same 1 existing suppression. No severity, threshold, stage gate, or suppression changes were made. The remaining findings are deliberately visible; this review is not a suppression or claim of CI success.
+
+An independent review identified a real validation regression during cleanup; the implementation and a targeted test now preserve monotonic rejection of unsafe input writes. Full Go tests, vet, build, database boundary checks, SQL queries, and action/Checks adapter tests pass. Ordinary and staged replay of Tennis before/after, Theatrical before/after, and Racing preserves prototype advisory groups, values, receipts, and stage rows exactly.
+
+Review judgments are qualitative. The residual findings should inform further investigation of the existing rules; they do not justify arbitrary wrappers, altered matching syntax, a shared policy across unrelated AST operations, or automatic exemptions.
+
+Cleanup residual review — corrected final assessment
+
+Reviewed source: /workspace/scratch/7147ec4e67c5/stage1-cleanup-work
+Compared against: /workspace/scratch/7147ec4e67c5/stage1-advisory-work
+Residual evidence: /workspace/scratch/7147ec4e67c5/stage1-cleanup-evidence/review-self.sqlite
+Method: source diff and read-only SQLite inspection; no test execution or production-source edits by reviewer.
+
+BLOCKER STATUS: FIXED, VERIFIED BY SOURCE.
+
+The initial cleanup regressed (*overwriteScan).stable by assigning valid = s.safeAssignment(write), allowing a safe sibling assignment to reset an earlier failure. ast.Inspect returning false prunes descendants, not later siblings. Source now preserves monotonic failure at internal/columbo/overwrites.go:184:
+
+    valid = valid && s.safeAssignment(write)
+
+The regression test is present at internal/columbo/overwrites_test.go:29:
+
+    {"input mutation followed by local write", `x=5;s="reset";if x>y{s="a"};if x>=y{s="b"}`, 0},
+
+This restores the original function-level rejection of input mutation even when later safe assignments exist. Root reports implementer's focused test pass and rebuilt binary; those executions were not independently rerun in this review.
+
+No other concrete behavior/scope regression or mandatory pre-publication fix was found in the reviewed changes.
+
+OWNERSHIP ASSESSMENT
+
+The cleanup improves ownership honestly. Assignment decoding is shared by candidate discovery and execution without conflating their acceptance policies. Assignment history updates are grouped coherently. Expression resolution is separated from recursive interpretation. Existing visitReference, comparison classification, and parameter-membership logic are reused. nodeSource is the previous spelling-preserving receipt implementation, now shared directly without redundant forwarding wrappers. Sample order remains unchanged for the admitted one- and two-input domains.
+
+RESIDUAL EFFECTIVE FAILS: 13 / 13 ACCOUNTED
+
+C-5226e83d58 — (*complexityVisitor).walkElse / ast.Stmt repeated-variant-decision.
+Questionable heuristic. Five operations share statement variants: complexity accounting, mutation extraction, prefix preservation, witness execution, and type-switch extraction. No common behavioral policy warrants coupling them.
+
+C-499393d3e6 — (*guardedNormalizer).computed / ast.Expr repeated-variant-decision.
+Questionable heuristic. Genuine identifier/selector dispatch duplication was removed through visitReference. Residual overlap is BinaryExpr in normalization/evaluation and SelectorExpr in reference dispatch/dependency collection. Those responsibilities differ.
+
+C-e699c6d260 and C-8906cddea1 — (*overwriteScan).decodeAssignment, excessive-dependencies and feature-envy.
+Questionable heuristics; overlapping symptoms. Six external types and six accesses to assignment AST are expected for decoding that AST. The new representation serves two real consumers. Moving behavior onto external ast.AssignStmt is unavailable; disguising field access would worsen clarity.
+
+C-4b7cec8fba — (*overwriteWitness).recordAssignment, excessive-dependencies.
+Questionable dependency threshold. Six dependencies include Detail and Source. Maintaining assignment history, marking execution, and recording the assignment receipt constitute one accepted-assignment state transition. A separate execution-state object remains optional if the interpreter grows; it is not needed to justify this cleanup.
+
+C-8fbc2987c9 — (*overwriteScan).group, excessive-dependencies.
+Questionable residual threshold. Reduced to six dependencies after extracting genuinely repeated assignment-site construction. It assembles one advisory group and its stable identity. A pair-owned identity method is possible, but would mostly move a short, single-use calculation; no remaining supported defect requires it.
+
+C-e0669f13a0 — (*overwriteScan).assignmentSite, excessive-dependencies.
+Questionable dependency threshold. Seven dependencies describe precisely the AST-to-evidence adapter's job. The helper removes duplicated earlier/later site layout and preserves their distinct labels. Its appearance as a new case does not invalidate the refactor.
+
+C-4695b0689e — (*overwriteWitness).operation, excessive-dependencies.
+Questionable dependency threshold. Cohesive operation evaluation. Reusing existing guardedComparison preserves exactly the six comparison operators and removes genuine repeated classification; this is defensible reuse, not merely changing switch syntax.
+
+C-6b590fa822 — (*overwriteWitness).decision, excessive-dependencies.
+Questionable dependency threshold. Guard evaluation, accepted-path receipt, and conditional body execution are cohesive. Detail became explicit through direct nodeSource reuse, increasing the metric without introducing a new responsibility.
+
+C-3f780ad947 and C-8e408f55d3 — (*overwriteScan).supportedNode, excessive-dependencies and feature-envy.
+Questionable heuristics; overlapping symptoms. The rejection list necessarily names many AST forms. Envy combines accesses to differing type-switch bindings. Separating pure syntax rejection from input collection is an optional design improvement, not a demonstrated defect. Preserve the explicit unsupported-form policy.
+
+C-d0a16890bf — (*overwriteScan).selector, excessive-dependencies.
+Questionable dependency threshold. Nine standard AST/type-checker types support one cohesive operation: resolve a direct receiver field. All important restrictions remain: identifier root, FieldVal, one-element selection index, and exact receiver object.
+
+C-43a55cd7ce — (*overwriteScan).candidate, excessive-dependencies.
+Questionable residual threshold. Seven dependencies reflect candidate-specific policy applied to the shared decoded assignment. Length and duplicated decoding concerns were addressed. Further splitting sequential eligibility checks would not establish better ownership.
+
+CONCLUSION
+
+All thirteen effective FAILs are questionable residual heuristics rather than independently demonstrated must-fix defects. The concrete monotonicity regression was outside these residual cases and is now fixed, verified in source with its regression test present. No additional source change is recommended merely to force a zero count. No new suppression, tuning, altered advisory scope, or stage membership change is warranted by this review.
