@@ -452,7 +452,7 @@ func (d *declaration) variable(v *types.Var) string {
 func (f *file) variableIdentity(symbol string, v *types.Var) string {
 	return fmt.Sprintf("%s:%s@%d", symbol, v.Name(), f.fset.PositionFor(v.Pos(), false).Offset)
 }
-func (f *file) line(pos token.Pos) int { return f.tf.Line(pos) }
+func (f *file) line(pos token.Pos) int { return f.tf.PositionFor(pos, false).Line }
 func (d *declaration) declReceipt() Source {
 	return d.source("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
