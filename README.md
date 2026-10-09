@@ -72,3 +72,13 @@ No configuration is required. Columbo currently analyzes production code; test f
 - JavaScript
 - Python
 - Ruby
+
+## Staged refactoring (opt-in)
+
+Use `columbo --staged --output report.sqlite ./...` for **Untangle Behavior**,
+followed by **Assign Ownership** (`category-selected-behavior`) and **Consolidate
+Shared Behavior** (`repeated-guarded-update`). Each run freshly selects
+the first uncleared stage and enforces only its collector issues. Ordinary rule
+verdicts remain in SQLite; default non-staged CI is unchanged. See
+[ordered refactoring stages](docs/refactoring-stages.md) for membership, stopping
+boundaries and the GitHub Action input.

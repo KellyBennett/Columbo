@@ -535,9 +535,16 @@ func (a *engine) finishReport() Report {
 	a.report.finish()
 	a.report.finishRoles()
 	a.report.correlate()
-	a.report.Choices, a.report.Tangles = a.choiceSets(), a.tangles()
+	a.collectAdvisories()
 	a.collectDeclarationEvidence()
 	return a.report
+}
+func (a *engine) collectAdvisories() {
+	a.report.Choices, a.report.Tangles = a.choiceSets(), a.tangles()
+	a.report.GuardedUpdates = a.guardedUpdateAdvisories()
+	a.report.ConditionalOverwrites = a.overwriteAdvisories()
+	a.report.CategorySplit = a.categorySplitAdvisories()
+	a.collectStages()
 }
 func (a *engine) inspectDeclarations() error {
 	for _, d := range a.declarations {
@@ -747,4 +754,20 @@ func (selection evidenceSelection) packageClauses(files []*file) []DeclarationEv
 		}
 	}
 	return out
+}
+
+func (d *declaration) hasParameter(object types.Object) bool {
+	parameters := d.signature.Params()
+	for index := 0; index < parameters.Len(); index++ {
+		if parameters.At(index) == object {
+			return true
+		}
+	}
+	return false
+}
+
+func (owner *declaration) nodeSource(kind string, node ast.Node, detail Detail) Source {
+	receipt := owner.source(kind, node.Pos(), node.End(), detail)
+	receipt.Spelling = string(owner.file.data[receipt.StartOffset:receipt.EndOffset])
+	return receipt
 }

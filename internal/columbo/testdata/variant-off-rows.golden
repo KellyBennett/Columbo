@@ -1,6 +1,11 @@
+[active_stage_issues] id | kind | subject | lead | limits
+
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
+"category-split-updates" | 2 | 6
 "choice-set" | 2 | 6
 "nested-field-decision" | 2 | 6
+"repeated-guarded-update" | 2 | 6
+"witnessed-conditional-overwrite" | 2 | 6
 
 [advisory_groups] id | kind | subject | lead | limits
 
@@ -62,8 +67,10 @@
 
 [receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
 
+[refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
+
 [report] id | schema_version | columbo_version
-1 | 5 | "test"
+1 | 8 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 
@@ -78,6 +85,8 @@
 [role_candidates] id | canonical_interface | confidence | classification
 
 [source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id | spelling
+
+[stage_collectors] stage_id | ordinal | collector | issue_count
 
 [summary] failed | warned | suppressed
 0 | 0 | 0

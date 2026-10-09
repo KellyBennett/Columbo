@@ -4,6 +4,14 @@
 
 package snapshotdb
 
+type ActiveStageIssue struct {
+	ID      string
+	Kind    string
+	Subject string
+	Lead    string
+	Limits  string
+}
+
 type AdvisoryCollector struct {
 	Kind                 string
 	FilesAnalyzed        int64
@@ -243,6 +251,16 @@ type ReceiptExpansionSite struct {
 	OwnerDeclarationID *int64
 }
 
+type RefactoringStage struct {
+	ID                string
+	Ordinal           int64
+	Name              string
+	Task              string
+	State             string
+	PendingDefinition int64
+	IssueCount        int64
+}
+
 type Report struct {
 	ID             int64
 	SchemaVersion  int64
@@ -306,6 +324,13 @@ type SourceReceipt struct {
 	Nesting             *int64
 	SourceDeclarationID *int64
 	Spelling            string
+}
+
+type StageCollector struct {
+	StageID    string
+	Ordinal    int64
+	Collector  string
+	IssueCount int64
 }
 
 type Summary struct {

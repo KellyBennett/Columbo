@@ -22,15 +22,19 @@ func stableValue(d *declaration, expr ast.Expr) (*types.Var, string, bool) {
 }
 func valueBase(expr ast.Expr) ast.Expr {
 	expr = ast.Unparen(expr)
-	switch node := expr.(type) {
-	case *ast.StarExpr:
+	if unary, ok := visitUnary(expr, valueBaseUnary); ok {
+		return unary
+	}
+	if node, ok := expr.(*ast.StarExpr); ok {
 		return valueBase(node.X)
-	case *ast.UnaryExpr:
-		if node.Op == token.AND {
-			return valueBase(node.X)
-		}
 	}
 	return expr
+}
+func valueBaseUnary(node *ast.UnaryExpr) ast.Expr {
+	if node.Op == token.AND {
+		return valueBase(node.X)
+	}
+	return node
 }
 
 type valueAccess struct {

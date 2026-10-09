@@ -1,6 +1,11 @@
+[active_stage_issues] id | kind | subject | lead | limits
+
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
+"category-split-updates" | 4 | 18
 "choice-set" | 4 | 18
 "nested-field-decision" | 4 | 18
+"repeated-guarded-update" | 4 | 18
+"witnessed-conditional-overwrite" | 4 | 18
 
 [advisory_groups] id | kind | subject | lead | limits
 
@@ -590,8 +595,10 @@
 113 | 0 | 1 | 841 | 9
 117 | 0 | 1 | 841 | 9
 
+[refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
+
 [report] id | schema_version | columbo_version
-1 | 5 | "test"
+1 | 8 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2" | "C-b06ec7d1d9"
@@ -763,6 +770,8 @@
 140 | "C-82bc134f4f" | 3 | "variant-arm" | 4 | 19 | 19 | 280 | 283 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 14 | "RSS"
 141 | "C-82bc134f4f" | 4 | "variant-decision" | 4 | 19 | 23 | 269 | 366 | "value:fixture.SourceKind" | NULL | NULL | NULL | 14 | ""
 142 | "C-82bc134f4f" | 5 | "variant-arm" | 4 | 21 | 21 | 329 | 336 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 14 | "Reuters"
+
+[stage_collectors] stage_id | ordinal | collector | issue_count
 
 [summary] failed | warned | suppressed
 11 | 0 | 0

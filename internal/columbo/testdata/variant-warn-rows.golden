@@ -1,6 +1,11 @@
+[active_stage_issues] id | kind | subject | lead | limits
+
 [advisory_collectors] kind | files_analyzed | declarations_analyzed
+"category-split-updates" | 2 | 6
 "choice-set" | 2 | 6
 "nested-field-decision" | 2 | 6
+"repeated-guarded-update" | 2 | 6
+"witnessed-conditional-overwrite" | 2 | 6
 
 [advisory_groups] id | kind | subject | lead | limits
 
@@ -166,8 +171,10 @@
 
 [receipt_expansion_sites] receipt_id | ordinal | file_id | call_offset | owner_declaration_id
 
+[refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
+
 [report] id | schema_version | columbo_version
-1 | 5 | "test"
+1 | 8 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 
@@ -194,6 +201,8 @@
 10 | "C-e8720c9979" | 3 | "variant-decision" | 1 | 13 | 13 | 422 | 455 | "type:fixture.Payment" | NULL | NULL | NULL | 3 | ""
 11 | "C-e8720c9979" | 4 | "variant-arm" | 1 | 13 | 13 | 443 | 447 | "type:fixture.Payment=fixture.Card" | NULL | NULL | NULL | 3 | "Card"
 12 | "C-e8720c9979" | 5 | "variant-arm" | 1 | 13 | 13 | 448 | 453 | "type:fixture.Payment=*fixture.Cash" | NULL | NULL | NULL | 3 | "*Cash"
+
+[stage_collectors] stage_id | ordinal | collector | issue_count
 
 [summary] failed | warned | suppressed
 0 | 2 | 0

@@ -50,7 +50,7 @@ func (index *variantIndex) report() error {
 func (index *variantIndex) reportDomain(domain string) error {
 	config := index.engine.config
 	group := repeatedVariantGroup(index.domains[domain], int(config.Counts["repeated-variant-sites"]))
-	if len(group.repeated) < int(config.Counts["repeated-variant-variants"]) {
+	if !index.eligibleDomain(domain) {
 		return nil
 	}
 	return index.engine.reportVariants(domain, group)

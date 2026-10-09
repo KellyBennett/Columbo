@@ -190,3 +190,14 @@ SELECT s.ordinal,s.representation,s.input_expression,d.symbol,f.path FROM adviso
 SELECT kind,subject,start_line,end_line,start_offset,end_offset,spelling FROM advisory_receipts WHERE group_id=? AND site_ordinal=? ORDER BY ordinal;
 -- name: AdvisoryCoverage :many
 SELECT kind,files_analyzed,declarations_analyzed FROM advisory_collectors ORDER BY kind;
+
+-- name: InsertStage :exec
+INSERT INTO refactoring_stages (id,ordinal,name,task,state,pending_definition,issue_count) VALUES (?,?,?,?,?,?,?);
+-- name: InsertStageCollector :exec
+INSERT INTO stage_collectors (stage_id,ordinal,collector,issue_count) VALUES (?,?,?,?);
+-- name: SummaryStages :many
+SELECT * FROM refactoring_stages ORDER BY ordinal;
+-- name: StageCollectors :many
+SELECT * FROM stage_collectors WHERE stage_id=? ORDER BY ordinal;
+-- name: ActiveStageAdvisories :many
+SELECT g.* FROM advisory_groups g JOIN active_stage_issues a ON a.id=g.id ORDER BY g.kind,g.id;

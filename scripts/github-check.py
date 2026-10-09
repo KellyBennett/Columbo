@@ -44,10 +44,10 @@ class Snapshot:
     def validate(self):
         if self.db.execute("PRAGMA application_id").fetchone()[0] != 0x434C4D42:
             raise ValueError("not a Columbo snapshot")
-        if self.db.execute("PRAGMA user_version").fetchone()[0] != 5:
+        if self.db.execute("PRAGMA user_version").fetchone()[0] != 8:
             raise ValueError("unsupported Columbo snapshot schema")
         reports = self.db.execute("SELECT id,schema_version FROM report").fetchall()
-        if [tuple(row) for row in reports] != [(1, 5)]:
+        if [tuple(row) for row in reports] != [(1, 8)]:
             raise ValueError("invalid Columbo report metadata")
         if [tuple(row) for row in self.db.execute("PRAGMA integrity_check")] != [("ok",)]:
             raise ValueError("snapshot integrity check failed")
@@ -55,6 +55,8 @@ class Snapshot:
             raise ValueError("snapshot foreign key check failed")
 
     def annotations(self):
+        if self.stages():
+            return self.stage_annotations()
         cases = self.db.execute("""
             SELECT c.*,d.symbol,f.path FROM cases c
             JOIN declarations d ON d.id=c.primary_declaration_id
@@ -142,6 +144,8 @@ class Snapshot:
         return ["Dependency origins (lists overlap; each identity counts once):", *groups]
 
     def summary(self, exit_code):
+        if self.stages():
+            return self.stage_summary(exit_code)
         totals = tuple(self.db.execute("SELECT failed,warned,suppressed FROM summary").fetchone())
         expected = 1 if totals[0] else 0
         if exit_code != expected:
@@ -152,6 +156,45 @@ class Snapshot:
             text += "\n\nAnalysis warnings:\n" + "\n".join(warnings)
         text += self.advisory_summary()
         return limited(text)
+
+    def stages(self):
+        return self.db.execute("SELECT * FROM refactoring_stages ORDER BY ordinal").fetchall()
+
+    def stage_annotations(self):
+        result = []
+        for group in self.db.execute("SELECT * FROM active_stage_issues ORDER BY kind,id"):
+            for site in self.db.execute("""
+                SELECT f.path,min(r.start_line) AS line
+                FROM advisory_sites s JOIN declarations d ON d.id=s.declaration_id
+                JOIN files f ON f.id=d.file_id
+                JOIN advisory_receipts r ON r.group_id=s.group_id AND r.site_ordinal=s.ordinal
+                WHERE s.group_id=? GROUP BY s.ordinal ORDER BY s.ordinal
+            """, (group["id"],)):
+                result.append(dict(path=site["path"], start_line=site["line"], end_line=site["line"],
+                                   annotation_level="failure", title=limited("Columbo: " + group["kind"], 255),
+                                   message=limited(group["subject"] + "\n" + group["lead"] + "\n" + group["limits"])))
+        return result
+
+    def stage_summary(self, exit_code):
+        stages = self.stages()
+        active = [stage for stage in stages if stage["state"] == "active"]
+        if len(active) > 1 or (not active and any(stage["state"] != "cleared" for stage in stages)):
+            raise ValueError("invalid active refactoring stage")
+        if exit_code != (1 if active and active[0]["issue_count"] else 0):
+            raise ValueError("analysis exit code disagrees with stored stage issues")
+        lines = ["Refactoring mode: staged. Legacy verdicts remain in SQLite and are not enforced.", "Cleared means only that configured collectors found no issues; it does not prove architectural ownership or correctness."]
+        for stage in stages:
+            lines.append(f'Stage {stage["name"]}: {stage["state"]}')
+            if stage["state"] == "active":
+                lines.append(stage["task"])
+                if stage["pending_definition"]:
+                    lines.append("Pending definition; this is not completion.")
+            for member in self.db.execute("SELECT * FROM stage_collectors WHERE stage_id=? ORDER BY ordinal", (stage["id"],)):
+                lines.append(f'  Collector {member["collector"]}: {member["issue_count"]} issues')
+        for group in self.db.execute("SELECT * FROM active_stage_issues ORDER BY kind,id"):
+            lines.append(f'Evidence {group["id"]} {group["kind"]}: {group["subject"]}')
+        lines.extend(row[0] for row in self.db.execute("SELECT message FROM warnings ORDER BY ordinal"))
+        return limited("\n\n".join(lines))
 
     def advisory_summary(self):
         lines = []

@@ -32,6 +32,83 @@ class PublisherTests(unittest.TestCase):
     def setUp(self):
         self.snapshot = Path(os.environ["COLUMBO_TEST_SNAPSHOT"])
 
+    def test_staged_projection_defers_legacy_cases_and_never_clears_terminal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "staged.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO refactoring_stages VALUES ('untangle',0,'Untangle Behavior','Gather behavior','active',0,1)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('ownership',1,'Assign Ownership','Assign owners; no completion condition','locked',1,0)")
+                db.execute("INSERT INTO stage_collectors VALUES ('untangle',0,'nested-field-decision',1)")
+                db.execute("INSERT INTO advisory_groups VALUES ('stage-issue','nested-field-decision','Fixture','Gather behavior','Lexical evidence')")
+                declaration = db.execute("SELECT id FROM declarations ORDER BY id LIMIT 1").fetchone()[0]
+                db.execute("INSERT INTO advisory_sites VALUES ('stage-issue',0,?,'','')", (declaration,))
+                db.execute("INSERT INTO advisory_receipts VALUES ('stage-issue',0,0,'condition','Fixture',1,1,0,1,'x')")
+            annotations, summary = publisher.read_snapshot(path, 1)
+            self.assertEqual(1, len(annotations))
+            self.assertEqual("Columbo: nested-field-decision", annotations[0]["title"])
+            self.assertIn("Untangle Behavior: active", summary)
+            self.assertNotIn("11 failed", summary)
+            with sqlite3.connect(path) as db:
+                db.execute("DELETE FROM advisory_receipts WHERE group_id='stage-issue'")
+                db.execute("DELETE FROM advisory_sites WHERE group_id='stage-issue'")
+                db.execute("DELETE FROM advisory_groups WHERE id='stage-issue'")
+                db.execute("UPDATE stage_collectors SET issue_count=0")
+                db.execute("UPDATE refactoring_stages SET state='cleared',issue_count=0 WHERE id='untangle'")
+                db.execute("UPDATE refactoring_stages SET state='active' WHERE id='ownership'")
+            annotations, summary = publisher.read_snapshot(path, 0)
+            self.assertEqual([], annotations)
+            self.assertIn("Assign Ownership: active", summary)
+            self.assertIn("Pending definition; this is not completion", summary)
+            with self.assertRaisesRegex(ValueError, "stored stage issues"):
+                publisher.read_snapshot(path, 1)
+
+    def test_all_configured_stages_clear(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cleared.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO refactoring_stages VALUES ('untangle',0,'Untangle Behavior','Gather behavior','cleared',0,0)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('ownership',1,'Assign Ownership','Initial bounded ownership gate','cleared',0,0)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('consolidate',2,'Consolidate Shared Behavior','Consolidate repeated responsibilities','cleared',0,0)")
+                db.execute("INSERT INTO stage_collectors VALUES ('consolidate',0,'repeated-guarded-update',0)")
+                db.execute("INSERT INTO advisory_collectors VALUES ('category-selected-behavior',1,1)")
+                db.execute("INSERT INTO stage_collectors VALUES ('ownership',0,'category-selected-behavior',0)")
+            annotations, summary = publisher.read_snapshot(path, 0)
+            self.assertEqual([], annotations)
+            self.assertIn("Assign Ownership: cleared", summary)
+            self.assertIn("Consolidate Shared Behavior: cleared", summary)
+            self.assertIn("does not prove architectural ownership", summary)
+            with self.assertRaisesRegex(ValueError, "stored stage issues"):
+                publisher.read_snapshot(path, 1)
+            with sqlite3.connect(path) as db:
+                db.execute("UPDATE refactoring_stages SET state='locked' WHERE id='ownership'")
+            with self.assertRaisesRegex(ValueError, "invalid active refactoring stage"):
+                publisher.read_snapshot(path, 0)
+
+    def test_third_stage_projects_only_its_findings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "consolidation.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO refactoring_stages VALUES ('untangle',0,'Untangle Behavior','Gather behavior','cleared',0,0)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('ownership',1,'Assign Ownership','Assign owners','cleared',0,0)")
+                db.execute("INSERT INTO refactoring_stages VALUES ('consolidate',2,'Consolidate Shared Behavior','Preserve behavior, order and effects','active',0,1)")
+                db.execute("INSERT INTO stage_collectors VALUES ('consolidate',0,'repeated-guarded-update',1)")
+                db.execute("INSERT INTO advisory_groups VALUES ('shared','repeated-guarded-update','Fixture','Consolidate repeated responsibilities','Not proof of safe extraction')")
+                declaration = db.execute("SELECT id FROM declarations ORDER BY id LIMIT 1").fetchone()[0]
+                db.execute("INSERT INTO advisory_sites VALUES ('shared',0,?,'','')", (declaration,))
+                db.execute("INSERT INTO advisory_receipts VALUES ('shared',0,0,'bound-guard','Fixture',1,1,0,1,'x')")
+            annotations, summary = publisher.read_snapshot(path, 1)
+            self.assertEqual(1, len(annotations))
+            self.assertEqual("Columbo: repeated-guarded-update", annotations[0]["title"])
+            self.assertEqual("failure", annotations[0]["annotation_level"])
+            self.assertIn("Consolidate Shared Behavior: active", summary)
+            self.assertIn("Preserve behavior, order and effects", summary)
+            self.assertNotIn("11 failed", summary)
+            with self.assertRaisesRegex(ValueError, "stored stage issues"):
+                publisher.read_snapshot(path, 0)
+
     def test_advisories_appear_in_summary_without_annotations(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "advisories.sqlite"
@@ -42,6 +119,17 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(11, len(annotations))
             self.assertIn("test-evidence", summary)
             self.assertIn("Review ownership", summary)
+
+    def test_guarded_update_is_advisory_in_ordinary_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "guarded.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                db.execute("INSERT INTO advisory_groups VALUES ('guarded','repeated-guarded-update','Quality < 50; ++ 1','Preserve surrounding conditions','Not proof of safe extraction')")
+            annotations, summary = publisher.read_snapshot(path, 1)
+            self.assertEqual(11, len(annotations))
+            self.assertIn("repeated-guarded-update", summary)
+            self.assertIn("Preserve surrounding conditions", summary)
 
     def test_real_snapshot_preserves_findings_and_policy(self):
         before = self.snapshot.read_bytes()

@@ -10,6 +10,9 @@ inputs:
   go-version:
     description: Optional Go version override; otherwise use the checked-out module's go.mod.
     default: ''
+  staged:
+    description: Enforce the first uncleared stage in Untangle Behavior, Assign Ownership, and Consolidate Shared Behavior.
+    default: 'false'
   artifact-name:
     description: Evidence artifact name; use different names for multiple invocations in a job.
     default: columbo-evidence
@@ -42,6 +45,7 @@ runs:
       shell: bash
       env:
         COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        COLUMBO_STAGED: ${{ inputs.staged }}
         COLUMBO_CONFIG: ${{ inputs.config }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"
     - name: Publish findings
