@@ -289,16 +289,22 @@ func (w *Writer) bindQueries()           { w.queries = New(w.tx) }
 func snapshotQueries(db *sql.DB) Querier { return New(db) }
 
 func validateSnapshotFile(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
+	if _, err := ValidateRegularFile(path); err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("snapshot destination must be a regular non-symlink file: %s", path)
-	}
-	return validateSnapshotSidecars(path)
+	return ValidateSidecars(path)
 }
-func validateSnapshotSidecars(path string) error {
+func ValidateRegularFile(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("snapshot destination must be a regular non-symlink file: %s", path)
+	}
+	return info, nil
+}
+func ValidateSidecars(path string) error {
 	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
 		if _, err := os.Lstat(path + suffix); err == nil {
 			return fmt.Errorf("snapshot has an unsupported sidecar: %s", path+suffix)

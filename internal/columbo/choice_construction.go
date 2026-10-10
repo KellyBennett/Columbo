@@ -86,9 +86,7 @@ func (c *choiceConstruction) site() ChoiceSetSite {
 	return ChoiceSetSite{Symbol: c.owner.symbol, Representation: c.representation, Seeds: c.constants, Input: c.inputSpelling(), Receipts: c.receipts()}
 }
 func (c *choiceConstruction) receipt(kind string, node ast.Node) Source {
-	r := c.owner.source(kind, node.Pos(), node.End(), Detail{Subject: c.owner.symbol})
-	r.Spelling = c.spelling(node)
-	return r
+	return c.owner.nodeSource(kind, node, Detail{Subject: c.owner.symbol})
 }
 func (c *choiceConstruction) spelling(node ast.Node) string {
 	f := c.owner.file
