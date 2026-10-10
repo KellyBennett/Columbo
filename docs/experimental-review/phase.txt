@@ -1,0 +1,23 @@
+Review and refactor in Columbo's phase order: untangle behavior, assign ownership, then consolidate shared responsibilities. Preserve observable behavior, ordering, evaluation timing, defaults, nil/empty behavior, error propagation and lifecycle ownership.
+
+Treat emitted evidence as a review obligation, not proof that an edit is needed. Inspect each eligible group's full source context. Record a source-backed disposition: changed with validated responsibility benefit; retained because the current boundary is intentional; or unresolved because evidence, behavior contract or budget is insufficient. Cover every initial eligible group, grouping related cases into semantic families without dropping their IDs. Keep added and removed groups separately visible after scans.
+
+A retained or unresolved finding remains an actual finding. Never suppress it, change thresholds/exclusions, reshape locals just to erase it, claim a stage cleared when the tool says otherwise, or turn a subjective disposition into CI success. After all groups in the current review phase have dispositions, continue the next review phase even if the analyzer still marks it locked. This is an experimental review procedure, not a changed tool verdict.
+
+For ownership, inspect the tool's eligible ownership groups and non-gating repeated-variant review leads. Prefer coherent behavior behind a small owner or protocol only when the actual variation warrants it. Do not introduce classes, factories, strategies or visitors merely to name a pattern. Keep selection and invocation separate when doing so reduces concrete duplicated knowledge.
+
+For sharing, inspect every eligible duplicate-code group, even if earlier phases have retained findings or all stages already appear clear. Ask what shared responsibility or policy would change together. Prefer the smallest coherent owner of that knowledge. Preserve intentional repetition where contracts, lifetimes or change rates differ. Similar syntax alone does not justify a helper or universal abstraction.
+
+Before an edit, identify the behavior boundary at risk and obtain useful characterization evidence on unchanged code. Prefer portable externally observable assertions that can run unchanged before and after; tests that only exercise a new private helper are supplemental. Avoid tautological expected values computed by the implementation being changed. Preserve existing tests and assertions. A passing full suite does not prove equivalence.
+
+Make small changes; validate tests and fresh analyzer evidence after each cycle. Count compile/fixture errors, failed tests, rejected approaches, repairs and validation time. Do not reset the budget after a failure. Restore the last validated endpoint if a candidate remains invalid at a stop. Stop under the frozen time/cycle, stagnation and failed-approach limits, or when no supported improvement remains. Leave all unresolved obligations explicit.
+
+There is no zero-duplicate target and no requirement to make a patch. An honest, source-supported no-op is valid. Improvements must earn clearer responsibility, less duplicated knowledge or a smaller next-change surface; moving lines or reducing a count alone is insufficient.
+
+Protocol-characterization follow-on rule
+
+Prioritize a concrete repeated decision or execution protocol with meaningful coordinated next-change cost over convenient leaf formatting or conversion extractions. Build source-backed semantic families; rank by shared knowledge, collaborating sites and change obligations, not raw length or a desired finding count. Preserve intentional differences. A prior lack of characterization is an invitation to investigate, not by itself a stopping condition.
+
+Before declaring a reviewed family evidence-blocked, either attempt an observable characterization on unchanged code and preserve its result, or identify a specific indispensable unavailable prerequisite and explain why it prevents a safe local oracle. Merely listing possible ordering, mutation, callback, failure or lifecycle risks is insufficient. An attempted oracle need not establish safety: preserve inconclusive or failed evidence and do not force a production edit. Tests limited to a new helper are supplemental.
+
+Spend the bounded budget on the highest-value supported family before moving to easier unrelated cleanup. Keep unattempted obligations as not reached or unresolved, never as demonstrated saturation. No obligation authorizes a public behavior change, new product-policy choice, weakened assertion, suppression or target-zero rewrite. All original stop, failure, reserve and validation rules still apply.

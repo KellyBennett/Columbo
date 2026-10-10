@@ -18,10 +18,11 @@ and evaluates Assign Ownership against its initial gate. There is no persisted a
 untangling finding on a later run activates Untangle Behavior again.
 
 Untangle Behavior asks the agent to gather each behavioral category into coherent
-paths or methods, preserving behavior, ordering and boundaries. Temporary
-duplication is acceptable. Do just enough to address the current findings, then
+paths or methods where source evidence supports improvement, preserving behavior,
+ordering and boundaries. Temporary duplication is acceptable. Findings require
+source-backed review, not a forced edit or count reduction. Validate changes and
 rerun for fresh evidence. Ownership, common roles, sharing and deduplication belong
-to later stages. Assign Ownership gives those gathered behaviors appropriate
+to later review phases. Assign Ownership gives those gathered behaviors appropriate
 owners. Its initial gate is now defined: zero category-selected-behavior findings.
 Clearing it means only that this bounded gate found no issues, not that all
 architectural ownership is correct. Its task includes available repeated-variant-decision and
@@ -30,7 +31,8 @@ as review context, never as completion gates.
 
 Consolidate Shared Behavior asks the agent to consolidate repeated responsibilities
 into shared implementations while preserving behavior and the guarantees of earlier
-stages. Resolve current evidence, then rerun. Its completion gate is zero
+stages. Review current evidence, including every eligible duplicate-code group,
+then validate changes and rerun. Its completion gate is zero
 `repeated-guarded-update` groups, including supported caller/helper boundary groups.
 Preserve surrounding conditions, evaluation order and effects: evidence is not
 proof of safe extraction or outer-guard removal. Zero groups do not establish that
@@ -79,8 +81,14 @@ mode is an explicit workflow choice, not an automatic change to existing jobs.
 
 The GitHub check likewise succeeds when all three configured stages clear and states
 the bounded meaning of clearing. Warnings remain visible.
-Use the active task and status as the agent's stopping boundary, not a green check
-as proof that all stages are done.
+The active task and status describe the mechanical gate. The
+[experimental source-backed review recipe](experimental-review-recipe.md) treats
+findings as review obligations and requires an observable characterization attempt
+or a specific indispensable unavailable prerequisite before calling a family
+evidence-blocked. It permits later review phases after current-phase dispositions,
+even when their tool stages remain locked. That review progression does not clear
+a stage, remove a finding or turn CI green. Retained and unresolved findings remain
+findings; a cleared gate does not establish architectural completeness.
 
 Schema 8 stores `refactoring_stages` in order, `stage_collectors` with membership
 and issue counts, and an `active_stage_issues` view joining membership to the
