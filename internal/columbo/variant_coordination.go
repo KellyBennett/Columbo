@@ -68,11 +68,24 @@ func (s *coordinationScan) refines(d coordinationDecision) bool {
 }
 func (s *coordinationScan) record(d coordinationDecision) {
 	e := coordinationEffects{owner: s.owner, info: s.info, writes: map[string]Source{}, reads: map[string]Source{}}
-	ast.Inspect(d.node, e.visit)
+	rootInitializer := d.initializer()
+	ast.Inspect(d.node, func(node ast.Node) bool {
+		return node != rootInitializer && e.visit(node)
+	})
 	d.writes, d.reads = e.writes, e.reads
 	s.decisions = append(s.decisions, d)
 	s.parents = append(s.parents, d)
 }
+func (d coordinationDecision) initializer() ast.Stmt {
+	switch n := d.node.(type) {
+	case *ast.IfStmt:
+		return n.Init
+	case *ast.SwitchStmt:
+		return n.Init
+	}
+	return nil
+}
+
 func (s *coordinationScan) decision(node ast.Node) (coordinationDecision, bool) {
 	d := coordinationDecision{node: node}
 	p := coordinationPredicate{info: s.info, domain: s.domain, decision: &d}
@@ -89,14 +102,14 @@ type coordinationPredicate struct {
 func (p *coordinationPredicate) interpret(node ast.Node) bool {
 	switch n := node.(type) {
 	case *ast.IfStmt:
-		return n.Init == nil && p.condition(n.Cond)
+		return p.condition(n.Cond)
 	case *ast.SwitchStmt:
 		return p.valueSwitch(n)
 	}
 	return false
 }
 func (p *coordinationPredicate) valueSwitch(n *ast.SwitchStmt) bool {
-	if n.Init != nil || n.Tag == nil || !p.selector(n.Tag) {
+	if n.Tag == nil || !p.selector(n.Tag) {
 		return false
 	}
 	for _, stmt := range n.Body.List {
