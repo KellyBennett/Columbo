@@ -125,24 +125,10 @@ func snapshotPath(path string) (string, error) {
 	return filepath.Abs(path)
 }
 func snapshotRegularFile(path string) (os.FileInfo, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("snapshot destination must be a regular non-symlink file: %s", path)
-	}
-	return info, nil
+	return snapshotdb.ValidateRegularFile(path)
 }
 func snapshotNoSidecars(path string) error {
-	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
-		if _, err := os.Lstat(path + suffix); err == nil {
-			return fmt.Errorf("snapshot has an unsupported sidecar: %s", path+suffix)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return snapshotdb.ValidateSidecars(path)
 }
 func snapshotDestinationAbsent(path string) error {
 	_, err := os.Lstat(path)

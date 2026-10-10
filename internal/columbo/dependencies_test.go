@@ -30,7 +30,7 @@ func F(){s:=os.Getenv("X");s=strings.TrimSpace(s);n,_:=strconv.Atoi(s);_=filepat
 	{"alias and generic owners", `package fixture
 import("bytes";"sync/atomic")
 type Buffer = bytes.Buffer
-func F(p *atomic.Pointer[Buffer]){_=p.Load()}`, []string{"type:bytes.Buffer", "type:sync/atomic.Pointer[T any]", "type:sync/atomic.Pointer[bytes.Buffer]"}, false},
+func F(p *atomic.Pointer[Buffer]){_=p.Load()}`, []string{"type:bytes.Buffer", "type:sync/atomic.Pointer[bytes.Buffer]"}, false},
 	{"nonempty interface", `package fixture
 func F(s interface{Run()error}){_=s.Run()}`, []string{"interface:interface{Run() error}"}, false},
 	{"named interface", `package fixture

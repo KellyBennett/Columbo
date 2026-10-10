@@ -13,7 +13,8 @@ func TestVariantCoordination(t *testing.T) {
 		shared, flow int
 	}{
 		{"shared accumulator", `n:=0; if x==A {n++}; if x!=B {n+=2}; _=n`, 1, 1},
-		{"early return retains lexical overlap", `n:=0; if x==A {n=1;return}; if x==B {println(n)}`, 0, 1},
+		{"early return excludes isolated local continuation", `n:=0; if x==A {n=1;return}; if x==B {println(n)}`, 0, 0},
+		{"early return retains escaped local overlap", `n:=0; p:=&n;_=p; if x==A {n=1;return}; if x==B {println(n)}`, 0, 1},
 		{"local calculation", `n,m:=0,0; if x==A {n=1}; if x==B {m=n+1}; _,_=n,m`, 0, 1},
 		{"nested refinement", `n:=0; if x==A {n++; if x!=B {n++}}; _=n`, 0, 0},
 		{"else refinement", `n:=0; if x==A {n++} else if x==B {n+=2}; _=n`, 0, 0},

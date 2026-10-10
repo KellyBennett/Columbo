@@ -44,9 +44,12 @@ func (i *typeReferenceIndex) production(f *file) bool {
 }
 
 func (i *typeReferenceIndex) definitions(f *file) {
-	for _, obj := range f.typeInfo().Defs {
-		i.definition(obj, f)
-	}
+	ast.Inspect(f.ast, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			i.definition(f.typeInfo().Defs[id], f)
+		}
+		return true
+	})
 }
 
 func (i *typeReferenceIndex) definition(obj types.Object, f *file) {

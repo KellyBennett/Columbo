@@ -21,10 +21,10 @@ func refactoringStages() []stageDefinition {
 	}
 }
 
-const untangleTask = "Gather each behavioral category into coherent paths or methods, preserving behavior, ordering and boundaries. Temporary duplication is acceptable. Do only enough to remove the current collector findings, then rerun Columbo for fresh evidence. Defer ownership, sharing and deduplication decisions."
-const ownershipTask = "Assign an explicit owner to category-selected behavior and separate category selection from invocation. Functions and objects can both express ownership. Preserve default and no-op behavior. Clearing this initial bounded collector is not proof that all architectural ownership is correct."
-
-const consolidationTask = "Consolidate repeated responsibilities into shared implementations while preserving behavior and the guarantees of earlier stages. Resolve the current collector evidence, then rerun Columbo. Preserve surrounding conditions, evaluation order and effects; evidence is not proof of safe extraction or outer-guard removal. Clearing this bounded collector is not proof that all shared responsibilities have been consolidated."
+const untangleTask = "Review behavioral categories for coherent paths or methods. Preserve behavior, ordering and boundaries; temporary duplication is acceptable. Defer ownership and sharing to later review phases." + reviewTask
+const ownershipTask = "Review category-selected behavior and non-gating review leads for coherent ownership. Separate selection from invocation when it reduces duplicated knowledge. Preserve defaults and no-op behavior." + reviewTask
+const consolidationTask = "Review every eligible duplicate-code group for shared responsibility. Preserve intentional differences, surrounding conditions, evaluation order and effects; evidence does not prove safe extraction or outer-guard removal." + reviewTask
+const reviewTask = " Treat findings as source-backed review obligations, not edit or count targets. Do not suppress findings. Attempt observable characterization on unchanged code before claiming blocked; see docs/experimental-review-recipe.md for prerequisite exceptions and honest changed/validated, retained or unresolved dispositions. Later review after current-phase dispositions never clears locked tool stages or CI."
 
 type stageEvaluation struct {
 	groups []advisoryGroup
