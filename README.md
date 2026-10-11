@@ -88,6 +88,3 @@ boundaries and the GitHub Action input.
 See [source inspection](docs/inspection.md) for the opt-in `columbo-inspect` command
 and its existing support scripts. It is a navigation aid with explicit limits,
 not a default gate or proof of architectural completeness.
-
-Historical research protocols and outcomes live in
-[ColumboTestGauntlet](https://github.com/KellyBennett/ColumboTestGauntlet/blob/c222dee8eb2b5c70962786ce844c0691807ae7ee/docs/experiments/columbo-research-2026-10-11/README.md).
