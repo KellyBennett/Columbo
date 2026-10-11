@@ -82,3 +82,8 @@ the first uncleared stage and enforces only its collector issues. Ordinary rule
 verdicts remain in SQLite; default non-staged CI is unchanged. See
 [ordered refactoring stages](docs/refactoring-stages.md) for membership, stopping
 boundaries and the GitHub Action input.
+
+For supervised agent refactoring, the
+[experimental source-backed review recipe](docs/experimental-review-recipe.md)
+adds characterization, ordinary-evidence composition review and progress-sensitive
+checkpoints. It supplements the stage workflow without changing actual CI verdicts.

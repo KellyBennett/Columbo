@@ -29,15 +29,20 @@ func Defaults() Config {
 	return c
 }
 func LoadConfig(path string, explicit bool) (Config, error) {
-	c := Defaults()
-	b, e := os.ReadFile(path)
-	if os.IsNotExist(e) && !explicit {
-		return c, nil
+	config, _, _, err := loadConfigSource(path, explicit)
+	return config, err
+}
+func loadConfigSource(path string, explicit bool) (Config, []byte, bool, error) {
+	config := Defaults()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) && !explicit {
+		return config, nil, false, nil
 	}
-	if e != nil {
-		return c, e
+	if err != nil {
+		return config, nil, false, err
 	}
-	return decodeConfig(b, c)
+	config, err = decodeConfig(data, config)
+	return config, data, true, err
 }
 func decodeConfig(b []byte, c Config) (Config, error) {
 	n, e := configDocument(b)

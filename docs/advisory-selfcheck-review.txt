@@ -8,9 +8,9 @@ Review judgments are qualitative. The residual findings should inform further in
 
 Cleanup residual review — corrected final assessment
 
-Reviewed source: /workspace/scratch/7147ec4e67c5/stage1-cleanup-work
-Compared against: /workspace/scratch/7147ec4e67c5/stage1-advisory-work
-Residual evidence: /workspace/scratch/7147ec4e67c5/stage1-cleanup-evidence/review-self.sqlite
+Reviewed source artifact: stage1-cleanup-work
+Compared artifact: stage1-advisory-work
+Residual evidence artifact: stage1-cleanup-evidence/review-self.sqlite
 Method: source diff and read-only SQLite inspection; no test execution or production-source edits by reviewer.
 
 BLOCKER STATUS: FIXED, VERIFIED BY SOURCE.
