@@ -83,7 +83,11 @@ verdicts remain in SQLite; default non-staged CI is unchanged. See
 [ordered refactoring stages](docs/refactoring-stages.md) for membership, stopping
 boundaries and the GitHub Action input.
 
-For supervised agent refactoring, the
-[experimental source-backed review recipe](docs/experimental-review-recipe.md)
-adds characterization, ordinary-evidence composition review and progress-sensitive
-checkpoints. It supplements the stage workflow without changing actual CI verdicts.
+## Optional source inspection
+
+See [source inspection](docs/inspection.md) for the opt-in `columbo-inspect` command
+and its existing support scripts. It is a navigation aid with explicit limits,
+not a default gate or proof of architectural completeness.
+
+Historical research protocols and outcomes live in
+[ColumboTestGauntlet](https://github.com/KellyBennett/ColumboTestGauntlet/blob/c222dee8eb2b5c70962786ce844c0691807ae7ee/docs/experiments/columbo-research-2026-10-11/README.md).

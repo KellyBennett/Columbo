@@ -1,20 +1,13 @@
 # sqlc snapshot bindings
 
-The snapshot schema remains version 1. `internal/snapshotdb/schema.sql` is the
-single schema source, embedded by the lifecycle owner and read by sqlc. Its
-12,779 bytes are unchanged from the former `sqliteSchema` constant at `f59809e`.
-The 24 tables, indexes, constraints, three list-preservation triggers and summary
-view remain the public snapshot contract.
+`internal/snapshotdb/schema.sql` is the canonical schema source, embedded by the lifecycle owner and read by sqlc. See the [snapshot guide](sqlite-schema.md) for current schema versions and evidence tables.
 
 ## Ordinary operations and lifecycle exceptions
 
-All 33 ordinary data operations live in `internal/snapshotdb/queries.sql` and
-are bound/scanned by sqlc:
-
-- 24 writer inserts, including typed relationships and ordered evidence
-- One dependency-scoring inventory read
-- Seven summary/warning reads
-- One report-identity aggregate read
+Ordinary data operations live in `internal/snapshotdb/queries.sql` and are
+bound/scanned by sqlc. They include writer inserts and typed relationships,
+evidence/inventory reads, summaries and warnings, and report-identity reads.
+The checked-in query source is authoritative for the operation inventory.
 
 The SQL source is handwritten; generated Go is never edited manually. Explicit
 INSERT column lists preserve the original values and insertion order. Inserts
@@ -42,30 +35,14 @@ and read-only; each generated `:many` query consumes/closes its cursor before
 another operation uses the single connection. Summary/exit status still comes
 from stored verdicts and suppression flags.
 
-## Verification
+## Regression contracts
 
-The access guards were implemented and run before schema generation or runtime
-migration. See [Database access boundary](database-access-boundary.md) for the
-failing baseline, exact exceptions, pinned tool installation and adversarial
-guard tests.
-
-A bounded compatibility spike used the complete verbatim schema and all 33
-operations with sqlc v1.31.1, Go 1.25.1 and the existing driver under CGO=0. It
-verified database and transaction execution, LastInsertId, generated scanners,
-cursor release, nullable values/IDs, trigger/constraint rejection, an integer of
-9,007,199,254,740,993 and integral REAL `1.0` without losing their distinct types.
-
-The committed regression suite also checks generated numeric round-tripping,
-rejection of a write through the production read-only reader, missing-report
-completion rejection, and direct-boundary sidecar/symlink rejection. Existing logical
-row/summary goldens, malformed-value and cross-case constraints, disk/interruption
-faults, race/no-clobber cases and sidecar checks remain in force. Independent raw
-SQL test oracles retain only their six pre-existing exact-path exceptions.
-
-Before publication, the all-seven fixture produced the same 506 typed logical
-rows across 25 tables/views as the pre-migration binary. Its terminal summary was
-byte-identical after normalizing the output destination. Every published query
-was exercised read-only against the migrated snapshot.
+The regression suite checks generated numeric round-tripping, rejection of
+writes through the read-only reader, missing-report completion rejection and
+sidecar/symlink rejection. Logical-row/summary goldens, malformed-value and
+cross-case constraints, disk/interruption faults and race/no-clobber checks
+remain independent obligations. Raw SQL test oracles use only the exact
+exceptions in the [database access boundary](database-access-boundary.md).
 
 ## Changing a query
 

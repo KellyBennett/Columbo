@@ -81,14 +81,6 @@ mode is an explicit workflow choice, not an automatic change to existing jobs.
 
 The GitHub check likewise succeeds when all three configured stages clear and states
 the bounded meaning of clearing. Warnings remain visible.
-The active task and status describe the mechanical gate. The
-[experimental source-backed review recipe](experimental-review-recipe.md) treats
-findings as review obligations and requires an observable characterization attempt
-or a specific indispensable unavailable prerequisite before calling a family
-evidence-blocked. It permits later review phases after current-phase dispositions,
-even when their tool stages remain locked. That review progression does not clear
-a stage, remove a finding or turn CI green. Retained and unresolved findings remain
-findings; a cleared gate does not establish architectural completeness.
 
 Schema 8 stores `refactoring_stages` in order, `stage_collectors` with membership
 and issue counts, and an `active_stage_issues` view joining membership to the
@@ -97,6 +89,24 @@ See [the stage query](sqlite/stages.sql). Order and membership are centralized i
 `refactoringStages`; adding a later defined stage does not require renderer or
 collector-specific stage checks. Membership is intentionally code-defined in this
 version; no speculative user-configurable workflow framework is introduced.
+
+## Review guidance
+
+The task text emitted for the active stage asks for source-backed review
+obligations, not edit or count targets, and says not to suppress findings.
+Before claiming a family is evidence-blocked, attempt observable characterization
+on unchanged code or identify the specific indispensable unavailable prerequisite
+and explain why it prevents a safe local oracle. A list of risks alone does not
+satisfy that prerequisite exception. Failed or inconclusive evidence remains
+visible and does not require a production edit.
+
+Record changed/validated, intentionally retained or unresolved dispositions
+honestly; work not reached is not a reviewed retention. These dispositions are
+review records, not inputs that clear a mechanical gate. Later review after
+current-phase dispositions never clears locked tool stages or CI. Retained and
+unresolved findings remain findings; a cleared gate does not establish
+architectural completeness. This section explains the existing emitted task
+text and does not add a new collector, workflow phase or efficacy claim.
 
 ## Category-selected behavior contract
 

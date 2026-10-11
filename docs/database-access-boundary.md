@@ -119,20 +119,7 @@ future generated-file wildcard. The manifest records the same exact exceptions
 and reasons. A new exception needs explicit architectural review and a targeted
 configuration change.
 
-## Guard-first evidence and regression fixtures
-
-The guard was run before the migration, on the runtime from `f59809e`. Official
-linter output failed with five forbidden imports and thirty raw-API-reference
-findings covering nineteen distinct call lines in four runtime files:
-
-- `cli.go`: database handle import and typed-handle handoff
-- `snapshot_summary.go`: database handle import and seven raw query call lines
-- `sqlite.go`: database/driver imports and nine raw lifecycle/validation call lines
-- `sqlite_writer.go`: transaction import and three raw call lines
-
-The five planned boundary files were also reported missing. No runtime file was
-exempted to make this baseline pass. This failing checklist established the
-migration work before schema generation or runtime changes started.
+## Regression fixtures
 
 The executable fixtures include a clean typed-Querier control and failures for
 direct, alias, dot, and driver imports; passed raw handles; local-interface APIs;
@@ -164,16 +151,4 @@ proves that package inventory must include test-only dependencies. Standalone
 import, generator-version, missing-file/header, source-symlink, and active-cgo
 cases exercise overlapping controls independently.
 
-The initial audit at `5bc598e` tried 53 hand-selected production mutations: 29
-were caught and 24 survived. The focused follow-up adds coverage for those gaps
-and includes seven additional CI mutations suggested by independent review.
-The resulting 60-case audit catches all 60 mutations. Vendor-import coverage
-uses a compiled external stub whose package path ends in `vendor`, which Go
-permits. A descendant such as `vendor/helper` is rejected by Go itself and would
-not establish that the depguard rule works; compiler rejection is never counted
-as a linter kill.
-
-These results establish the tested regressions, not exhaustive mutation coverage
-or a formal proof against arbitrary rewrites of the trusted lifecycle boundary.
-The coverage follow-up changes tests and documentation only; production guards,
-generated bindings, dependencies, schema, and strict Columbo rules are unchanged.
+These fixtures establish bounded regression coverage, not a formal proof against arbitrary rewrites of the trusted lifecycle boundary.

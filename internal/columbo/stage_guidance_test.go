@@ -1,10 +1,6 @@
 package columbo
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -22,7 +18,7 @@ func TestReviewTaskGuidanceContract(t *testing.T) {
 				"Do not suppress findings",
 				"Later review after current-phase dispositions",
 				"never clears locked tool stages or CI",
-				"docs/experimental-review-recipe.md",
+				"docs/refactoring-stages.md#review-guidance",
 			} {
 				require.Contains(t, definition.task, obligation)
 			}
@@ -102,20 +98,5 @@ func TestReviewGuidanceRendersOnlyActiveTask(t *testing.T) {
 	require.NotContains(t, string(rendered), consolidationTask)
 	require.Contains(t, string(rendered), "Stage Assign Ownership: locked")
 	require.Contains(t, string(rendered), "Stage Consolidate Shared Behavior: locked")
-	require.Equal(t, 3, h.sqlCount(db, "SELECT count(*) FROM refactoring_stages WHERE task LIKE '%docs/experimental-review-recipe.md%'"))
-}
-
-func TestReviewRecipeFrozenInstructions(t *testing.T) {
-	for name, expected := range map[string]string{
-		"phase.txt":             "4972c83396d8ae31555ea595615ca1a461d8b199d73a669d61a94ad0437ce4c5",
-		"common-assignment.txt": "b203d6c2c8d43608f2440f753e890d5b457e945aebfae6a3fc89f3d5b4853ce8",
-	} {
-		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("..", "..", "docs", "experimental-review", name))
-			require.NoError(t, err)
-			require.Equal(t, expected, fmt.Sprintf("%x", sha256.Sum256(data)))
-		})
-	}
-	_, err := os.Stat(filepath.Join("..", "..", "docs", "experimental-review-recipe.md"))
-	require.NoError(t, err)
+	require.Equal(t, 3, h.sqlCount(db, "SELECT count(*) FROM refactoring_stages WHERE task LIKE '%docs/refactoring-stages.md#review-guidance%'"))
 }

@@ -24,7 +24,7 @@ func refactoringStages() []stageDefinition {
 const untangleTask = "Review behavioral categories for coherent paths or methods. Preserve behavior, ordering and boundaries; temporary duplication is acceptable. Defer ownership and sharing to later review phases." + reviewTask
 const ownershipTask = "Review category-selected behavior and non-gating review leads for coherent ownership. Separate selection from invocation when it reduces duplicated knowledge. Preserve defaults and no-op behavior." + reviewTask
 const consolidationTask = "Review every eligible duplicate-code group for shared responsibility. Preserve intentional differences, surrounding conditions, evaluation order and effects; evidence does not prove safe extraction or outer-guard removal." + reviewTask
-const reviewTask = " Treat findings as source-backed review obligations, not edit or count targets. Do not suppress findings. Attempt observable characterization on unchanged code before claiming blocked; see docs/experimental-review-recipe.md for prerequisite exceptions and honest changed/validated, retained or unresolved dispositions. Later review after current-phase dispositions never clears locked tool stages or CI."
+const reviewTask = " Treat findings as source-backed review obligations, not edit or count targets. Do not suppress findings. Attempt observable characterization on unchanged code before claiming blocked; see docs/refactoring-stages.md#review-guidance for prerequisite exceptions and honest changed/validated, retained or unresolved dispositions. Later review after current-phase dispositions never clears locked tool stages or CI."
 
 type stageEvaluation struct {
 	groups []advisoryGroup

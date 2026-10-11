@@ -49,9 +49,7 @@ unsupported/skipped paths are not enumerated as separate findings.
 
 ## Validation
 
-The untouched TennisGame2 source yields witnesses 5–3 and 3–5, showing advantage
-then win assignments. TennisGame3 yields no witness under this contract; absence
-is not a general quality judgment. Regression tests cover intentional override,
+Regression tests cover intentional override,
 exclusive/equal-result guards, accumulation, intervening writers, multiple body
 statements, early returns, calls, mutation, aliases, shadowing, signed types,
 overflow, unsupported unsigned inputs, and out-of-domain overlaps. SQLite tests

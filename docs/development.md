@@ -42,6 +42,6 @@ Dependency scoring counts named types and packages not already represented by a 
 - [Common-role inference evidence](common-role-inference.md)
 - [SQLite schema, report handling, and query guide](sqlite-schema.md)
 - [Accepted SQLite implementation specification](sqlite-implementation-spec.md)
-- [SQLite cutover validation](sqlite-validation.md)
+- [Historical SQLite cutover validation](https://github.com/KellyBennett/ColumboTestGauntlet/blob/c222dee8eb2b5c70962786ce844c0691807ae7ee/docs/experiments/columbo-research-2026-10-11/columbo/docs/sqlite-validation.md)
 
 Generated `.sqlite` files are ignored by this checkout. Retain or upload them explicitly as CI artifacts. Read snapshots without modifying them; rerun Columbo for new results. If you choose a path with `--output`, it must not already exist. See the query guide for publication failures and report recovery.
