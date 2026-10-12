@@ -116,7 +116,7 @@ func (a *engine) inspectionFiles() ([]inspectionFile, error) {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() && entry.Name() == ".git" {
+		if path != a.root && entry.IsDir() && strings.HasPrefix(entry.Name(), ".") {
 			return filepath.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
