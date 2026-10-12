@@ -26,12 +26,16 @@ func TestInspectionInventoryAcceptancePrecedesClassification(t *testing.T) {
 	assert.Equal(t, "generated.go", files[0].Path)
 }
 
-func TestInspectionInventoryPrunesGitAndRetainsNonSelectedBytes(t *testing.T) {
+func TestInspectionInventoryPrunesDotFoldersAndRetainsNonSelectedBytes(t *testing.T) {
 	root := inspectionTestModule(t)
 	a, err := load(root, []string{"./..."}, Defaults())
 	require.NoError(t, err)
-	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
-	require.NoError(t, os.Symlink("absent", filepath.Join(root, ".git", "bad.go")))
+	for _, name := range []string{".git", ".claude", "nested/.cache"} {
+		directory := filepath.Join(root, name)
+		require.NoError(t, os.MkdirAll(directory, 0700))
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "notes.md"), []byte("ignored"), 0600))
+		require.NoError(t, os.Symlink("absent", filepath.Join(directory, "bad.go")))
+	}
 	data := []byte("changed non-selected source")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "platform_windows.go"), data, 0600))
 	files, err := a.inspectionFiles()
@@ -74,4 +78,19 @@ func TestInspectionLexicalBindingsRemainPhysicalAndOneHop(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestInspectionDotFolderChangesDoNotAffectSourceIdentity(t *testing.T) {
+	root := inspectionTestModule(t)
+	hiddenRoot := filepath.Join(t.TempDir(), ".project")
+	require.NoError(t, os.Rename(root, hiddenRoot))
+	require.NoError(t, os.WriteFile(filepath.Join(hiddenRoot, ".columbo.yml"), []byte("exclude: []\n"), 0600))
+	before := inspectTestFacts(t, hiddenRoot)
+	require.NoError(t, os.Mkdir(filepath.Join(hiddenRoot, ".claude"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(hiddenRoot, ".claude", "broken.go"), []byte("not Go source"), 0600))
+	after := inspectTestFacts(t, hiddenRoot)
+	assert.Equal(t, before.SourceSHA, after.SourceSHA)
+	assert.Equal(t, before.Files, after.Files)
+	assert.NotEmpty(t, after.ConfigSHA)
+	assert.Equal(t, ".columbo.yml", after.ConfigFile)
 }

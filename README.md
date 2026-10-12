@@ -63,6 +63,8 @@ columbo ./...
 
 No configuration is required. Columbo currently analyzes production code; test files are excluded.
 
+Source inventory skips dot-folders such as `.claude/` and `.git/` at any depth beneath the module root. Dotfiles such as `.columbo.yml` remain included.
+
 ## Supported Languages
 
 - Go
