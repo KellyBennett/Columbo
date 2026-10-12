@@ -28,7 +28,7 @@ func TestInspectionInventoryAcceptancePrecedesClassification(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, err = a.inspectionFiles()
-	if err == nil || err.Error() != "source changed during inspection: model.go" || len(files) != 1 || files[0].Path != "generated.go" {
+	if err == nil || err.Error() != "source changed during inspection: model.go" || len(files) != 2 || files[0].Path != "generated.go" {
 		t.Fatalf("stale selected source must retain earlier entries: %v %#v", err, files)
 	}
 }
@@ -61,7 +61,7 @@ func TestInspectionInventoryPrunesGitAndRetainsNonSelectedBytes(t *testing.T) {
 			t.Fatalf("test scope: %#v", f)
 		}
 	}
-	if len(files) != 4 {
+	if len(files) != 5 {
 		t.Fatalf("inventory: %#v", files)
 	}
 }

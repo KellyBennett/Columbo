@@ -1,8 +1,6 @@
 package columbo
 
 import (
-	"bytes"
-	"encoding/json"
 	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
@@ -39,11 +37,12 @@ func inspectionTestModule(t *testing.T) string {
 }
 func inspectTestFacts(t *testing.T, root string) inspectionFacts {
 	t.Helper()
-	var buffer bytes.Buffer
-	require.NoError(t, WriteInspectionFacts(root, "", nil, &buffer))
-	var facts inspectionFacts
-	require.NoError(t, json.Unmarshal(buffer.Bytes(), &facts))
-	return facts
+	input, err := validateInspectionInput(root, "")
+	require.NoError(t, err)
+	report, err := input.analyze(nil)
+	require.NoError(t, err)
+	require.NotNil(t, report.inspection)
+	return *report.inspection
 }
 func TestInspectionCompleteRuntimeMethodsAndCallBounds(t *testing.T) {
 	root := inspectionTestModule(t)
@@ -98,13 +97,17 @@ func TestInspectionSourceRangesAndAnalysisUnchanged(t *testing.T) {
 	after, err := Analyze(root, []string{"./..."}, Defaults())
 	require.NoError(t, err)
 	require.Equal(t, canonical(before), canonical(after))
-	require.Len(t, facts.Files, 4)
+	require.Len(t, facts.Files, 5)
 }
 func TestInspectionRejectsSymlinksAndTypeErrors(t *testing.T) {
 	root := inspectionTestModule(t)
 	link := filepath.Join(t.TempDir(), "linked")
 	require.NoError(t, os.Symlink(root, link))
-	require.Error(t, WriteInspectionFacts(link, "", nil, &bytes.Buffer{}))
+	_, err := validateInspectionInput(link, "")
+	require.Error(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "invalid.go"), []byte("package fixture\nfunc Broken(){ missing() }\n"), 0600))
-	require.Error(t, WriteInspectionFacts(root, "", nil, &bytes.Buffer{}))
+	input, err := validateInspectionInput(root, "")
+	require.NoError(t, err)
+	_, err = input.analyze(nil)
+	require.Error(t, err)
 }

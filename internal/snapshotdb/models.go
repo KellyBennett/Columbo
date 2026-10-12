@@ -308,6 +308,146 @@ type RoleCandidateReceipt struct {
 	EndOffset     int64
 }
 
+type SourceCall struct {
+	ID                  int64
+	DeclarationID       int64
+	FileID              int64
+	Ordinal             int64
+	RangeID             int64
+	Expression          string
+	Resolution          string
+	TargetDeclarationID *int64
+	ReceiverForm        string
+	ReceiverRangeID     *int64
+	BindingRangeID      *int64
+	BindingLimit        string
+}
+
+type SourceConfig struct {
+	ScanID       int64
+	ConfigPath   string
+	ConfigFileID *int64
+	ConfigSha256 *string
+	Staged       int64
+	History      int64
+	MaxCommits   int64
+}
+
+type SourceConfigCount struct {
+	ScanID int64
+	Name   string
+	Value  int64
+}
+
+type SourceConfigExclusion struct {
+	ScanID  int64
+	Ordinal int64
+	Pattern string
+}
+
+type SourceConfigRatio struct {
+	ScanID int64
+	Name   string
+	Value  float64
+}
+
+type SourceConfigSeverity struct {
+	ScanID   int64
+	Smell    string
+	Severity string
+}
+
+type SourceDeclaration struct {
+	DeclarationID  int64
+	FileID         int64
+	Kind           string
+	ReceiverTypeID *int64
+	Sha256         string
+}
+
+type SourceEnvironment struct {
+	ScanID int64
+	Name   string
+	Value  string
+}
+
+type SourceField struct {
+	ID           int64
+	TypeID       int64
+	FileID       int64
+	Ordinal      int64
+	RangeID      int64
+	Embedded     int64
+	TypeText     string
+	TypeKey      *string
+	TargetTypeID *int64
+}
+
+type SourceFieldName struct {
+	FieldID int64
+	Ordinal int64
+	Name    string
+}
+
+type SourceFile struct {
+	FileID          int64
+	ScanID          int64
+	Sha256          string
+	Size            int64
+	Package         string
+	SelectedRuntime int64
+	OrdinaryTarget  int64
+	Generated       int64
+	Scope           string
+}
+
+type SourceOneHopCall struct {
+	ReceiverTypeID      *int64
+	CallID              int64
+	DeclarationID       int64
+	CallerSymbol        string
+	Ordinal             int64
+	Expression          string
+	Resolution          string
+	Relation            string
+	Path                string
+	StartLine           int64
+	EndLine             int64
+	StartOffset         int64
+	EndOffset           int64
+	Sha256              string
+	FileSha256          string
+	TargetDeclarationID *int64
+	TargetSymbol        *string
+	TargetPath          *string
+	TargetStartLine     *int64
+	TargetEndLine       *int64
+	TargetStartOffset   *int64
+	TargetEndOffset     *int64
+	TargetSha256        *string
+	TargetFileSha256    *string
+	ReceiverForm        string
+	ReceiverRangeID     *int64
+	BindingRangeID      *int64
+	BindingLimit        string
+}
+
+type SourcePattern struct {
+	ScanID  int64
+	Ordinal int64
+	Pattern string
+}
+
+type SourceRange struct {
+	ID          int64
+	FileID      int64
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Sha256      string
+}
+
 type SourceReceipt struct {
 	ID                  int64
 	CaseID              string
@@ -324,6 +464,81 @@ type SourceReceipt struct {
 	Nesting             *int64
 	SourceDeclarationID *int64
 	Spelling            string
+}
+
+type SourceReceiverSeed struct {
+	CaseID         string
+	Smell          string
+	Verdict        string
+	Role           string
+	DeclarationID  int64
+	ReceiverTypeID *int64
+	TypeKey        string
+	Symbol         string
+	Path           string
+	StartLine      int64
+	EndLine        int64
+	StartOffset    int64
+	EndOffset      int64
+	Sha256         string
+	FileSha256     string
+	OrdinaryTarget int64
+	Scope          string
+}
+
+type SourceReceiverSibling struct {
+	ReceiverTypeID *int64
+	TypeKey        string
+	DeclarationID  int64
+	Symbol         string
+	Path           string
+	StartLine      int64
+	EndLine        int64
+	StartOffset    int64
+	EndOffset      int64
+	Sha256         string
+	FileSha256     string
+	OrdinaryTarget int64
+	Generated      int64
+	Scope          string
+}
+
+type SourceScan struct {
+	ID           int64
+	Root         string
+	GoVersion    string
+	SourceSha256 string
+}
+
+type SourceStoragePath struct {
+	ReceiverTypeID *int64
+	OwnerTypeID    int64
+	FieldID        int64
+	TargetTypeID   *int64
+	Depth          int64
+	FieldPath      string
+	Relation       string
+	OwnerType      string
+	Ordinal        int64
+	Embedded       int64
+	TypeText       string
+	FieldType      *string
+	Path           string
+	StartLine      int64
+	EndLine        int64
+	StartOffset    int64
+	EndOffset      int64
+	Sha256         string
+	FileSha256     string
+}
+
+type SourceType struct {
+	ID          int64
+	TypeKey     string
+	ResolvedKey string
+	Alias       int64
+	FileID      int64
+	RangeID     int64
 }
 
 type StageCollector struct {

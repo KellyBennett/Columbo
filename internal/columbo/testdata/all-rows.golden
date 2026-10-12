@@ -598,7 +598,7 @@
 [refactoring_stages] id | ordinal | name | task | state | pending_definition | issue_count
 
 [report] id | schema_version | columbo_version
-1 | 8 | "test"
+1 | 9 | "test"
 
 [role_candidate_case_links] candidate_id | case_id
 "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2" | "C-b06ec7d1d9"
@@ -626,6 +626,34 @@
 
 [role_candidates] id | canonical_interface | confidence | classification
 "R-1472e00c1939847046a7e92bce14a195bb5f711750e4a1fd806bf29b693130e2" | "interface { Close() error; Send(string) error }" | "strong" | "existing role"
+
+[source_calls] id | declaration_id | file_id | ordinal | range_id | expression | resolution | target_declaration_id | receiver_form | receiver_range_id | binding_range_id | binding_limit
+
+[source_config] scan_id | config_path | config_file_id | config_sha256 | staged | history | max_commits
+
+[source_config_counts] scan_id | name | value
+
+[source_config_exclusions] scan_id | ordinal | pattern
+
+[source_config_ratios] scan_id | name | value
+
+[source_config_severity] scan_id | smell | severity
+
+[source_declarations] declaration_id | file_id | kind | receiver_type_id | sha256
+
+[source_environment] scan_id | name | value
+
+[source_field_names] field_id | ordinal | name
+
+[source_fields] id | type_id | file_id | ordinal | range_id | embedded | type_text | type_key | target_type_id
+
+[source_files] file_id | scan_id | sha256 | size | package | selected_runtime | ordinary_target | generated | scope
+
+[source_one_hop_calls] receiver_type_id | call_id | declaration_id | caller_symbol | ordinal | expression | resolution | relation | path | start_line | end_line | start_offset | end_offset | sha256 | file_sha256 | target_declaration_id | target_symbol | target_path | target_start_line | target_end_line | target_start_offset | target_end_offset | target_sha256 | target_file_sha256 | receiver_form | receiver_range_id | binding_range_id | binding_limit
+
+[source_patterns] scan_id | ordinal | pattern
+
+[source_ranges] id | file_id | start_line | end_line | start_offset | end_offset | sha256
 
 [source_receipts] id | case_id | ordinal | kind | file_id | start_line | end_line | start_offset | end_offset | subject | value_type | value | nesting | source_declaration_id | spelling
 1 | "C-b10bccb46b" | 0 | "declaration" | 1 | 13 | 25 | 102 | 303 | "fixture.LongFunction" | NULL | NULL | NULL | 7 | ""
@@ -770,6 +798,16 @@
 140 | "C-82bc134f4f" | 3 | "variant-arm" | 4 | 19 | 19 | 280 | 283 | "value:fixture.SourceKind=\"rss\"" | NULL | NULL | NULL | 14 | "RSS"
 141 | "C-82bc134f4f" | 4 | "variant-decision" | 4 | 19 | 23 | 269 | 366 | "value:fixture.SourceKind" | NULL | NULL | NULL | 14 | ""
 142 | "C-82bc134f4f" | 5 | "variant-arm" | 4 | 21 | 21 | 329 | 336 | "value:fixture.SourceKind=\"reuters\"" | NULL | NULL | NULL | 14 | "Reuters"
+
+[source_receiver_seeds] case_id | smell | verdict | role | declaration_id | receiver_type_id | type_key | symbol | path | start_line | end_line | start_offset | end_offset | sha256 | file_sha256 | ordinary_target | scope
+
+[source_receiver_siblings] receiver_type_id | type_key | declaration_id | symbol | path | start_line | end_line | start_offset | end_offset | sha256 | file_sha256 | ordinary_target | generated | scope
+
+[source_scan] id | root | go_version | source_sha256
+
+[source_storage_paths] receiver_type_id | owner_type_id | field_id | target_type_id | depth | field_path | relation | owner_type | ordinal | embedded | type_text | field_type | path | start_line | end_line | start_offset | end_offset | sha256 | file_sha256
+
+[source_types] id | type_key | resolved_key | alias | file_id | range_id
 
 [stage_collectors] stage_id | ordinal | collector | issue_count
 

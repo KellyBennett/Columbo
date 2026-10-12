@@ -14,7 +14,7 @@ The writer builds a temporary sibling file in a transaction, validates integrity
 
 ## Identity and discovery
 
-Schema version 8 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
+Schema version 9 is recorded in both `report.schema_version` and `PRAGMA user_version`. `PRAGMA application_id` is `0x434c4d42` (ASCII `CLMB`, decimal 1129073986). `report` has exactly one row (`id=1`) containing the schema and Columbo build versions. `summary` is a one-row view with `failed`, `warned`, and `suppressed`, including zeros for an empty analysis. Suppressed cases retain their original WARN/FAIL verdict and count only toward suppressed.
 
 The authoritative DDL is [internal/snapshotdb/schema.sql](../internal/snapshotdb/schema.sql). SQLite introspection discovers tables, columns, declared foreign keys, indexes, and views without Columbo or Go:
 
@@ -163,7 +163,7 @@ references case-owned source receipts with a compound ownership foreign key.
 
 ## Schema version 5: advisory evidence
 
-Ordinary advisory collectors run during normal analysis. Their evidence lives in the same database and transaction as cases, without independent verdicts. Older snapshots remain readable with ordinary SQLite tools; this build's reader and GitHub adapter require schema version 8, consistent with the existing single-version contract.
+Ordinary advisory collectors run during normal analysis. Their evidence lives in the same database and transaction as cases, without independent verdicts. Older snapshots remain readable with ordinary SQLite tools; this build's reader and GitHub adapter require schema version 9, consistent with the existing single-version contract.
 
 | Table | Contents |
 | --- | --- |
@@ -190,8 +190,8 @@ Staged advisories admit `category-selected-behavior`; its collector membership,
 counts, candidate callable surface, category mappings and source receipts use the
 existing normalized advisory and stage tables. Both configured stages can now be
 cleared. Legacy severity/enforcement is unchanged; no stage rows are stored in
-legacy mode. This build follows the existing single-version reader contract and
-requires schema 8.
+legacy mode. These advisory tables were introduced before optional source
+inspection; the current reader version is stated above.
 
 `repeated-guarded-update` is registered in ordinary and staged snapshots. Its
 resolved field and structurally normalized check/write expressions use
@@ -205,3 +205,25 @@ and earlier/later results; `advisory_receipts` stores both guards and assignment
 plus the evaluated prefix, with source spelling and ranges. It has no
 `stage_collectors` membership and cannot change verdicts or stage counts. See
 [bounded witness contract](witnessed-conditional-overwrite.md).
+
+## Schema version 9: optional source inspection
+
+`--inspect-source` stores source navigation in the ordinary snapshot transaction.
+`source_scan` is optional (zero or one row); no row means it was not collected.
+The `source_files` inventory extends existing `files` identities with content
+hashes, sizes and target/build scope. `source_declarations` extends existing
+`declarations` identities with hashes and receiver relationships; locations stay
+in `declarations`. Other hashed ranges live in `source_ranges`.
+
+`source_types`, `source_fields`, `source_field_names` and `source_calls` preserve
+ordered typed relationships. Nullable targets explicitly retain unresolved or
+external relationships. `source_config*`, `source_environment` and
+`source_patterns` retain scan inputs without JSON payloads. Foreign keys enforce
+file ownership, receiver/target identity and configuration hash membership.
+
+Read [source inspection](inspection.md) for scope, provenance and interpretation
+limits, and [source-navigation.sql](sqlite/source-navigation.sql) for receiver
+seeds, complete siblings, declared storage paths and one-hop call evidence. All
+four query views are empty when optional inspection was not collected. Schema 9
+is the only version accepted by this build; old snapshots remain readable with
+ordinary SQLite tools and are preserved. Rerun Columbo for a new snapshot.

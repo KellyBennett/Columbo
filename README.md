@@ -85,6 +85,6 @@ boundaries and the GitHub Action input.
 
 ## Optional source inspection
 
-See [source inspection](docs/inspection.md) for the opt-in `columbo-inspect` command
-and its existing support scripts. It is a navigation aid with explicit limits,
-not a default gate or proof of architectural completeness.
+Add `--inspect-source --output /outside/source/report.sqlite` to include source
+relationships in the same SQLite evidence snapshot. See [source inspection](docs/inspection.md)
+for receiver, sibling, storage and call queries and their limits.

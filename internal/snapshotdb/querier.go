@@ -46,11 +46,44 @@ type Querier interface {
 	InsertRoleInterface(ctx context.Context, arg InsertRoleInterfaceParams) error
 	InsertRoleMessage(ctx context.Context, arg InsertRoleMessageParams) error
 	InsertRoleReceipt(ctx context.Context, arg InsertRoleReceiptParams) error
+	InsertSourceCall(ctx context.Context, arg InsertSourceCallParams) error
+	InsertSourceConfig(ctx context.Context, arg InsertSourceConfigParams) error
+	InsertSourceConfigCount(ctx context.Context, arg InsertSourceConfigCountParams) error
+	InsertSourceConfigExclusion(ctx context.Context, arg InsertSourceConfigExclusionParams) error
+	InsertSourceConfigRatio(ctx context.Context, arg InsertSourceConfigRatioParams) error
+	InsertSourceConfigSeverity(ctx context.Context, arg InsertSourceConfigSeverityParams) error
+	InsertSourceDeclaration(ctx context.Context, arg InsertSourceDeclarationParams) error
+	InsertSourceEnvironment(ctx context.Context, arg InsertSourceEnvironmentParams) error
+	InsertSourceField(ctx context.Context, arg InsertSourceFieldParams) (int64, error)
+	InsertSourceFieldName(ctx context.Context, arg InsertSourceFieldNameParams) error
+	InsertSourceFile(ctx context.Context, arg InsertSourceFileParams) error
+	InsertSourcePattern(ctx context.Context, arg InsertSourcePatternParams) error
+	InsertSourceRange(ctx context.Context, arg InsertSourceRangeParams) (int64, error)
 	InsertSourceReceipt(ctx context.Context, arg InsertSourceReceiptParams) (int64, error)
+	InsertSourceScan(ctx context.Context, arg InsertSourceScanParams) error
+	InsertSourceType(ctx context.Context, arg InsertSourceTypeParams) (int64, error)
 	InsertStage(ctx context.Context, arg InsertStageParams) error
 	InsertStageCollector(ctx context.Context, arg InsertStageCollectorParams) error
 	InsertSuppression(ctx context.Context, arg InsertSuppressionParams) error
 	InsertWarning(ctx context.Context, arg InsertWarningParams) error
+	InspectionCalls(ctx context.Context, arg InspectionCallsParams) ([]SourceOneHopCall, error)
+	InspectionConfigCounts(ctx context.Context) ([]InspectionConfigCountsRow, error)
+	InspectionConfigExclusions(ctx context.Context) ([]InspectionConfigExclusionsRow, error)
+	InspectionConfigRatios(ctx context.Context) ([]InspectionConfigRatiosRow, error)
+	InspectionConfigSeverity(ctx context.Context) ([]InspectionConfigSeverityRow, error)
+	InspectionDeclarationLocation(ctx context.Context, arg InspectionDeclarationLocationParams) (InspectionDeclarationLocationRow, error)
+	InspectionDeclarations(ctx context.Context) ([]InspectionDeclarationsRow, error)
+	InspectionEnvironment(ctx context.Context) ([]InspectionEnvironmentRow, error)
+	InspectionFieldNames(ctx context.Context, arg InspectionFieldNamesParams) ([]InspectionFieldNamesRow, error)
+	InspectionFields(ctx context.Context, arg InspectionFieldsParams) ([]InspectionFieldsRow, error)
+	InspectionFiles(ctx context.Context) ([]InspectionFilesRow, error)
+	InspectionIdentity(ctx context.Context) (InspectionIdentityRow, error)
+	InspectionPatterns(ctx context.Context) ([]InspectionPatternsRow, error)
+	InspectionRange(ctx context.Context, arg InspectionRangeParams) (InspectionRangeRow, error)
+	InspectionReceiverSeeds(ctx context.Context) ([]SourceReceiverSeed, error)
+	InspectionSiblings(ctx context.Context, arg InspectionSiblingsParams) ([]SourceReceiverSibling, error)
+	InspectionStoragePaths(ctx context.Context, arg InspectionStoragePathsParams) ([]SourceStoragePath, error)
+	InspectionTypes(ctx context.Context) ([]InspectionTypesRow, error)
 	LinkCaseDeclaration(ctx context.Context, arg LinkCaseDeclarationParams) error
 	LinkClueReceipt(ctx context.Context, arg LinkClueReceiptParams) error
 	LinkCorrelationCase(ctx context.Context, arg LinkCorrelationCaseParams) error

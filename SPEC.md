@@ -650,3 +650,11 @@ The non-enforcing correlation contract is specified in
 Correlations join independently justified cases and common-role evidence. They
 never create an additional verdict, change a member case ID or suppression, or
 publish an additional GitHub error annotation. MPR-001 is provisional.
+
+## Optional source navigation
+
+`--inspect-source` adds source identity, scope and relationships to the same
+SQLite report and package load. Run from the module root and select a fresh
+`--output` outside that root. Ordinary policy and staged verdicts remain unchanged.
+See [source inspection](docs/inspection.md) for its SQL views, drift checks and
+explicit navigation limits.

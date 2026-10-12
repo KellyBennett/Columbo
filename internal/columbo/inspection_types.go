@@ -4,21 +4,22 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"strconv"
 )
 
 type inspectionField struct {
 	inspectionSpan
-	Names    []string `json:"names"`
-	Embedded bool     `json:"embedded"`
-	TypeText string   `json:"type_text"`
-	TypeKey  string   `json:"type_key,omitempty"`
+	Names    []string
+	Embedded bool
+	TypeText string
+	TypeKey  string
 }
 type inspectionType struct {
 	inspectionSpan
-	Key         string            `json:"key"`
-	ResolvedKey string            `json:"resolved_key,omitempty"`
-	Alias       bool              `json:"alias"`
-	Fields      []inspectionField `json:"fields"`
+	Key         string
+	ResolvedKey string
+	Alias       bool
+	Fields      []inspectionField
 }
 
 func (f *file) inspectionTypes() []inspectionType {
@@ -41,6 +42,7 @@ func (f *file) inspectionType(t *ast.TypeSpec) inspectionType {
 	if obj != nil {
 		result.ResolvedKey = inspectionTypeKey(obj.Type())
 	}
+	result.identifyBlank(t.Name.Name)
 	st, ok := t.Type.(*ast.StructType)
 	if !ok {
 		return result
@@ -58,4 +60,14 @@ func (f *file) inspectionType(t *ast.TypeSpec) inspectionType {
 		result.Fields = append(result.Fields, item)
 	}
 	return result
+}
+
+func (typ *inspectionType) identifyBlank(name string) {
+	if name != "_" {
+		return
+	}
+	typ.Key += "@" + typ.Path + ":" + strconv.Itoa(typ.StartOffset)
+	if !typ.Alias {
+		typ.ResolvedKey = typ.Key
+	}
 }

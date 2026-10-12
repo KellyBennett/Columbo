@@ -43,6 +43,7 @@ type MemberRef struct {
 }
 
 type Report struct {
+	inspection            *inspectionFacts
 	CategorySplit         []advisoryGroup       `json:"-"`
 	ConditionalOverwrites []advisoryGroup       `json:"-"`
 	GuardedUpdates        []advisoryGroup       `json:"-"`

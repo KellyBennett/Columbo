@@ -17,6 +17,7 @@ Investigate Go code smells. Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
   --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
   --staged            enforce only the current refactoring stage
+  --inspect-source    include source relationships in SQLite (output outside source)
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -27,9 +28,9 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, output                                            string
-	noHistory, showVersion, help, shortHelp, explicit, staged bool
-	patterns                                                  []string
+	config, output                                                           string
+	noHistory, showVersion, help, shortHelp, explicit, staged, inspectSource bool
+	patterns                                                                 []string
 }
 type command struct {
 	invocation Invocation
@@ -47,6 +48,9 @@ func Run(args []string, invocation Invocation) int {
 	}
 	if c.options.showVersion {
 		return c.deliver(c.invocation.versionText())
+	}
+	if c.options.inspectSource {
+		return c.analyzeInspection()
 	}
 	return c.analyze()
 }
@@ -85,6 +89,7 @@ func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
 	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
 	fs.BoolVar(&o.staged, "staged", false, "")
+	fs.BoolVar(&o.inspectSource, "inspect-source", false, "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")

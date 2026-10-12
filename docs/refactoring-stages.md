@@ -82,7 +82,7 @@ mode is an explicit workflow choice, not an automatic change to existing jobs.
 The GitHub check likewise succeeds when all three configured stages clear and states
 the bounded meaning of clearing. Warnings remain visible.
 
-Schema 8 stores `refactoring_stages` in order, `stage_collectors` with membership
+The snapshot stores `refactoring_stages` in order, `stage_collectors` with membership
 and issue counts, and an `active_stage_issues` view joining membership to the
 advisory groups and their source receipts. Legacy snapshots have no stage rows.
 See [the stage query](sqlite/stages.sql). Order and membership are centralized in
@@ -236,7 +236,7 @@ Consolidate Shared Behavior requires zero groups from this collector. Ordinary C
 without changing verdicts/exit status. Staged summaries remain gate-focused;
 inspect either snapshot with [the advisory queries](sqlite/advisories.sql), filtering
 `advisory_groups.kind = 'repeated-guarded-update'`, or run ordinary analysis to a new
-output path. Schema 8 is unchanged; normalized-check/normalized-write values and
+output path. The normalized-check/normalized-write values and
 mutation-input receipts use the existing tables. Thresholds/suppressions are unchanged.
 
 ### Guard repeated across a helper boundary

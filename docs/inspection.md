@@ -1,88 +1,70 @@
 # Optional source inspection
 
-`columbo-inspect` is a provisional, opt-in source-navigation command. It emits
-JSON facts to stdout without running smell analysis or editing source. It is not
-a default analysis gate, an architectural diagnosis or evidence of refactoring
-efficacy. The Go loader can use normal build/module caches.
-
-## Command
-
-Build from the Columbo checkout with Go 1.25.1. Keep output outside the source
-root and choose a new destination so shell redirection does not replace evidence:
+Run from the Go module root with a fresh output path outside that root:
 
 ```sh
-CGO_ENABLED=0 go build -o /absolute/evidence/columbo-inspect ./cmd/columbo-inspect
-(set -C; /absolute/evidence/columbo-inspect --root /absolute/source ./... > /absolute/evidence/facts.json)
+columbo --inspect-source --no-history --output /absolute/evidence/report.sqlite ./...
+sqlite3 -readonly /absolute/evidence/report.sqlite < docs/sqlite/source-navigation.sql
 ```
 
-`--root` defaults to the working directory. `--config` is relative to that root
-unless absolute, and must remain inside it. Symlink source roots are refused.
-An absent implicit `.columbo.yml` uses defaults; an explicitly missing file,
-read error or invalid configuration fails. Configuration and its hash are
-captured from the same read. Later filesystem changes do not update that captured
-value; the binding checks below must still reject source drift. Errors exit 2.
+`--inspect-source` adds source navigation to the same SQLite snapshot as ordinary
+findings. Both use one package load, configuration and transaction. It also works
+with `--staged`; the stored ordinary verdicts and stage selection are unchanged.
+Default scans do not collect this optional inventory. Exit codes, read-only
+readers and atomic no-clobber publication follow the ordinary CLI contract.
 
-Facts include file identities, physical source ranges and hashes, declarations,
-receiver types, fields and calls. Selected runtime definitions remain separate
-from tests, generated files and nonselected build/package/module variants.
-One-hop local method targets and embedded storage are navigation context;
-unresolved imported/dynamic/transitive relationships remain explicit. Facts do
-not prove value aliasing, ownership, lifetime, mutation or behavior preservation.
+## Read the evidence
 
-## Existing support scripts
+- `source_receiver_seeds` links unsuppressed, non-prose findings to their primary
+  and supporting instance methods inside the configured ordinary target scope.
+  Roles and case IDs are retained; repeated primary links are deduplicated.
+- `source_receiver_siblings` lists every selected-runtime source-defined method
+  of those receivers, including short methods and generated/excluded supporting
+  context. Aliases and generic receivers resolve to their underlying named type;
+  promoted methods are not invented.
+- `source_storage_paths` follows declared local embedding, preserving distinct
+  paths through a diamond and stopping at cycles. Held fields are terminal.
+  Missing targets and builtin, compound or imported types stay explicit.
+  `source_field_names` supplies each field's declared names; embedded fields use
+  their stored type spelling.
+- `source_one_hop_calls` lists calls from sibling bodies with static local method
+  targets where available, including target ranges and hashes. Unresolved calls
+  remain visible. Receiver and lexical-binding ranges can be joined through
+  `source_ranges`. Target bodies are navigation context, not recursive expansion.
 
-The versioned directory name is an existing script interface. Run its scripts
-from this Columbo checkout; no Gauntlet runner is required for these commands.
-The optional Python binder reads an ordinary SQLite report without changing it:
+The [published navigation queries](sqlite/source-navigation.sql) run against
+saved snapshots without reading current source or re-running analysis. Their
+empty result on an ordinary snapshot means inspection was not collected; check
+`source_scan` to distinguish that from a collected scan with no eligible seeds.
+No queue or separate review-status file is needed to discover these relationships.
 
-```sh
-python3 scripts/cooperating-method-inspection-v1/inspect.py \
-  --database /absolute/evidence/ordinary.sqlite \
-  --facts /absolute/evidence/facts.json \
-  --manifest /absolute/evidence/source-manifest.json \
-  --binding /absolute/evidence/binding.json \
-  --scan-receipt /absolute/evidence/ordinary-receipt.json \
-  --output /absolute/evidence/queue.json
-```
+## Identity and limits
 
-The manifest contains the complete source-tree `files` array of `{path, sha256}`
-and its compact, sorted-object-key JSON SHA-256. It excludes `.git` directories,
-refuses symlinks and duplicate/unsafe paths, and must match every current file.
-The scan receipt must have terminal `child_exited` status, actual exit 0 or 1,
-exact argv/cwd/environment, and identical `source_before`/`source_after` manifests.
-Staged scans and unrecognized argument forms are refused. Match the exact Go
-version, package patterns, configuration and loader environment used for facts.
+`source_scan` records the absolute root, running Columbo Go version and source
+identity. `source_patterns`, `source_environment` and the typed `source_config*`
+tables retain package patterns, inherited loader environment and effective
+configuration, including staging, history, exclusions and threshold values.
+The configuration path must remain inside the root; its hash comes from the same
+read that was decoded. A missing implicit `.columbo.yml` uses defaults and a
+null file/hash. An explicitly missing or invalid configuration fails.
 
-The binding records `database_sha256`, `facts_sha256`, `manifest_sha256`,
-`scan_receipt_sha256`, `source_identity`, `database_path_at_scan`,
-`database_hash_provenance`, `patterns`, `configuration` and `scope_provenance`.
-Use `scan-time` provenance only with preserved scan-time evidence; otherwise use
-`current-observation`. Schema 8 has no source-content hashes, so a current report
-hash is not a scan-time attestation or independent proof of authorship.
+`source_files` stores SHA-256 and size for every regular file below the root,
+excluding `.git` directories, with selected-runtime, ordinary-target and generated
+scope distinguished. Tests and nonselected build/package/module variants never
+become runtime declarations. The complete path/hash inventory is compared before
+loading and after analysis; durable source/configuration drift fails without
+publishing. Symlinks and nonregular inputs are refused. Keep build outputs and
+mutable caches outside the source root. Earlier snapshots are never overwritten.
 
-The binder validates hashes, source membership, physical ranges, scan scope and
-configuration before creating a new queue outside the source root. It refuses
-an existing queue destination. The queue starts receiver seeds as `not-reached`;
-its existence does not certify semantic review or justify a refactoring.
+The source identity is SHA-256 over sorted inventory entries encoded as
+`<UTF-8 path byte length>:<path>:<lowercase file SHA-256>\n`. Declaration, type,
+field, call, receiver and binding ranges use physical, half-open byte offsets and
+SHA-256 of the exact captured range. Declaration locations reuse the ordinary
+`declarations` rows. Compare stored file hashes with current bytes before using
+a saved snapshot to edit source.
 
-`checkpoint.py` is a separate optional structure/binding validator. It accepts
-the same `--database`, `--facts`, `--manifest`, `--binding`, `--scan-receipt`
-arguments plus `--checkpoint` and `--evidence-root`, and prints JSON to stdout.
-The [input template](../scripts/cooperating-method-inspection-v1/checkpoint-template.json)
-and [implementation](../scripts/cooperating-method-inspection-v1/checkpoint.py)
-define the accepted fields, ordered attempt/replacement records and hashed
-oracle/receipt requirements. Passing it does not adjudicate semantic priority,
-oracle adequacy or behavior preservation. It generates no priority score.
-
-## Maintenance checks
-
-```sh
-CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go vet ./...
-CGO_ENABLED=0 go build ./cmd/columbo-inspect
-python3 -m unittest discover -s scripts/cooperating-method-inspection-v1 -p 'test_*.py' -v
-```
-
-Keep the Go facts representation, Python validation, adjacent SQL/template and
-regression fixtures compatible. Existing ordinary CLI, Action/CI, collector,
-threshold, suppression, schema and stage behavior are independent of this aid.
+These are in-process observations, not signatures or an attestation of external
+module/toolchain caches. They do not prove alias origin, interface dispatch,
+mutation, ownership, lifetime, behavioral equivalence or better architecture.
+Read source and test any proposed refactoring. Inspection does not add a gate,
+priority score or completion claim.

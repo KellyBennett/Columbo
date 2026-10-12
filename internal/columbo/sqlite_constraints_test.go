@@ -71,3 +71,42 @@ func (h *sqliteHarness) forbiddenClusterLinks() {
 		require.Error(h.T, err, statement)
 	}
 }
+
+func TestSQLiteInspectionSourceIntegrityConstraints(t *testing.T) {
+	root := inspectionTestModule(t)
+	inspectionSQLWriteFile(t, root, ".columbo.yml", "exclude: []\n")
+	inspectionSQLWriteFile(t, root, "other.go", "package fixture\ntype Other struct { value int }\nfunc (*Other) Check() {}\n")
+	h := newSQLiteHarness(t)
+	h.write(inspectionSQLAnalyze(t, root, ""))
+	db := h.mutable()
+	for _, tc := range []struct {
+		name, statement, failure string
+	}{
+		{"configuration-hash", "UPDATE source_config SET config_sha256=printf('%064d',0)", "FOREIGN KEY"},
+		{"configuration-null-half", "UPDATE source_config SET config_file_id=NULL", "CHECK constraint"},
+		{"scan-hash-shape", "UPDATE source_scan SET source_sha256='not-a-sha256'", "CHECK constraint"},
+		{"file-selection", "UPDATE source_files SET selected_runtime=0 WHERE ordinary_target=1", "CHECK constraint"},
+		{"file-shrink", "UPDATE source_files SET size=0 WHERE file_id=(SELECT id FROM files WHERE path='model.go')", "source file size excludes stored range"},
+		{"range-past-file", "UPDATE source_ranges SET end_offset=999999 WHERE id=(SELECT MIN(id) FROM source_ranges)", "source range exceeds file size"},
+		{"declaration-past-file", "UPDATE declarations SET end_offset=999999 WHERE symbol='fixture.(*Owner).Update'", "source declaration exceeds file size"},
+		{"declaration-cross-file", "UPDATE source_declarations SET file_id=(SELECT id FROM files WHERE path='model.go') WHERE declaration_id=(SELECT id FROM declarations WHERE symbol='fixture.(*Other).Check')", "FOREIGN KEY"},
+		{"method-without-receiver", "UPDATE source_declarations SET receiver_type_id=NULL WHERE kind='method'", "CHECK constraint"},
+		{"function-with-receiver", "UPDATE source_declarations SET receiver_type_id=(SELECT id FROM source_types WHERE type_key='fixture.Owner') WHERE kind='function'", "CHECK constraint"},
+		{"type-cross-file-range", "UPDATE source_types SET range_id=(SELECT id FROM source_ranges WHERE file_id=(SELECT id FROM files WHERE path='other.go') LIMIT 1) WHERE type_key='fixture.Owner'", "FOREIGN KEY"},
+		{"field-cross-file-owner", "UPDATE source_fields SET type_id=(SELECT id FROM source_types WHERE type_key='fixture.Other') WHERE type_id=(SELECT id FROM source_types WHERE type_key='fixture.Owner') AND ordinal=3", "FOREIGN KEY"},
+		{"field-target-identity", "UPDATE source_fields SET target_type_id=(SELECT id FROM source_types WHERE type_key='fixture.Other') WHERE type_key='fixture.Cell'", "FOREIGN KEY"},
+		{"call-cross-file-range", "UPDATE source_calls SET range_id=(SELECT id FROM source_ranges WHERE file_id=(SELECT id FROM files WHERE path='other.go') LIMIT 1)", "FOREIGN KEY"},
+		{"call-cross-file-receiver", "UPDATE source_calls SET receiver_range_id=(SELECT id FROM source_ranges WHERE file_id=(SELECT id FROM files WHERE path='other.go') LIMIT 1)", "FOREIGN KEY"},
+		{"call-binding-without-receiver", "UPDATE source_calls SET receiver_range_id=NULL,receiver_form='' WHERE binding_range_id IS NOT NULL", "CHECK constraint"},
+		{"call-target-orphan", "UPDATE source_calls SET target_declaration_id=999999", "FOREIGN KEY"},
+		{"call-receiver-form", "UPDATE source_calls SET receiver_form='' WHERE receiver_range_id IS NOT NULL", "CHECK constraint"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, err := db.Begin()
+			require.NoError(t, err)
+			defer tx.Rollback()
+			_, err = tx.Exec(tc.statement)
+			require.ErrorContains(t, err, tc.failure)
+		})
+	}
+}

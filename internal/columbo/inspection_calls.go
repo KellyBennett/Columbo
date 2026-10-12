@@ -6,14 +6,14 @@ import (
 )
 
 type inspectionCall struct {
-	ReceiverForm string `json:"receiver_form,omitempty"`
+	ReceiverForm string
 	inspectionSpan
-	Expression   string                 `json:"expression"`
-	Resolution   string                 `json:"resolution"`
-	Target       *inspectionDeclaration `json:"target,omitempty"`
-	Receiver     *inspectionSpan        `json:"receiver,omitempty"`
-	Binding      *inspectionSpan        `json:"lexical_binding,omitempty"`
-	BindingLimit string                 `json:"binding_limit"`
+	Expression   string
+	Resolution   string
+	Target       *inspectionDeclaration
+	Receiver     *inspectionSpan
+	Binding      *inspectionSpan
+	BindingLimit string
 }
 
 func (a *engine) inspectionCalls(d *declaration) []inspectionCall {

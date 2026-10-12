@@ -1,9 +1,6 @@
 package columbo
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -104,48 +101,41 @@ func TestInspectionConfigurationErrorsPrecedeLoading(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, expected := LoadConfig(path, false)
-	err := WriteInspectionFacts(root, "", nil, &bytes.Buffer{})
+	_, err := validateInspectionInput(root, "")
 	if err == nil || err.Error() != expected.Error() {
 		t.Fatalf("configuration error must precede source loading: %v", err)
 	}
-	if err := WriteInspectionFacts(root, "missing.yml", nil, &bytes.Buffer{}); !os.IsNotExist(err) {
+	if _, err := validateInspectionInput(root, "missing.yml"); !os.IsNotExist(err) {
 		t.Fatalf("explicit missing config must precede loading: %v", err)
 	}
-	if err := WriteInspectionFacts(root, "../outside.yml", nil, &bytes.Buffer{}); err == nil || err.Error() != "inspection configuration must be source-manifest bound" {
+	if _, err := validateInspectionInput(root, "../outside.yml"); err == nil || err.Error() != "inspection configuration must be inside source root" {
 		t.Fatalf("source-bound path check must precede config read: %v", err)
 	}
 	link := filepath.Join(t.TempDir(), "linked")
 	if err := os.Symlink(root, link); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteInspectionFacts(link, "../outside.yml", nil, &bytes.Buffer{}); err == nil || !strings.HasPrefix(err.Error(), "symlink source root refused:") {
+	if _, err := validateInspectionInput(link, "../outside.yml"); err == nil || !strings.HasPrefix(err.Error(), "symlink source root refused:") {
 		t.Fatalf("root check must precede config path check: %v", err)
 	}
 }
 
-type inspectionFailingWriter struct{ err error }
-
-func (w inspectionFailingWriter) Write([]byte) (int, error) { return 0, w.err }
-
-func TestInspectionConfigurationFactsAndWriterError(t *testing.T) {
+func TestInspectionConfigurationCapturedInReport(t *testing.T) {
 	root := inspectionTestModule(t)
 	data := []byte("thresholds:\n  function-lines: 11\n")
 	if err := os.WriteFile(filepath.Join(root, "settings.yml"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	var output bytes.Buffer
-	if err := WriteInspectionFacts(root, "settings.yml", nil, &output); err != nil {
+	input, err := validateInspectionInput(root, "settings.yml")
+	if err != nil {
 		t.Fatal(err)
 	}
-	var facts inspectionFacts
-	if err := json.Unmarshal(output.Bytes(), &facts); err != nil {
+	report, err := input.analyze(nil)
+	if err != nil {
 		t.Fatal(err)
 	}
+	facts := report.inspection
 	if facts.ConfigFile != "settings.yml" || facts.ConfigSHA != inspectionHash(data) || facts.Config.Counts["function-lines"] != 11 {
-		t.Fatal("facts must contain the same source-bound configuration snapshot")
-	}
-	want := errors.New("writer failed")
-	if err := WriteInspectionFacts(root, "settings.yml", nil, inspectionFailingWriter{want}); !errors.Is(err, want) {
-		t.Fatalf("writer error must propagate unchanged: %v", err)
+		t.Fatal("inspection must contain the same source-bound configuration snapshot")
 	}
 }
