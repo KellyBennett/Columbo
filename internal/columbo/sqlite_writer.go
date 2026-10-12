@@ -35,6 +35,7 @@ func newSnapshotWriter(queries snapshotdb.Querier) *snapshotWriter {
 func (w *snapshotWriter) write(report Report, version string) error {
 	w.writeHeader(version)
 	w.writeDeclarations(report.Declarations)
+	w.writeInspection(report.inspection)
 	for ordinal, c := range report.Cases {
 		w.writeCase(c, ordinal)
 	}

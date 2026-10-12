@@ -31,6 +31,9 @@ func (d coordinationDecision) writeKeys() []string {
 func (s *coordinationScan) pairEvidence(c *Case, left, right coordinationDecision) {
 	p := coordinationPair{scan: s, left: left, right: right}
 	for _, key := range left.writeKeys() {
+		if p.excludesContinuation(key) {
+			continue
+		}
 		if target, ok := right.writes[key]; ok {
 			p.link(c, coordinationLink{"variant-shared-write", key, target})
 		}

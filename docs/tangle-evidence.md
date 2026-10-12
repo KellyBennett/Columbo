@@ -27,4 +27,4 @@ Return-only validation, checks on unrelated receivers, single-output updates, sw
 
 ## Snapshot publication
 
-Groups, values, declaration-linked sites and full source receipts are written in the same SQLite transaction as other findings. Publication is atomic and refuses an existing output path. No JSON sidecar or collector-specific output flag exists. See [SQLite evidence snapshots](sqlite-schema.md).
+Groups, values, declaration-linked sites and full source receipts are written in the same SQLite transaction as other findings. Publication is atomic and refuses an existing output path. No JSON sidecar or collector-specific output flag exists.

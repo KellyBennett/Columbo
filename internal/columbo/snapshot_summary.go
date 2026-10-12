@@ -30,6 +30,9 @@ func (r *snapshotRenderer) render(path string) error {
 	if err := r.reportBody(); err != nil {
 		return err
 	}
+	if err := r.sourceGuidance(); err != nil {
+		return err
+	}
 	r.emit("Database: %s\n", path)
 	return nil
 }

@@ -896,6 +896,277 @@ func (q *Queries) InsertRoleReceipt(ctx context.Context, arg InsertRoleReceiptPa
 	return err
 }
 
+const insertSourceCall = `-- name: InsertSourceCall :exec
+INSERT INTO source_calls(declaration_id,file_id,ordinal,range_id,expression,resolution,target_declaration_id,receiver_form,receiver_range_id,binding_range_id,binding_limit) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+`
+
+type InsertSourceCallParams struct {
+	DeclarationID       int64
+	FileID              int64
+	Ordinal             int64
+	RangeID             int64
+	Expression          string
+	Resolution          string
+	TargetDeclarationID *int64
+	ReceiverForm        string
+	ReceiverRangeID     *int64
+	BindingRangeID      *int64
+	BindingLimit        string
+}
+
+func (q *Queries) InsertSourceCall(ctx context.Context, arg InsertSourceCallParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceCall,
+		arg.DeclarationID,
+		arg.FileID,
+		arg.Ordinal,
+		arg.RangeID,
+		arg.Expression,
+		arg.Resolution,
+		arg.TargetDeclarationID,
+		arg.ReceiverForm,
+		arg.ReceiverRangeID,
+		arg.BindingRangeID,
+		arg.BindingLimit,
+	)
+	return err
+}
+
+const insertSourceConfig = `-- name: InsertSourceConfig :exec
+INSERT INTO source_config(config_path,config_file_id,config_sha256,staged,history,max_commits) VALUES (?,?,?,?,?,?)
+`
+
+type InsertSourceConfigParams struct {
+	ConfigPath   *string
+	ConfigFileID *int64
+	ConfigSha256 *string
+	Staged       int64
+	History      int64
+	MaxCommits   int64
+}
+
+func (q *Queries) InsertSourceConfig(ctx context.Context, arg InsertSourceConfigParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceConfig,
+		arg.ConfigPath,
+		arg.ConfigFileID,
+		arg.ConfigSha256,
+		arg.Staged,
+		arg.History,
+		arg.MaxCommits,
+	)
+	return err
+}
+
+const insertSourceConfigCount = `-- name: InsertSourceConfigCount :exec
+INSERT INTO source_config_counts(name,value) VALUES (?,?)
+`
+
+type InsertSourceConfigCountParams struct {
+	Name  string
+	Value int64
+}
+
+func (q *Queries) InsertSourceConfigCount(ctx context.Context, arg InsertSourceConfigCountParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceConfigCount, arg.Name, arg.Value)
+	return err
+}
+
+const insertSourceConfigExclusion = `-- name: InsertSourceConfigExclusion :exec
+INSERT INTO source_config_exclusions(ordinal,pattern) VALUES (?,?)
+`
+
+type InsertSourceConfigExclusionParams struct {
+	Ordinal int64
+	Pattern string
+}
+
+func (q *Queries) InsertSourceConfigExclusion(ctx context.Context, arg InsertSourceConfigExclusionParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceConfigExclusion, arg.Ordinal, arg.Pattern)
+	return err
+}
+
+const insertSourceConfigRatio = `-- name: InsertSourceConfigRatio :exec
+INSERT INTO source_config_ratios(name,value) VALUES (?,?)
+`
+
+type InsertSourceConfigRatioParams struct {
+	Name  string
+	Value float64
+}
+
+func (q *Queries) InsertSourceConfigRatio(ctx context.Context, arg InsertSourceConfigRatioParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceConfigRatio, arg.Name, arg.Value)
+	return err
+}
+
+const insertSourceConfigSeverity = `-- name: InsertSourceConfigSeverity :exec
+INSERT INTO source_config_severity(smell,severity) VALUES (?,?)
+`
+
+type InsertSourceConfigSeverityParams struct {
+	Smell    string
+	Severity string
+}
+
+func (q *Queries) InsertSourceConfigSeverity(ctx context.Context, arg InsertSourceConfigSeverityParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceConfigSeverity, arg.Smell, arg.Severity)
+	return err
+}
+
+const insertSourceDeclaration = `-- name: InsertSourceDeclaration :exec
+INSERT INTO source_declarations(declaration_id,file_id,kind,receiver_type_id,sha256) VALUES (?,?,?,?,?)
+`
+
+type InsertSourceDeclarationParams struct {
+	DeclarationID  int64
+	FileID         int64
+	Kind           string
+	ReceiverTypeID *int64
+	Sha256         string
+}
+
+func (q *Queries) InsertSourceDeclaration(ctx context.Context, arg InsertSourceDeclarationParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceDeclaration,
+		arg.DeclarationID,
+		arg.FileID,
+		arg.Kind,
+		arg.ReceiverTypeID,
+		arg.Sha256,
+	)
+	return err
+}
+
+const insertSourceEnvironment = `-- name: InsertSourceEnvironment :exec
+INSERT INTO source_environment(name,value) VALUES (?,?)
+`
+
+type InsertSourceEnvironmentParams struct {
+	Name  string
+	Value string
+}
+
+func (q *Queries) InsertSourceEnvironment(ctx context.Context, arg InsertSourceEnvironmentParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceEnvironment, arg.Name, arg.Value)
+	return err
+}
+
+const insertSourceField = `-- name: InsertSourceField :execlastid
+INSERT INTO source_fields(type_id,file_id,ordinal,range_id,embedded,type_text,type_key,target_type_id) VALUES (?,?,?,?,?,?,?,?)
+`
+
+type InsertSourceFieldParams struct {
+	TypeID       int64
+	FileID       int64
+	Ordinal      int64
+	RangeID      int64
+	Embedded     int64
+	TypeText     string
+	TypeKey      *string
+	TargetTypeID *int64
+}
+
+func (q *Queries) InsertSourceField(ctx context.Context, arg InsertSourceFieldParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSourceField,
+		arg.TypeID,
+		arg.FileID,
+		arg.Ordinal,
+		arg.RangeID,
+		arg.Embedded,
+		arg.TypeText,
+		arg.TypeKey,
+		arg.TargetTypeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+const insertSourceFieldName = `-- name: InsertSourceFieldName :exec
+INSERT INTO source_field_names(field_id,ordinal,name) VALUES (?,?,?)
+`
+
+type InsertSourceFieldNameParams struct {
+	FieldID int64
+	Ordinal int64
+	Name    string
+}
+
+func (q *Queries) InsertSourceFieldName(ctx context.Context, arg InsertSourceFieldNameParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceFieldName, arg.FieldID, arg.Ordinal, arg.Name)
+	return err
+}
+
+const insertSourceFile = `-- name: InsertSourceFile :exec
+INSERT INTO source_files(file_id,sha256,size,package,selected_runtime,ordinary_target,generated,scope) VALUES (?,?,?,?,?,?,?,?)
+`
+
+type InsertSourceFileParams struct {
+	FileID          int64
+	Sha256          string
+	Size            int64
+	Package         string
+	SelectedRuntime int64
+	OrdinaryTarget  int64
+	Generated       int64
+	Scope           string
+}
+
+func (q *Queries) InsertSourceFile(ctx context.Context, arg InsertSourceFileParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceFile,
+		arg.FileID,
+		arg.Sha256,
+		arg.Size,
+		arg.Package,
+		arg.SelectedRuntime,
+		arg.OrdinaryTarget,
+		arg.Generated,
+		arg.Scope,
+	)
+	return err
+}
+
+const insertSourcePattern = `-- name: InsertSourcePattern :exec
+INSERT INTO source_patterns(ordinal,pattern) VALUES (?,?)
+`
+
+type InsertSourcePatternParams struct {
+	Ordinal int64
+	Pattern string
+}
+
+func (q *Queries) InsertSourcePattern(ctx context.Context, arg InsertSourcePatternParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourcePattern, arg.Ordinal, arg.Pattern)
+	return err
+}
+
+const insertSourceRange = `-- name: InsertSourceRange :execlastid
+INSERT INTO source_ranges(file_id,start_line,end_line,start_offset,end_offset,sha256) VALUES (?,?,?,?,?,?)
+`
+
+type InsertSourceRangeParams struct {
+	FileID      int64
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Sha256      string
+}
+
+func (q *Queries) InsertSourceRange(ctx context.Context, arg InsertSourceRangeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSourceRange,
+		arg.FileID,
+		arg.StartLine,
+		arg.EndLine,
+		arg.StartOffset,
+		arg.EndOffset,
+		arg.Sha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
 const insertSourceReceipt = `-- name: InsertSourceReceipt :execlastid
 INSERT INTO source_receipts(case_id,ordinal,kind,file_id,start_line,end_line,start_offset,end_offset,subject,value_type,value,nesting,source_declaration_id,spelling) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 `
@@ -933,6 +1204,47 @@ func (q *Queries) InsertSourceReceipt(ctx context.Context, arg InsertSourceRecei
 		arg.Nesting,
 		arg.SourceDeclarationID,
 		arg.Spelling,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+const insertSourceScan = `-- name: InsertSourceScan :exec
+INSERT INTO source_scan(id,root,go_version,source_sha256) VALUES (1,?,?,?)
+`
+
+type InsertSourceScanParams struct {
+	Root         string
+	GoVersion    string
+	SourceSha256 string
+}
+
+func (q *Queries) InsertSourceScan(ctx context.Context, arg InsertSourceScanParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceScan, arg.Root, arg.GoVersion, arg.SourceSha256)
+	return err
+}
+
+const insertSourceType = `-- name: InsertSourceType :execlastid
+INSERT INTO source_types(type_key,resolved_key,alias,file_id,range_id) VALUES (?,?,?,?,?)
+`
+
+type InsertSourceTypeParams struct {
+	TypeKey     string
+	ResolvedKey string
+	Alias       int64
+	FileID      int64
+	RangeID     int64
+}
+
+func (q *Queries) InsertSourceType(ctx context.Context, arg InsertSourceTypeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSourceType,
+		arg.TypeKey,
+		arg.ResolvedKey,
+		arg.Alias,
+		arg.FileID,
+		arg.RangeID,
 	)
 	if err != nil {
 		return 0, err
@@ -1038,6 +1350,760 @@ func (q *Queries) InsertWarning(ctx context.Context, arg InsertWarningParams) er
 		arg.Message,
 	)
 	return err
+}
+
+const inspectionAvailable = `-- name: InspectionAvailable :one
+SELECT EXISTS(SELECT 1 FROM source_scan)
+`
+
+func (q *Queries) InspectionAvailable(ctx context.Context) (bool, error) {
+	row := q.db.QueryRowContext(ctx, inspectionAvailable)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const inspectionCalls = `-- name: InspectionCalls :many
+SELECT receiver_type_id, call_id, declaration_id, caller_symbol, ordinal, expression, resolution, relation, path, start_line, end_line, start_offset, end_offset, sha256, file_sha256, target_declaration_id, target_symbol, target_path, target_start_line, target_end_line, target_start_offset, target_end_offset, target_sha256, target_file_sha256, receiver_form, receiver_range_id, binding_range_id, binding_limit FROM source_one_hop_calls WHERE receiver_type_id=?1 ORDER BY path,start_offset,ordinal
+`
+
+type InspectionCallsParams struct {
+	ReceiverTypeID *int64
+}
+
+func (q *Queries) InspectionCalls(ctx context.Context, arg InspectionCallsParams) ([]SourceOneHopCall, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionCalls, arg.ReceiverTypeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceOneHopCall
+	for rows.Next() {
+		var i SourceOneHopCall
+		if err := rows.Scan(
+			&i.ReceiverTypeID,
+			&i.CallID,
+			&i.DeclarationID,
+			&i.CallerSymbol,
+			&i.Ordinal,
+			&i.Expression,
+			&i.Resolution,
+			&i.Relation,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+			&i.FileSha256,
+			&i.TargetDeclarationID,
+			&i.TargetSymbol,
+			&i.TargetPath,
+			&i.TargetStartLine,
+			&i.TargetEndLine,
+			&i.TargetStartOffset,
+			&i.TargetEndOffset,
+			&i.TargetSha256,
+			&i.TargetFileSha256,
+			&i.ReceiverForm,
+			&i.ReceiverRangeID,
+			&i.BindingRangeID,
+			&i.BindingLimit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionConfigCounts = `-- name: InspectionConfigCounts :many
+SELECT name,value FROM source_config_counts ORDER BY name
+`
+
+type InspectionConfigCountsRow struct {
+	Name  string
+	Value int64
+}
+
+func (q *Queries) InspectionConfigCounts(ctx context.Context) ([]InspectionConfigCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionConfigCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionConfigCountsRow
+	for rows.Next() {
+		var i InspectionConfigCountsRow
+		if err := rows.Scan(&i.Name, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionConfigExclusions = `-- name: InspectionConfigExclusions :many
+SELECT ordinal,pattern FROM source_config_exclusions ORDER BY ordinal
+`
+
+type InspectionConfigExclusionsRow struct {
+	Ordinal int64
+	Pattern string
+}
+
+func (q *Queries) InspectionConfigExclusions(ctx context.Context) ([]InspectionConfigExclusionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionConfigExclusions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionConfigExclusionsRow
+	for rows.Next() {
+		var i InspectionConfigExclusionsRow
+		if err := rows.Scan(&i.Ordinal, &i.Pattern); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionConfigRatios = `-- name: InspectionConfigRatios :many
+SELECT name,value FROM source_config_ratios ORDER BY name
+`
+
+type InspectionConfigRatiosRow struct {
+	Name  string
+	Value float64
+}
+
+func (q *Queries) InspectionConfigRatios(ctx context.Context) ([]InspectionConfigRatiosRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionConfigRatios)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionConfigRatiosRow
+	for rows.Next() {
+		var i InspectionConfigRatiosRow
+		if err := rows.Scan(&i.Name, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionConfigSeverity = `-- name: InspectionConfigSeverity :many
+SELECT smell,severity FROM source_config_severity ORDER BY smell
+`
+
+type InspectionConfigSeverityRow struct {
+	Smell    string
+	Severity string
+}
+
+func (q *Queries) InspectionConfigSeverity(ctx context.Context) ([]InspectionConfigSeverityRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionConfigSeverity)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionConfigSeverityRow
+	for rows.Next() {
+		var i InspectionConfigSeverityRow
+		if err := rows.Scan(&i.Smell, &i.Severity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionDeclarationLocation = `-- name: InspectionDeclarationLocation :one
+SELECT file_id,start_line,end_line,start_offset,end_offset FROM declarations WHERE id=?
+`
+
+type InspectionDeclarationLocationParams struct {
+	ID int64
+}
+
+type InspectionDeclarationLocationRow struct {
+	FileID      int64
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+}
+
+func (q *Queries) InspectionDeclarationLocation(ctx context.Context, arg InspectionDeclarationLocationParams) (InspectionDeclarationLocationRow, error) {
+	row := q.db.QueryRowContext(ctx, inspectionDeclarationLocation, arg.ID)
+	var i InspectionDeclarationLocationRow
+	err := row.Scan(
+		&i.FileID,
+		&i.StartLine,
+		&i.EndLine,
+		&i.StartOffset,
+		&i.EndOffset,
+	)
+	return i, err
+}
+
+const inspectionDeclarations = `-- name: InspectionDeclarations :many
+SELECT d.id,d.symbol,f.path,d.start_line,d.end_line,d.start_offset,d.end_offset,s.kind,s.receiver_type_id,s.sha256,sf.sha256 AS file_sha256
+FROM source_declarations s JOIN declarations d ON d.id=s.declaration_id JOIN files f ON f.id=d.file_id JOIN source_files sf ON sf.file_id=f.id
+ORDER BY f.path,d.start_offset,d.symbol
+`
+
+type InspectionDeclarationsRow struct {
+	ID             int64
+	Symbol         string
+	Path           string
+	StartLine      int64
+	EndLine        int64
+	StartOffset    int64
+	EndOffset      int64
+	Kind           string
+	ReceiverTypeID *int64
+	Sha256         string
+	FileSha256     string
+}
+
+func (q *Queries) InspectionDeclarations(ctx context.Context) ([]InspectionDeclarationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionDeclarations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionDeclarationsRow
+	for rows.Next() {
+		var i InspectionDeclarationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Symbol,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Kind,
+			&i.ReceiverTypeID,
+			&i.Sha256,
+			&i.FileSha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionEnvironment = `-- name: InspectionEnvironment :many
+SELECT name,value FROM source_environment ORDER BY name
+`
+
+type InspectionEnvironmentRow struct {
+	Name  string
+	Value string
+}
+
+func (q *Queries) InspectionEnvironment(ctx context.Context) ([]InspectionEnvironmentRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionEnvironment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionEnvironmentRow
+	for rows.Next() {
+		var i InspectionEnvironmentRow
+		if err := rows.Scan(&i.Name, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionFieldNames = `-- name: InspectionFieldNames :many
+SELECT ordinal,name FROM source_field_names WHERE field_id=? ORDER BY ordinal
+`
+
+type InspectionFieldNamesParams struct {
+	FieldID int64
+}
+
+type InspectionFieldNamesRow struct {
+	Ordinal int64
+	Name    string
+}
+
+func (q *Queries) InspectionFieldNames(ctx context.Context, arg InspectionFieldNamesParams) ([]InspectionFieldNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionFieldNames, arg.FieldID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionFieldNamesRow
+	for rows.Next() {
+		var i InspectionFieldNamesRow
+		if err := rows.Scan(&i.Ordinal, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionFields = `-- name: InspectionFields :many
+SELECT f.id,f.ordinal,f.embedded,f.type_text,f.type_key,f.target_type_id,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256
+FROM source_fields f JOIN source_ranges r ON r.id=f.range_id WHERE f.type_id=?1 ORDER BY f.ordinal
+`
+
+type InspectionFieldsParams struct {
+	TypeID int64
+}
+
+type InspectionFieldsRow struct {
+	ID           int64
+	Ordinal      int64
+	Embedded     int64
+	TypeText     string
+	TypeKey      *string
+	TargetTypeID *int64
+	StartLine    int64
+	EndLine      int64
+	StartOffset  int64
+	EndOffset    int64
+	Sha256       string
+}
+
+func (q *Queries) InspectionFields(ctx context.Context, arg InspectionFieldsParams) ([]InspectionFieldsRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionFields, arg.TypeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionFieldsRow
+	for rows.Next() {
+		var i InspectionFieldsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ordinal,
+			&i.Embedded,
+			&i.TypeText,
+			&i.TypeKey,
+			&i.TargetTypeID,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionFiles = `-- name: InspectionFiles :many
+SELECT f.id AS file_id,f.path,s.sha256,s.size,s.package,s.selected_runtime,s.ordinary_target,s.generated,s.scope
+FROM source_files s JOIN files f ON f.id=s.file_id ORDER BY f.path
+`
+
+type InspectionFilesRow struct {
+	FileID          int64
+	Path            string
+	Sha256          string
+	Size            int64
+	Package         string
+	SelectedRuntime int64
+	OrdinaryTarget  int64
+	Generated       int64
+	Scope           string
+}
+
+func (q *Queries) InspectionFiles(ctx context.Context) ([]InspectionFilesRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionFiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionFilesRow
+	for rows.Next() {
+		var i InspectionFilesRow
+		if err := rows.Scan(
+			&i.FileID,
+			&i.Path,
+			&i.Sha256,
+			&i.Size,
+			&i.Package,
+			&i.SelectedRuntime,
+			&i.OrdinaryTarget,
+			&i.Generated,
+			&i.Scope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionIdentity = `-- name: InspectionIdentity :one
+SELECT s.root,s.go_version,s.source_sha256,c.config_path,c.config_sha256,c.staged,c.history,c.max_commits
+FROM source_scan s JOIN source_config c ON c.scan_id=s.id WHERE s.id=1
+`
+
+type InspectionIdentityRow struct {
+	Root         string
+	GoVersion    string
+	SourceSha256 string
+	ConfigPath   *string
+	ConfigSha256 *string
+	Staged       int64
+	History      int64
+	MaxCommits   int64
+}
+
+func (q *Queries) InspectionIdentity(ctx context.Context) (InspectionIdentityRow, error) {
+	row := q.db.QueryRowContext(ctx, inspectionIdentity)
+	var i InspectionIdentityRow
+	err := row.Scan(
+		&i.Root,
+		&i.GoVersion,
+		&i.SourceSha256,
+		&i.ConfigPath,
+		&i.ConfigSha256,
+		&i.Staged,
+		&i.History,
+		&i.MaxCommits,
+	)
+	return i, err
+}
+
+const inspectionPatterns = `-- name: InspectionPatterns :many
+SELECT ordinal,pattern FROM source_patterns ORDER BY ordinal
+`
+
+type InspectionPatternsRow struct {
+	Ordinal int64
+	Pattern string
+}
+
+func (q *Queries) InspectionPatterns(ctx context.Context) ([]InspectionPatternsRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionPatterns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionPatternsRow
+	for rows.Next() {
+		var i InspectionPatternsRow
+		if err := rows.Scan(&i.Ordinal, &i.Pattern); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionRange = `-- name: InspectionRange :one
+SELECT f.path,sf.sha256 AS file_sha256,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256
+FROM source_ranges r JOIN files f ON f.id=r.file_id JOIN source_files sf ON sf.file_id=f.id WHERE r.id=?
+`
+
+type InspectionRangeParams struct {
+	ID int64
+}
+
+type InspectionRangeRow struct {
+	Path        string
+	FileSha256  string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Sha256      string
+}
+
+func (q *Queries) InspectionRange(ctx context.Context, arg InspectionRangeParams) (InspectionRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, inspectionRange, arg.ID)
+	var i InspectionRangeRow
+	err := row.Scan(
+		&i.Path,
+		&i.FileSha256,
+		&i.StartLine,
+		&i.EndLine,
+		&i.StartOffset,
+		&i.EndOffset,
+		&i.Sha256,
+	)
+	return i, err
+}
+
+const inspectionReceiverSeeds = `-- name: InspectionReceiverSeeds :many
+SELECT case_id, smell, verdict, role, declaration_id, receiver_type_id, type_key, symbol, path, start_line, end_line, start_offset, end_offset, sha256, file_sha256, ordinary_target, scope FROM source_receiver_seeds ORDER BY type_key,case_id,path,start_offset,role
+`
+
+func (q *Queries) InspectionReceiverSeeds(ctx context.Context) ([]SourceReceiverSeed, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionReceiverSeeds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceReceiverSeed
+	for rows.Next() {
+		var i SourceReceiverSeed
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.Smell,
+			&i.Verdict,
+			&i.Role,
+			&i.DeclarationID,
+			&i.ReceiverTypeID,
+			&i.TypeKey,
+			&i.Symbol,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+			&i.FileSha256,
+			&i.OrdinaryTarget,
+			&i.Scope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionSiblings = `-- name: InspectionSiblings :many
+SELECT receiver_type_id, type_key, declaration_id, symbol, path, start_line, end_line, start_offset, end_offset, sha256, file_sha256, ordinary_target, "generated", scope FROM source_receiver_siblings WHERE receiver_type_id=?1 ORDER BY path,start_offset,symbol
+`
+
+type InspectionSiblingsParams struct {
+	ReceiverTypeID *int64
+}
+
+func (q *Queries) InspectionSiblings(ctx context.Context, arg InspectionSiblingsParams) ([]SourceReceiverSibling, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionSiblings, arg.ReceiverTypeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceReceiverSibling
+	for rows.Next() {
+		var i SourceReceiverSibling
+		if err := rows.Scan(
+			&i.ReceiverTypeID,
+			&i.TypeKey,
+			&i.DeclarationID,
+			&i.Symbol,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+			&i.FileSha256,
+			&i.OrdinaryTarget,
+			&i.Generated,
+			&i.Scope,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionStoragePaths = `-- name: InspectionStoragePaths :many
+SELECT receiver_type_id, owner_type_id, field_id, target_type_id, depth, field_path, relation, owner_type, ordinal, embedded, type_text, field_type, path, start_line, end_line, start_offset, end_offset, sha256, file_sha256 FROM source_storage_paths WHERE receiver_type_id=?1 ORDER BY field_path
+`
+
+type InspectionStoragePathsParams struct {
+	ReceiverTypeID *int64
+}
+
+func (q *Queries) InspectionStoragePaths(ctx context.Context, arg InspectionStoragePathsParams) ([]SourceStoragePath, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionStoragePaths, arg.ReceiverTypeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceStoragePath
+	for rows.Next() {
+		var i SourceStoragePath
+		if err := rows.Scan(
+			&i.ReceiverTypeID,
+			&i.OwnerTypeID,
+			&i.FieldID,
+			&i.TargetTypeID,
+			&i.Depth,
+			&i.FieldPath,
+			&i.Relation,
+			&i.OwnerType,
+			&i.Ordinal,
+			&i.Embedded,
+			&i.TypeText,
+			&i.FieldType,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+			&i.FileSha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const inspectionTypes = `-- name: InspectionTypes :many
+SELECT t.id,t.type_key,t.resolved_key,t.alias,f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256,sf.sha256 AS file_sha256
+FROM source_types t JOIN source_ranges r ON r.id=t.range_id JOIN files f ON f.id=t.file_id JOIN source_files sf ON sf.file_id=t.file_id
+ORDER BY t.type_key
+`
+
+type InspectionTypesRow struct {
+	ID          int64
+	TypeKey     string
+	ResolvedKey string
+	Alias       int64
+	Path        string
+	StartLine   int64
+	EndLine     int64
+	StartOffset int64
+	EndOffset   int64
+	Sha256      string
+	FileSha256  string
+}
+
+func (q *Queries) InspectionTypes(ctx context.Context) ([]InspectionTypesRow, error) {
+	rows, err := q.db.QueryContext(ctx, inspectionTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InspectionTypesRow
+	for rows.Next() {
+		var i InspectionTypesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TypeKey,
+			&i.ResolvedKey,
+			&i.Alias,
+			&i.Path,
+			&i.StartLine,
+			&i.EndLine,
+			&i.StartOffset,
+			&i.EndOffset,
+			&i.Sha256,
+			&i.FileSha256,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const linkCaseDeclaration = `-- name: LinkCaseDeclaration :exec

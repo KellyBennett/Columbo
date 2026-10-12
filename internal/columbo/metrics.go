@@ -285,9 +285,51 @@ func (s *dependencyScan) explicitType(n ast.Node) {
 	if !ok {
 		return
 	}
-	if tv, yes := s.info.Types[e]; yes && tv.IsType() {
+	if tv, yes := s.info.Types[e]; yes && tv.IsType() && !s.instantiationHead(e, tv.Type) {
 		s.add(e, tv.Type, "declared")
 	}
+}
+
+func (s *dependencyScan) instantiationHead(e ast.Expr, typ types.Type) bool {
+	tv := s.info.Types[s.typeInstantiation(e)]
+	return tv.IsType() && instantiatedFrom(tv.Type, typ)
+}
+func (s *dependencyScan) typeInstantiation(e ast.Expr) ast.Expr {
+	for i := len(s.path) - 2; i >= 0; i-- {
+		if parent, ok := s.path[i].(*ast.ParenExpr); ok {
+			e = parent
+			continue
+		}
+		return instantiationUsing(s.path[i], e)
+	}
+	return nil
+}
+func instantiationUsing(parent ast.Node, head ast.Expr) ast.Expr {
+	switch parent := parent.(type) {
+	case *ast.IndexExpr:
+		if parent.X == head {
+			return parent
+		}
+	case *ast.IndexListExpr:
+		if parent.X == head {
+			return parent
+		}
+	}
+	return nil
+}
+func instantiatedFrom(instance, head types.Type) bool {
+	origin, instantiated := genericOrigin(instance)
+	headOrigin, _ := genericOrigin(head)
+	return instantiated && origin == headOrigin
+}
+func genericOrigin(typ types.Type) (types.Type, bool) {
+	switch typ := typ.(type) {
+	case *types.Alias:
+		return typ.Origin(), typ.TypeArgs().Len() > 0
+	case *types.Named:
+		return typ.Origin(), typ.TypeArgs().Len() > 0
+	}
+	return nil, false
 }
 func (s *dependencyScan) identifier(n *ast.Ident) {
 	obj := s.info.Uses[n]
@@ -392,7 +434,7 @@ func (e *lineEvidence) scan() {
 		if !e.includes(t) {
 			continue
 		}
-		for line := e.file.tf.Line(t.pos); line <= e.file.tf.Line(t.end-1); line++ {
+		for line := e.file.line(t.pos); line <= e.file.line(t.end-1); line++ {
 			e.lines[line] = true
 		}
 	}

@@ -5,20 +5,20 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/sebdah/goldie/v2"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/uudashr/gocognit"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sebdah/goldie/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/uudashr/gocognit"
 )
 
 type testHarness struct{ *testing.T }
@@ -42,11 +42,15 @@ func (t *testHarness) fixture(src string) string {
 func (t *testHarness) write(dir, path, content string) {
 	t.Helper()
 	e := os.WriteFile(filepath.Join(dir, path), []byte(content), 0600)
-	t.require(e == nil, e)
+	require.NoError(t.T, e)
 }
+
+// quiet disables ordinary smell severities and staged presentation so focused
+// collector fixtures can opt into only the behavior they exercise.
 func quiet() Config {
 	c := Defaults()
 	c.History = false
+	c.Staged = false
 	for _, s := range smells {
 		c.Severity[s] = "off"
 	}
@@ -57,10 +61,15 @@ func longParameterConfig() Config {
 	config.Severity["long-parameter-list"] = "fail"
 	return config
 }
+
+// investigate exercises the lower-level detector pipeline for focused fixtures.
+// Public Analyze tests cover source inspection and its additional evidence.
 func (t *testHarness) investigate(dir string, c Config) Report {
 	t.Helper()
-	r, e := Analyze(dir, []string{"./..."}, c)
-	t.require(e == nil, e)
+	a, err := load(dir, []string{"./..."}, c)
+	require.NoError(t.T, err)
+	r, err := a.Analyze()
+	require.NoError(t.T, err)
 	return r
 }
 func (t *testHarness) one(r Report, smell string) Case {
@@ -71,7 +80,7 @@ func (t *testHarness) one(r Report, smell string) Case {
 			found = append(found, c)
 		}
 	}
-	t.requiref(len(found) == 1, "%s: want one case, got %d", smell, len(found))
+	require.Len(t.T, found, 1, "%s: want one case", smell)
 	return found[0]
 }
 func (t *testHarness) clueValue(c Case, kind string) any {
@@ -81,7 +90,7 @@ func (t *testHarness) clueValue(c Case, kind string) any {
 			return q.Value
 		}
 	}
-	t.Fatalf("missing %s", kind)
+	require.FailNow(t.T, "missing clue", "kind: %s", kind)
 	return nil
 }
 func (t *testHarness) reconcile(c Case, kind string) {
@@ -93,13 +102,15 @@ func (t *testHarness) reconcile(c Case, kind string) {
 		}
 	}
 	want := t.clueValue(c, kind).(int)
-	t.requiref(sum == want, "%s contributions %d != %d", kind, sum, want)
+	require.Equal(t.T, want, sum, "%s contributions", kind)
 }
 func (t *testHarness) TestAllSevenDefaultFail() {
 	dir, e := filepath.Abs("testdata/all")
-	t.require(e == nil, e)
+	require.NoError(t.T, e)
 	c := Defaults()
 	c.History = false
+	// Test the default severity policy in ordinary diagnostic mode.
+	c.Staged = false
 	r := t.investigate(dir, c)
 	for _, smell := range smells {
 		if c.Severity[smell] == "fail" {
@@ -116,7 +127,7 @@ func (t *testHarness) verifyDefaultSmell(r Report, smell string) {
 			t.reconcileDefaultCase(c)
 		}
 	}
-	t.checkf(found, "missing default FAIL %s", smell)
+	assert.True(t.T, found, "missing default FAIL %s", smell)
 }
 func (t *testHarness) reconcileDefaultCase(c Case) {
 	switch c.Smell {
@@ -137,19 +148,19 @@ func (t *testHarness) snapshotGoldens(r Report, base string) {
 	db := t.snapshot(r)
 	t.goldenBytes(base+"-rows.golden", t.logicalRows(db))
 	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), "report.sqlite")
-	t.require(err == nil, err)
-	t.require(exitCode == failureExit(r.Summary.Failed), "stored outcome exit", exitCode, r.Summary)
-	t.require(t.sqlCount(db, `SELECT failed FROM summary`) == r.Summary.Failed, "stored failure count", r.Summary)
+	require.NoError(t.T, err)
+	require.Equal(t.T, failureExit(r.Summary.Failed), exitCode, "stored outcome exit")
+	require.Equal(t.T, r.Summary.Failed, t.sqlCount(db, `SELECT failed FROM summary`), "stored failure count")
 	t.goldenBytes(base+"-summary.golden", summary)
 }
 func (t *testHarness) snapshot(r Report) *sql.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "report.sqlite")
 	err := WriteSnapshot(path, r, "test")
-	t.require(err == nil, err)
+	require.NoError(t.T, err)
 	db, err := openTestSnapshot(path)
-	t.require(err == nil, err)
-	t.Cleanup(func() { t.check(db.Close() == nil, "close snapshot") })
+	require.NoError(t.T, err)
+	t.Cleanup(func() { assert.NoError(t.T, db.Close(), "close snapshot") })
 	return db
 }
 func (t *testHarness) goldenBytes(path string, data []byte) {
@@ -157,7 +168,7 @@ func (t *testHarness) goldenBytes(path string, data []byte) {
 	g, name := goldenFile(t.T, path)
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
 		err := g.Update(t.T, name, data)
-		t.require(err == nil, err)
+		require.NoError(t.T, err)
 	}
 	g.Assert(t.T, name, data)
 }
@@ -187,10 +198,10 @@ func (table logicalTable) quotedName() string {
 }
 func (table logicalTable) columns() []string {
 	rows, err := table.db.Query("SELECT * FROM " + table.quotedName() + " LIMIT 0")
-	table.test.noError(err)
+	require.NoError(table.test.T, err)
 	defer rows.Close()
 	columns, err := rows.Columns()
-	table.test.noError(err)
+	require.NoError(table.test.T, err)
 	return columns
 }
 func (table logicalTable) orderedRows(columns []string) *sql.Rows {
@@ -199,7 +210,7 @@ func (table logicalTable) orderedRows(columns []string) *sql.Rows {
 		order[i] = strconv.Itoa(i + 1)
 	}
 	rows, err := table.db.Query("SELECT * FROM " + table.quotedName() + " ORDER BY " + strings.Join(order, ","))
-	table.test.noError(err)
+	require.NoError(table.test.T, err)
 	return rows
 }
 func (table logicalTable) writeTo(output *strings.Builder) {
@@ -210,7 +221,7 @@ func (table logicalTable) writeTo(output *strings.Builder) {
 	for rows.Next() {
 		output.WriteString(table.formattedRow(rows, len(columns)) + "\n")
 	}
-	table.test.noError(rows.Err())
+	require.NoError(table.test.T, rows.Err())
 	output.WriteByte('\n')
 }
 func (table logicalTable) formattedRow(rows *sql.Rows, count int) string {
@@ -219,7 +230,7 @@ func (table logicalTable) formattedRow(rows *sql.Rows, count int) string {
 	for i := range values {
 		pointers[i] = &values[i]
 	}
-	table.test.noError(rows.Scan(pointers...))
+	require.NoError(table.test.T, rows.Scan(pointers...))
 	parts := make([]string, count)
 	for i, value := range values {
 		parts[i] = logicalValue(value)
@@ -259,12 +270,17 @@ func (t *testHarness) TestConfigMerge() {
 	dir := t.TempDir()
 	t.write(dir, "config.yml", "severity:\n  long-function: warn\nthresholds:\n  parameters: 9\nexclude: []\n")
 	c, e := LoadConfig(filepath.Join(dir, "config.yml"), true)
-	t.require(e == nil, e)
-	t.require(c.Severity["long-function"] == "warn" && c.Severity["feature-envy"] == "fail" && c.Counts["parameters"] == 9 && c.Counts["dependencies"] == 5 && len(c.Exclude) == 0, c)
+	require.NoError(t.T, e)
+	require.Equal(t.T, "warn", c.Severity["long-function"])
+	require.Equal(t.T, "fail", c.Severity["feature-envy"])
+	require.Equal(t.T, int64(9), c.Counts["parameters"])
+	require.Equal(t.T, int64(5), c.Counts["dependencies"])
+	require.Empty(t.T, c.Exclude)
 	for _, text := range []string{"", "{}"} {
 		t.write(dir, "config.yml", text)
 		c, e = LoadConfig(filepath.Join(dir, "config.yml"), true)
-		t.requiref(e == nil && reflect.DeepEqual(c, Defaults()), "defaults: %v %v", c, e)
+		require.NoError(t.T, e)
+		require.Equal(t.T, Defaults(), c, "defaults")
 	}
 }
 func TestConfigMerge(t *testing.T) { (&testHarness{T: t}).TestConfigMerge() }
@@ -276,7 +292,7 @@ func (t *testHarness) TestConfigInvalid() {
 			d := t.TempDir()
 			t.write(d, "c", s)
 			_, e := LoadConfig(filepath.Join(d, "c"), true)
-			t.require(e != nil, "accepted invalid config")
+			require.Error(t.T, e, "accepted invalid config")
 		})
 	}
 }
@@ -285,7 +301,7 @@ func (t *testHarness) TestConfigRatioEndpoints() {
 		d := t.TempDir()
 		t.write(d, "c", "thresholds: {cosmetic-parameter-overlap: "+n+"}")
 		_, e := LoadConfig(filepath.Join(d, "c"), true)
-		t.require(e == nil, e)
+		require.NoError(t.T, e)
 	}
 }
 func TestConfigRatioEndpoints(t *testing.T) { (&testHarness{T: t}).TestConfigRatioEndpoints() }
@@ -298,10 +314,11 @@ func (t *testHarness) TestPhysicalLines() {
 	}{{"", 0}, {"a:=1;_ = a", 1}, {"\n// comment\n{\n}\n", 0}, {"s := `one\n\nthree`\n_ = s", 4}, {"x := []int{\n1,\n2,\n}\n_ = x", 4}} {
 		dir := t.fixture("package fixture\nfunc F(){" + x.body + "}\n")
 		a, e := load(dir, []string{"./..."}, quiet())
-		t.require(e == nil, e)
+		require.NoError(t.T, e)
+		require.NotEmpty(t.T, a.declarations)
 		d := a.declarations[0]
 		d.measure(a)
-		t.checkf(d.lines == x.want, "%q: %d != %d", x.body, d.lines, x.want)
+		assert.Equal(t.T, x.want, d.lines, "body: %q", x.body)
 	}
 }
 func TestPhysicalLines(t *testing.T) { (&testHarness{T: t}).TestPhysicalLines() }
@@ -323,20 +340,24 @@ func (t *testHarness) TestPinnedComplexity() {
 	for i, source := range complexitySources {
 		score := t.pinnedComplexity(source)
 		if i == 0 {
-			t.requiref(score == 17, "pinned fixture score: %d", score)
+			require.Equal(t.T, 17, score, "pinned fixture score")
 		}
 	}
 }
 func (t *testHarness) complexityDeclaration(source string) *ast.FuncDecl {
 	f, err := parser.ParseFile(token.NewFileSet(), "source.go", source, parser.ParseComments)
-	t.require(err == nil, err)
-	return f.Decls[0].(*ast.FuncDecl)
+	require.NoError(t.T, err)
+	require.NotEmpty(t.T, f.Decls)
+	fn, ok := f.Decls[0].(*ast.FuncDecl)
+	require.True(t.T, ok, "first declaration must be a function")
+	return fn
 }
 func (t *testHarness) pinnedComplexity(source string) int {
 	fn := t.complexityDeclaration(source)
 	got := scanComplexity(fn)
 	expected := gocognit.ScanComplexity(fn, true)
-	t.require(got.complexity == expected.Complexity && len(got.diagnostics) == len(expected.Diagnostics), "pinned visitor mismatch", source)
+	require.Equal(t.T, expected.Complexity, got.complexity, "pinned complexity mismatch: %s", source)
+	require.Len(t.T, got.diagnostics, len(expected.Diagnostics), "pinned diagnostics mismatch: %s", source)
 	t.pinnedDiagnostics(got.diagnostics, expected)
 	return got.complexity
 }
@@ -346,7 +367,7 @@ func (t *testHarness) pinnedDiagnostics(got []diagnostic, expected gocognit.Scan
 	}
 }
 func (t *testHarness) complexityDiagnostic(got diagnostic, expected diagnostic, index int) {
-	t.require(got.Inc == expected.Inc && got.Nesting == expected.Nesting && got.Pos == expected.Pos && got.Text == expected.Text, "pinned diagnostic mismatch", index)
+	require.Equal(t.T, expected, got, "pinned diagnostic mismatch: %d", index)
 }
 func TestPinnedComplexity(t *testing.T) { (&testHarness{T: t}).TestPinnedComplexity() }
 
@@ -360,28 +381,31 @@ func (t *testHarness) TestSeverityAndExits() {
 func (t *testHarness) severityExit(dir, severity string) {
 	t.write(dir, ".columbo.yml", "history: {enabled: false}\nseverity: {long-parameter-list: "+severity+"}\n")
 	var out, err bytes.Buffer
-	path := filepath.Join(dir, "report-"+severity+".sqlite")
-	code := Run([]string{"--output=" + path}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	path := filepath.Join(t.TempDir(), "report-"+severity+".sqlite")
+	code := Run([]string{"--staged=false", "--output=" + path}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
 	want := 0
 	if severity == "fail" {
 		want = 1
 	}
-	t.requiref(code == want, "%s: exit %d (%s)", severity, code, err.String())
+	require.Equal(t.T, want, code, "%s: %s", severity, err.String())
 	t.requireSeveritySnapshot(path, out.Bytes(), want)
 }
 func (t *testHarness) requireSeveritySnapshot(path string, stdout []byte, want int) {
 	db, err := openTestSnapshot(path)
-	t.noError(err)
+	require.NoError(t.T, err)
 	defer db.Close()
 	summary, exitCode, err := RenderSnapshot(testDatabaseQueries(db), path)
-	t.noError(err)
-	t.equal(want, exitCode, "exit did not follow stored outcomes")
-	t.equal(summary, stdout, "CLI summary disagrees with snapshot")
+	require.NoError(t.T, err)
+	require.Equal(t.T, want, exitCode, "exit did not follow stored outcomes")
+	require.Equal(t.T, summary, stdout, "CLI summary disagrees with snapshot")
 }
 func (t *testHarness) malformedPackageExit(dir string) {
 	t.write(dir, "bad.go", "package fixture\nvar x = missing\n")
 	var out, err bytes.Buffer
-	t.require(Run(nil, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err}) == 2 && out.Len() == 0, "fatal did not leave stdout empty")
+	path := filepath.Join(t.TempDir(), "report.sqlite")
+	code := Run([]string{"--output=" + path}, Invocation{Dir: dir, Version: "", Stdout: &out, Stderr: &err})
+	require.Equal(t.T, 2, code, "malformed package must be fatal")
+	require.Empty(t.T, out.Bytes(), "fatal did not leave stdout empty")
 }
 func TestSeverityAndExits(t *testing.T) { (&testHarness{T: t}).TestSeverityAndExits() }
 
@@ -398,7 +422,10 @@ func (b *brokenSink) Write(p []byte) (int, error) {
 func (t *testHarness) TestOutputWriteFailure() {
 	var err bytes.Buffer
 	b := &brokenSink{}
-	t.require(Run([]string{"--version"}, Invocation{Dir: "/no/module", Version: "", Stdout: b, Stderr: &err}) == 2 && b.accepted == 3 && strings.Contains(err.String(), "sink failure"), "write failure not fatal")
+	code := Run([]string{"--version"}, Invocation{Dir: "/no/module", Version: "", Stdout: b, Stderr: &err})
+	require.Equal(t.T, 2, code, "write failure must be fatal")
+	require.Equal(t.T, 3, b.accepted)
+	require.Contains(t.T, err.String(), "sink failure")
 }
 func TestOutputWriteFailure(t *testing.T) { (&testHarness{T: t}).TestOutputWriteFailure() }
 
@@ -407,7 +434,7 @@ func (t *testHarness) TestSuppressionValidation() {
 		src := "package fixture\n" + directive + "\nfunc F(a,b,c,d,e int){}"
 		dir := t.fixture(src)
 		_, e := Analyze(dir, []string{"./..."}, quiet())
-		t.require(e != nil, "accepted invalid directive", directive)
+		require.Error(t.T, e, "accepted invalid directive: %s", directive)
 	}
 }
 func TestSuppressionValidation(t *testing.T) { (&testHarness{T: t}).TestSuppressionValidation() }
@@ -416,10 +443,13 @@ func (t *testHarness) TestSuppressionAccounting() {
 	dir := t.fixture("package fixture\n// columbo:ignore long-parameter-list -- legacy public API compatibility\n// unrelated comment\nfunc F(a,b,c,d,e int){}\n")
 	c := longParameterConfig()
 	r := t.investigate(dir, c)
-	t.require(r.Summary.Suppressed == 1 && r.Summary.Failed == 0 && t.one(r, "long-parameter-list").Suppressed, r)
+	require.Equal(t.T, 1, r.Summary.Suppressed)
+	require.Zero(t.T, r.Summary.Failed)
+	require.True(t.T, t.one(r, "long-parameter-list").Suppressed)
 	c.Severity["long-parameter-list"] = "off"
 	r = t.investigate(dir, c)
-	t.require(len(r.Warnings) == 1 && r.Warnings[0].Code == "unused-suppression", r)
+	require.Len(t.T, r.Warnings, 1)
+	require.Equal(t.T, "unused-suppression", r.Warnings[0].Code)
 }
 func TestSuppressionAccounting(t *testing.T) { (&testHarness{T: t}).TestSuppressionAccounting() }
 
@@ -432,7 +462,11 @@ func (t *testHarness) TestGeneratedMarker() {
 		c := quiet()
 		c.Severity["long-parameter-list"] = "fail"
 		r := t.investigate(dir, c)
-		t.require((len(r.Cases) == 0) == x.excluded, x, r)
+		if x.excluded {
+			require.Empty(t.T, r.Cases, "generated marker: %s", x.marker)
+		} else {
+			require.NotEmpty(t.T, r.Cases, "generated marker: %s", x.marker)
+		}
 	}
 }
 func TestGeneratedMarker(t *testing.T) { (&testHarness{T: t}).TestGeneratedMarker() }
@@ -441,7 +475,10 @@ func (t *testHarness) TestBlankFunctionIdentities() {
 	dir := t.fixture("package fixture\nfunc _(a,b,c,d,e int){}\nfunc _(a,b,c,d,e int){}\n")
 	c := longParameterConfig()
 	r := t.investigate(dir, c)
-	t.require(len(r.Cases) == 2 && r.Cases[0].Symbol == "fixture._#1" && r.Cases[1].Symbol == "fixture._#2" && r.Cases[0].ID != r.Cases[1].ID, r)
+	require.Len(t.T, r.Cases, 2)
+	require.Equal(t.T, "fixture._#1", r.Cases[0].Symbol)
+	require.Equal(t.T, "fixture._#2", r.Cases[1].Symbol)
+	require.NotEqual(t.T, r.Cases[0].ID, r.Cases[1].ID)
 }
 func TestBlankFunctionIdentities(t *testing.T) { (&testHarness{T: t}).TestBlankFunctionIdentities() }
 
@@ -450,10 +487,11 @@ func (t *testHarness) TestClumpClosedSupport() {
 	c := quiet()
 	c.Severity["data-clump"] = "fail"
 	r := t.investigate(dir, c)
-	t.requiref(len(r.Cases) == 2, "want both closed multisets, got %d", len(r.Cases))
+	require.Len(t.T, r.Cases, 2, "want both closed multisets")
 	t.write(dir, "source.go", "package fixture\nfunc A(a int,b bool,c string,d float64){}\nfunc B(a int,b bool,c string,d float64){}\nfunc C(a int,b bool,c string,d float64){}\n")
 	r = t.investigate(dir, c)
-	t.require(len(r.Cases) == 1 && t.clueValue(r.Cases[0], "clump-size") == 4, r)
+	require.Len(t.T, r.Cases, 1)
+	require.Equal(t.T, 4, t.clueValue(r.Cases[0], "clump-size"))
 }
 func TestClumpClosedSupport(t *testing.T) { (&testHarness{T: t}).TestClumpClosedSupport() }
 
@@ -462,7 +500,7 @@ func (t *testHarness) TestStructuralSignatureNames() {
 	c := quiet()
 	c.Severity["data-clump"] = "fail"
 	r := t.investigate(dir, c)
-	t.require(len(r.Cases) == 1, r)
+	require.Len(t.T, r.Cases, 1)
 }
 func TestStructuralSignatureNames(t *testing.T) { (&testHarness{T: t}).TestStructuralSignatureNames() }
 
@@ -472,11 +510,11 @@ func (t *testHarness) TestModuleAndTests() {
 	t.write(dir, "external_test.go", "package fixture_test\nfunc External(a,b,c,d,e int){}\n")
 	c := longParameterConfig()
 	r := t.investigate(dir, c)
-	t.require(len(r.Cases) == 1, r)
+	require.Len(t.T, r.Cases, 1)
 	_, e := Analyze(dir, []string{"./missing/..."}, c)
-	t.require(e != nil, "unmatched patterns accepted")
+	require.Error(t.T, e, "unmatched patterns accepted")
 	_, e = Analyze(t.TempDir(), []string{"./..."}, c)
-	t.require(e != nil, "no module accepted")
+	require.Error(t.T, e, "no module accepted")
 }
 func TestModuleAndTests(t *testing.T) { (&testHarness{T: t}).TestModuleAndTests() }
 
@@ -485,16 +523,20 @@ func (t *testHarness) TestHistoryFailure() {
 	c := longParameterConfig()
 	c.History = true
 	r := t.investigate(dir, c)
-	t.require(len(r.Warnings) == 1 && r.Warnings[0].Message == historyWarning, r)
+	require.Len(t.T, r.Warnings, 1)
+	require.Equal(t.T, historyWarning, r.Warnings[0].Message)
+	require.NotEmpty(t.T, r.Cases)
 	id := r.Cases[0].ID
 	c.History = false
 	r = t.investigate(dir, c)
-	t.require(len(r.Warnings) == 0 && r.Cases[0].ID == id, r)
+	require.Empty(t.T, r.Warnings)
+	require.NotEmpty(t.T, r.Cases)
+	require.Equal(t.T, id, r.Cases[0].ID)
 }
 func TestHistoryFailure(t *testing.T) { (&testHarness{T: t}).TestHistoryFailure() }
 
 func (t *testHarness) TestDogfoodingRelease() {
-	t.require(ValidatePublicRelease() != nil, "provisional public release accepted")
+	require.Error(t.T, ValidatePublicRelease(), "provisional public release accepted")
 }
 func TestDogfoodingRelease(t *testing.T) { (&testHarness{T: t}).TestDogfoodingRelease() }
 
@@ -533,7 +575,7 @@ var sourceTokenBoundaries = []lexToken{
 
 func (t *testHarness) TestSourceTokenBoundaries() {
 	got := t.sourceTokens("package p\n// note\nvar X = \"é\"\n")
-	t.require(reflect.DeepEqual(got, sourceTokenBoundaries), "physical token boundaries", got)
+	require.Equal(t.T, sourceTokenBoundaries, got, "physical token boundaries")
 }
 func (t *testHarness) sourceTokens(source string) []lexToken {
 	tf := token.NewFileSet().AddFile("source.go", -1, len(source))
@@ -558,7 +600,7 @@ var leadingGeneratedSources = []struct {
 
 func (t *testHarness) TestLeadingGeneratedSources() {
 	for _, x := range leadingGeneratedSources {
-		t.require(generated([]byte(x.source)) == x.want, "leading generated marker", x)
+		require.Equal(t.T, x.want, generated([]byte(x.source)), "leading generated marker: %s", x.source)
 	}
 }
 func TestLeadingGeneratedSources(t *testing.T) { (&testHarness{T: t}).TestLeadingGeneratedSources() }
@@ -584,10 +626,9 @@ func (t *testHarness) TestConfigDocumentErrors() {
 func (t *testHarness) configDocumentError(source, message string) {
 	_, err := decodeConfig([]byte(source), Defaults())
 	if message == "" {
-		t.require(err == nil, source, err)
+		require.NoError(t.T, err, "source: %s", source)
 		return
 	}
-	t.require(err != nil, "expected configuration error", source)
-	t.require(err.Error() == message, source, err)
+	require.EqualError(t.T, err, message, "source: %s", source)
 }
 func TestConfigDocumentErrors(t *testing.T) { (&testHarness{T: t}).TestConfigDocumentErrors() }

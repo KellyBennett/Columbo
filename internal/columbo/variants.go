@@ -177,8 +177,7 @@ func (s *variantSite) valueArm(expr ast.Expr) bool {
 }
 
 func (s *variantSite) addArm(key string, expr ast.Expr) {
-	receipt := s.owner.source("variant-arm", expr.Pos(), expr.End(), Detail{Subject: key})
-	receipt.Spelling = string(s.owner.file.data[s.owner.file.tf.Offset(expr.Pos()):s.owner.file.tf.Offset(expr.End())])
+	receipt := s.owner.nodeSource("variant-arm", expr, Detail{Subject: key})
 	s.arms[key] = append(s.arms[key], receipt)
 }
 

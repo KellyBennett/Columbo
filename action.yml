@@ -12,7 +12,7 @@ inputs:
     default: ''
   staged:
     description: Enforce the first uncleared stage in Untangle Behavior, Assign Ownership, and Consolidate Shared Behavior.
-    default: 'false'
+    default: 'true'
   artifact-name:
     description: Evidence artifact name; use different names for multiple invocations in a job.
     default: columbo-evidence

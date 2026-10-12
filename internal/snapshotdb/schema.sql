@@ -1,7 +1,7 @@
 
 CREATE TABLE report (
  id INTEGER PRIMARY KEY CHECK (id = 1),
- schema_version INTEGER NOT NULL CHECK (schema_version = 8),
+ schema_version INTEGER NOT NULL CHECK (schema_version = 9),
  columbo_version TEXT NOT NULL
 ) STRICT;
 CREATE TABLE files (
@@ -416,3 +416,222 @@ CREATE VIEW active_stage_issues AS
  SELECT g.* FROM advisory_groups g
  JOIN stage_collectors m ON m.collector=g.kind
  JOIN refactoring_stages s ON s.id=m.stage_id WHERE s.state='active';
+
+CREATE TABLE source_scan (
+ id INTEGER PRIMARY KEY CHECK (id = 1) REFERENCES report(id),
+ root TEXT NOT NULL CHECK (length(root) > 0),
+ go_version TEXT NOT NULL CHECK (length(go_version) > 0),
+ source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64 AND source_sha256 NOT GLOB '*[^0-9a-f]*')
+) STRICT;
+CREATE TABLE source_environment (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_scan(id),
+ name TEXT NOT NULL CHECK (length(name) > 0),
+ value TEXT NOT NULL,
+ PRIMARY KEY (scan_id, name)
+) STRICT;
+CREATE TABLE source_patterns (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_scan(id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ pattern TEXT NOT NULL,
+ PRIMARY KEY (scan_id, ordinal)
+) STRICT;
+CREATE TABLE source_files (
+ file_id INTEGER PRIMARY KEY REFERENCES files(id),
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_scan(id),
+ sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+ size INTEGER NOT NULL CHECK (size >= 0),
+ package TEXT NOT NULL,
+ selected_runtime INTEGER NOT NULL CHECK (selected_runtime IN (0, 1)),
+ ordinary_target INTEGER NOT NULL CHECK (ordinary_target IN (0, 1)),
+ generated INTEGER NOT NULL CHECK (generated IN (0, 1)),
+ scope TEXT NOT NULL CHECK (length(scope) > 0),
+ CHECK (ordinary_target <= selected_runtime),
+ CHECK (selected_runtime = 0 OR length(package) > 0),
+ UNIQUE (file_id, sha256)
+) STRICT;
+CREATE INDEX source_files_scope ON source_files(selected_runtime, ordinary_target);
+CREATE TABLE source_config (
+ scan_id INTEGER PRIMARY KEY DEFAULT 1 REFERENCES source_scan(id),
+ config_path TEXT CHECK (config_path IS NULL OR length(config_path) > 0),
+ config_file_id INTEGER,
+ config_sha256 TEXT,
+ staged INTEGER NOT NULL CHECK (staged IN (0, 1)),
+ history INTEGER NOT NULL CHECK (history IN (0, 1)),
+ max_commits INTEGER NOT NULL CHECK (max_commits > 0),
+ CHECK ((config_file_id IS NULL) = (config_sha256 IS NULL)),
+ CHECK (config_file_id IS NULL OR config_path IS NOT NULL),
+ FOREIGN KEY (config_file_id, config_sha256) REFERENCES source_files(file_id, sha256)
+) STRICT;
+CREATE TABLE source_config_severity (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_config(scan_id),
+ smell TEXT NOT NULL,
+ severity TEXT NOT NULL CHECK (severity IN ('off', 'warn', 'fail')),
+ PRIMARY KEY (scan_id, smell)
+) STRICT;
+CREATE TABLE source_config_counts (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_config(scan_id),
+ name TEXT NOT NULL,
+ value INTEGER NOT NULL CHECK (value > 0),
+ PRIMARY KEY (scan_id, name)
+) STRICT;
+CREATE TABLE source_config_ratios (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_config(scan_id),
+ name TEXT NOT NULL,
+ value REAL NOT NULL CHECK (value >= 0),
+ PRIMARY KEY (scan_id, name)
+) STRICT;
+CREATE TABLE source_config_exclusions (
+ scan_id INTEGER NOT NULL DEFAULT 1 REFERENCES source_config(scan_id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ pattern TEXT NOT NULL,
+ PRIMARY KEY (scan_id, ordinal)
+) STRICT;
+CREATE TABLE source_ranges (
+ id INTEGER PRIMARY KEY,
+ file_id INTEGER NOT NULL REFERENCES source_files(file_id),
+ start_line INTEGER NOT NULL CHECK (start_line > 0),
+ end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+ start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+ end_offset INTEGER NOT NULL CHECK (end_offset >= start_offset),
+ sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+ UNIQUE (file_id, start_offset, end_offset),
+ UNIQUE (id, file_id)
+) STRICT;
+CREATE TRIGGER source_ranges_file_bounds BEFORE INSERT ON source_ranges WHEN NEW.end_offset > (SELECT size FROM source_files WHERE file_id = NEW.file_id) BEGIN SELECT RAISE(ABORT, 'source range exceeds file size'); END;
+CREATE TRIGGER source_ranges_file_bounds_update BEFORE UPDATE ON source_ranges WHEN NEW.end_offset > (SELECT size FROM source_files WHERE file_id = NEW.file_id) BEGIN SELECT RAISE(ABORT, 'source range exceeds file size'); END;
+CREATE TRIGGER source_files_range_bounds_update BEFORE UPDATE OF size ON source_files WHEN EXISTS (SELECT 1 FROM source_ranges WHERE file_id = NEW.file_id AND end_offset > NEW.size) OR EXISTS (SELECT 1 FROM source_declarations sd JOIN declarations d ON d.id = sd.declaration_id WHERE sd.file_id = NEW.file_id AND d.end_offset > NEW.size) BEGIN SELECT RAISE(ABORT, 'source file size excludes stored range'); END;
+CREATE TABLE source_types (
+ id INTEGER PRIMARY KEY,
+ type_key TEXT NOT NULL UNIQUE CHECK (length(type_key) > 0),
+ resolved_key TEXT NOT NULL,
+ alias INTEGER NOT NULL CHECK (alias IN (0, 1)),
+ file_id INTEGER NOT NULL REFERENCES source_files(file_id),
+ range_id INTEGER NOT NULL,
+ FOREIGN KEY (range_id, file_id) REFERENCES source_ranges(id, file_id),
+ UNIQUE (id, file_id),
+ UNIQUE (id, type_key)
+) STRICT;
+CREATE TABLE source_fields (
+ id INTEGER PRIMARY KEY,
+ type_id INTEGER NOT NULL,
+ file_id INTEGER NOT NULL REFERENCES source_files(file_id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ range_id INTEGER NOT NULL,
+ embedded INTEGER NOT NULL CHECK (embedded IN (0, 1)),
+ type_text TEXT NOT NULL,
+ type_key TEXT,
+ target_type_id INTEGER,
+ FOREIGN KEY (type_id, file_id) REFERENCES source_types(id, file_id),
+ FOREIGN KEY (range_id, file_id) REFERENCES source_ranges(id, file_id),
+ FOREIGN KEY (target_type_id, type_key) REFERENCES source_types(id, type_key),
+ CHECK (target_type_id IS NULL OR type_key IS NOT NULL),
+ UNIQUE (type_id, ordinal)
+) STRICT;
+CREATE INDEX source_fields_target ON source_fields(target_type_id);
+CREATE TABLE source_field_names (
+ field_id INTEGER NOT NULL REFERENCES source_fields(id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ name TEXT NOT NULL CHECK (length(name) > 0),
+ PRIMARY KEY (field_id, ordinal)
+) STRICT;
+CREATE TABLE source_declarations (
+ declaration_id INTEGER PRIMARY KEY,
+ file_id INTEGER NOT NULL REFERENCES source_files(file_id),
+ kind TEXT NOT NULL CHECK (kind IN ('function', 'method')),
+ receiver_type_id INTEGER REFERENCES source_types(id),
+ sha256 TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+ FOREIGN KEY (declaration_id, file_id) REFERENCES declarations(id, file_id),
+ CHECK ((kind = 'method') = (receiver_type_id IS NOT NULL)),
+ UNIQUE (declaration_id, file_id)
+) STRICT;
+CREATE INDEX source_declarations_receiver ON source_declarations(receiver_type_id);
+CREATE TRIGGER source_declarations_file_bounds BEFORE INSERT ON source_declarations WHEN (SELECT end_offset FROM declarations WHERE id = NEW.declaration_id) > (SELECT size FROM source_files WHERE file_id = NEW.file_id) BEGIN SELECT RAISE(ABORT, 'source declaration exceeds file size'); END;
+CREATE TRIGGER source_declarations_file_bounds_update BEFORE UPDATE ON source_declarations WHEN (SELECT end_offset FROM declarations WHERE id = NEW.declaration_id) > (SELECT size FROM source_files WHERE file_id = NEW.file_id) BEGIN SELECT RAISE(ABORT, 'source declaration exceeds file size'); END;
+CREATE TRIGGER declarations_source_bounds_update BEFORE UPDATE OF end_offset ON declarations WHEN EXISTS (SELECT 1 FROM source_declarations sd JOIN source_files sf ON sf.file_id = sd.file_id WHERE sd.declaration_id = OLD.id AND NEW.end_offset > sf.size) BEGIN SELECT RAISE(ABORT, 'source declaration exceeds file size'); END;
+CREATE TABLE source_calls (
+ id INTEGER PRIMARY KEY,
+ declaration_id INTEGER NOT NULL,
+ file_id INTEGER NOT NULL REFERENCES source_files(file_id),
+ ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+ range_id INTEGER NOT NULL,
+ expression TEXT NOT NULL,
+ resolution TEXT NOT NULL CHECK (length(resolution) > 0),
+ target_declaration_id INTEGER REFERENCES source_declarations(declaration_id),
+ receiver_form TEXT NOT NULL CHECK (receiver_form IN ('', 'method-value-or-invocation', 'method-expression')),
+ receiver_range_id INTEGER,
+ binding_range_id INTEGER REFERENCES source_ranges(id),
+ binding_limit TEXT NOT NULL,
+ FOREIGN KEY (declaration_id, file_id) REFERENCES source_declarations(declaration_id, file_id),
+ FOREIGN KEY (range_id, file_id) REFERENCES source_ranges(id, file_id),
+ FOREIGN KEY (receiver_range_id, file_id) REFERENCES source_ranges(id, file_id),
+ CHECK (binding_range_id IS NULL OR receiver_range_id IS NOT NULL),
+ CHECK ((receiver_range_id IS NULL) = (receiver_form = '')),
+ UNIQUE (declaration_id, ordinal)
+) STRICT;
+CREATE INDEX source_calls_target ON source_calls(target_declaration_id);
+CREATE VIEW source_receiver_seeds AS
+ WITH case_links AS (
+  SELECT id AS case_id, primary_declaration_id AS declaration_id, 'primary' AS role FROM cases
+  UNION SELECT case_id, declaration_id, role FROM case_declarations
+ )
+ SELECT c.id AS case_id, c.smell, c.verdict, l.role, d.id AS declaration_id,
+        sd.receiver_type_id, t.type_key, d.symbol, f.path,
+        d.start_line, d.end_line, d.start_offset, d.end_offset, sd.sha256,
+        sf.sha256 AS file_sha256, sf.ordinary_target, sf.scope
+ FROM cases c JOIN case_links l ON l.case_id = c.id
+ JOIN declarations d ON d.id = l.declaration_id
+ JOIN source_declarations sd ON sd.declaration_id = d.id
+ JOIN source_types t ON t.id = sd.receiver_type_id
+ JOIN files f ON f.id = d.file_id JOIN source_files sf ON sf.file_id = f.id
+ WHERE c.suppressed = 0 AND c.smell <> 'prose-comment' AND sd.kind = 'method' AND sf.ordinary_target = 1;
+CREATE VIEW source_receiver_siblings AS
+ SELECT sd.receiver_type_id, t.type_key, d.id AS declaration_id, d.symbol, f.path,
+        d.start_line, d.end_line, d.start_offset, d.end_offset, sd.sha256,
+        sf.sha256 AS file_sha256, sf.ordinary_target, sf.generated, sf.scope
+ FROM source_declarations sd JOIN declarations d ON d.id = sd.declaration_id
+ JOIN source_types t ON t.id = sd.receiver_type_id
+ JOIN files f ON f.id = d.file_id JOIN source_files sf ON sf.file_id = f.id
+ WHERE sd.kind = 'method' AND sd.receiver_type_id IN (SELECT receiver_type_id FROM source_receiver_seeds);
+CREATE VIEW source_storage_paths AS
+ WITH RECURSIVE paths(receiver_type_id, owner_type_id, field_id, target_type_id, depth, field_path, type_path, relation) AS (
+  SELECT roots.receiver_type_id, f.type_id AS owner_type_id, f.id AS field_id, f.target_type_id, 1 AS depth,
+         '/' || f.id || '/' AS field_path, '/' || f.type_id || '/' || COALESCE(f.target_type_id || '/', '') AS type_path,
+         CASE WHEN f.embedded = 0 THEN 'held-field'
+              WHEN f.target_type_id IS NULL THEN 'unresolved-embedding'
+              WHEN f.target_type_id = f.type_id THEN 'cycle-boundary'
+              ELSE 'declared-embedding' END AS relation
+  FROM (SELECT DISTINCT receiver_type_id FROM source_receiver_seeds) roots
+  JOIN source_fields f ON f.type_id = roots.receiver_type_id
+  UNION ALL
+  SELECT p.receiver_type_id, f.type_id, f.id, f.target_type_id, p.depth + 1,
+         p.field_path || f.id || '/', p.type_path || COALESCE(f.target_type_id || '/', ''),
+         CASE WHEN f.embedded = 0 THEN 'held-field'
+              WHEN f.target_type_id IS NULL THEN 'unresolved-embedding'
+              WHEN instr(p.type_path, '/' || f.target_type_id || '/') > 0 THEN 'cycle-boundary'
+              ELSE 'declared-embedding' END
+  FROM paths p JOIN source_fields f ON f.type_id = p.target_type_id
+  WHERE p.relation = 'declared-embedding'
+ )
+ SELECT p.receiver_type_id, p.owner_type_id, p.field_id, p.target_type_id, p.depth,
+        CAST(p.field_path AS TEXT) AS field_path, p.relation, t.type_key AS owner_type, f.ordinal, f.embedded,
+        f.type_text, f.type_key AS field_type, fp.path, r.start_line, r.end_line,
+        r.start_offset, r.end_offset, r.sha256, sf.sha256 AS file_sha256
+ FROM paths p JOIN source_fields f ON f.id = p.field_id
+ JOIN source_types t ON t.id = p.owner_type_id JOIN source_ranges r ON r.id = f.range_id
+ JOIN files fp ON fp.id = r.file_id JOIN source_files sf ON sf.file_id = fp.id;
+CREATE VIEW source_one_hop_calls AS
+ SELECT caller.receiver_type_id, c.id AS call_id, c.declaration_id, caller.symbol AS caller_symbol,
+        c.ordinal, c.expression, c.resolution,
+        CASE WHEN c.target_declaration_id IS NULL THEN 'unresolved' ELSE 'local-one-hop' END AS relation,
+        f.path, r.start_line, r.end_line, r.start_offset, r.end_offset, r.sha256,
+        sf.sha256 AS file_sha256, c.target_declaration_id, target.symbol AS target_symbol,
+        tf.path AS target_path, target.start_line AS target_start_line, target.end_line AS target_end_line,
+        target.start_offset AS target_start_offset, target.end_offset AS target_end_offset,
+        td.sha256 AS target_sha256, tsf.sha256 AS target_file_sha256,
+        c.receiver_form, c.receiver_range_id, c.binding_range_id, c.binding_limit
+ FROM source_calls c JOIN source_receiver_siblings caller ON caller.declaration_id = c.declaration_id
+ JOIN source_ranges r ON r.id = c.range_id JOIN files f ON f.id = r.file_id
+ JOIN source_files sf ON sf.file_id = f.id
+ LEFT JOIN declarations target ON target.id = c.target_declaration_id
+ LEFT JOIN source_declarations td ON td.declaration_id = target.id
+ LEFT JOIN files tf ON tf.id = target.file_id LEFT JOIN source_files tsf ON tsf.file_id = tf.id;

@@ -124,9 +124,7 @@ func (s *tangleScan) site(condition ast.Expr, comparisons []tangleComparison) Ta
 	return site
 }
 func (s *tangleScan) receipt(kind string, node ast.Node) Source {
-	receipt := s.owner.source(kind, node.Pos(), node.End(), Detail{Subject: s.owner.symbol})
-	receipt.Spelling = string(s.owner.file.data[receipt.StartOffset:receipt.EndOffset])
-	return receipt
+	return s.owner.nodeSource(kind, node, Detail{Subject: s.owner.symbol})
 }
 
 type tangleWrites struct {

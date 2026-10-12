@@ -45,7 +45,7 @@ func TestConsolidationCLIAndOrdinaryMode(t *testing.T) {
 	h := &testHarness{T: t}
 	dir := h.fixture(guardedPrelude + `func another(x *Item){if x.Quality<50{x.Quality++}}`)
 	var out, stderr bytes.Buffer
-	code := Run([]string{"--staged", "--no-history", "--output", filepath.Join(dir, "cli.sqlite")}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
+	code := Run([]string{"--no-history", "--output", filepath.Join(t.TempDir(), "cli.sqlite")}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
 	require.Equal(t, 1, code, stderr.String())
 	for _, text := range []string{"Stage Consolidate Shared Behavior: active", consolidationTask, guardedUpdateKind} {
 		require.Contains(t, out.String(), text)

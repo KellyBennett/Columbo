@@ -67,7 +67,7 @@ func TestStagedNestedCollectorAndLegacyMode(t *testing.T) {
 	require.Equal(t, 1, report.Stages[0].issues["nested-field-decision"])
 	checkStageSnapshot(t, h, report, 1, "Collector nested-field-decision: 1 issues")
 	var out, stderr bytes.Buffer
-	code := Run([]string{"--staged", "--no-history", "--output", filepath.Join(dir, "cli.sqlite")}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
+	code := Run([]string{"--no-history", "--output", filepath.Join(t.TempDir(), "cli.sqlite")}, Invocation{Dir: dir, Stdout: &out, Stderr: &stderr})
 	require.Equal(t, 1, code, stderr.String())
 	require.Contains(t, out.String(), "Stage Untangle Behavior: active")
 }

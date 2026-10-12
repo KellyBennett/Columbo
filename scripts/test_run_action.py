@@ -9,15 +9,19 @@ RUNNER = Path(__file__).with_name('run-action.sh').resolve()
 
 
 class ActionRunnerTests(unittest.TestCase):
-    def run_case(self, analysis_exit, build_exit=0, staged=False):
+    def run_case(self, analysis_exit, build_exit=0, staged=None):
         with tempfile.TemporaryDirectory(prefix='columbo action ') as directory:
             root = Path(directory)
             (root / 'module').mkdir()
             analyzer = root / 'analyzer'
             analyzer.write_text('#!/bin/bash\n'
                                 'test "$PWD" = "$GITHUB_WORKSPACE/module" || exit 2\n'
+                                'test "$1" = --output || exit 2\n'
+                                'test "$3" = --config || exit 2\n'
                                 'test "$4" = "settings with spaces.yml" || exit 2\n'
-                                'test "${COLUMBO_STAGED}" != true || test "$5" = --staged || exit 2\n'
+                                'test "$5" = "--staged=${EXPECTED_STAGED}" || exit 2\n'
+                                'test "$6" = ./... || exit 2\n'
+                                'test "$#" = 6 || exit 2\n'
                                 'printf evidence > "$2"\n'
                                 'echo "analysis completed"\n'
                                 f'exit {analysis_exit}\n')
@@ -33,7 +37,11 @@ class ActionRunnerTests(unittest.TestCase):
                        RUNNER_TEMP=str(root), GITHUB_OUTPUT=str(output),
                        GITHUB_SHA='abc', GITHUB_ACTION_PATH=str(root),
                        GITHUB_WORKSPACE=str(root), COLUMBO_WORKING_DIRECTORY='module',
-                       COLUMBO_CONFIG='settings with spaces.yml', FAKE_ANALYZER=str(analyzer), COLUMBO_STAGED=str(staged).lower())
+                       COLUMBO_CONFIG='settings with spaces.yml', FAKE_ANALYZER=str(analyzer),
+                       EXPECTED_STAGED='true' if staged is None else str(staged).lower())
+            env.pop('COLUMBO_STAGED', None)
+            if staged is not None:
+                env['COLUMBO_STAGED'] = str(staged).lower()
             result = subprocess.run(['bash', str(RUNNER)], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             outputs = dict(line.split('=', 1) for line in output.read_text().splitlines())
@@ -47,8 +55,18 @@ class ActionRunnerTests(unittest.TestCase):
             if not build_exit:
                 self.assertIn('analysis completed', (evidence / 'report.txt').read_text())
 
-    def test_staged_mode_is_forwarded(self):
+    def test_default_staged_mode_is_forwarded(self):
+        self.run_case(1)
+
+    def test_explicit_staged_mode_is_forwarded(self):
         self.run_case(1, staged=True)
+
+    def test_diagnostic_mode_is_forwarded(self):
+        self.run_case(1, staged=False)
+
+    def test_action_declares_staged_default(self):
+        action = RUNNER.parent.parent / 'action.yml'
+        self.assertRegex(action.read_text(), r"(?m)^  staged:\n    description: [^\n]+\n    default: 'true'$")
 
     def test_clean_analysis(self):
         self.run_case(0)

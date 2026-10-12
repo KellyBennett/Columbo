@@ -47,6 +47,7 @@ func (t *testHarness) allSmellsReport() Report {
 	t.noError(err)
 	config := Defaults()
 	config.History = false
+	config.Staged = false
 	return t.investigate(dir, config)
 }
 
@@ -185,22 +186,25 @@ func (result commandResult) requireFailure(t *testHarness) {
 }
 func (t *testHarness) checkCLISnapshotPublication() {
 	dir := t.fixture(cliFindingSource)
+	t.Setenv("TMPDIR", t.TempDir())
 	for _, name := range []string{"", "chosen.sqlite"} {
 		t.checkCLIOutputSelection(dir, name)
 	}
 }
 func (t *testHarness) checkCLIOutputSelection(dir, name string) {
-	args := []string{"--no-history"}
+	args := []string{"--staged=false", "--no-history"}
+	path := ""
 	if name != "" {
-		args = append(args, "--output="+name)
+		path = filepath.Join(t.TempDir(), name)
+		args = append(args, "--output="+path)
 	}
 	result := t.runCLI(dir, args...)
 	t.equal(1, result.code, result.stderr)
-	path := filepath.Join(dir, name)
 	if name == "" {
-		path = t.onlyDefaultSnapshot(dir)
+		path = t.onlyDefaultSnapshot(os.TempDir())
 	}
 	t.checkPublishedSummary(path, result.stdout)
+	t.empty(t.defaultSnapshots(dir), "snapshot publication must not change the source tree")
 	t.empty(result.stderr)
 }
 func (t *testHarness) defaultSnapshots(dir string) []string {
@@ -223,15 +227,18 @@ func TestCLIRepeatedRunsCreateFreshSnapshots(t *testing.T) {
 }
 func (t *testHarness) checkRepeatedRunsCreateFreshSnapshots() {
 	dir := t.fixture(cliFindingSource)
-	first := t.runCLI(dir, "--no-history")
+	outputDir := t.TempDir()
+	t.Setenv("TMPDIR", outputDir)
+	first := t.runCLI(dir, "--staged=false", "--no-history")
 	t.equal(1, first.code, first.stderr)
-	previous := t.onlyDefaultSnapshot(dir)
+	previous := t.onlyDefaultSnapshot(outputDir)
 	before := t.read(previous)
-	second := t.runCLI(dir, "--no-history")
+	second := t.runCLI(dir, "--staged=false", "--no-history")
 	t.equal(1, second.code, second.stderr)
-	t.checkNewDefaultSnapshot(dir, previous, second.stdout)
+	t.checkNewDefaultSnapshot(outputDir, previous, second.stdout)
 	t.equal(before, t.read(previous), "earlier snapshots must remain unchanged")
 	t.checkPublishedSummary(previous, first.stdout)
+	t.empty(t.defaultSnapshots(dir), "snapshot publication must not change the source tree")
 }
 func (t *testHarness) checkNewDefaultSnapshot(dir, previous string, stdout []byte) {
 	paths := t.defaultSnapshots(dir)
@@ -247,10 +254,10 @@ func TestCLIExplicitExistingSnapshotRefused(t *testing.T) {
 }
 func (t *testHarness) checkExplicitExistingSnapshotRefused() {
 	dir := t.fixture(cliFindingSource)
-	path := filepath.Join(dir, "chosen.sqlite")
-	t.equal(1, t.runCLI(dir, "--no-history", "--output="+path).code)
+	path := filepath.Join(t.TempDir(), "chosen.sqlite")
+	t.equal(1, t.runCLI(dir, "--staged=false", "--no-history", "--output="+path).code)
 	before := t.read(path)
-	result := t.runCLI(dir, "--no-history", "--output="+path)
+	result := t.runCLI(dir, "--staged=false", "--no-history", "--output="+path)
 	result.requireFailure(t)
 	t.contains(result.stderr, "choose a fresh output path")
 	t.equal(before, t.read(path))
@@ -274,9 +281,10 @@ func (t *testHarness) checkPublishedManifest(db *sql.DB) {
 func TestCLIPrepublicationFailure(t *testing.T) { (&testHarness{T: t}).checkCLIPrepublicationFailure() }
 func (t *testHarness) checkCLIPrepublicationFailure() {
 	dir := t.fixture(cliFindingSource)
-	path := filepath.Join(dir, "reserved.sqlite")
+	outputDir := t.TempDir()
+	path := filepath.Join(outputDir, "reserved.sqlite")
 	original := "unrelated data must remain untouched"
-	t.write(dir, "reserved.sqlite", original)
+	t.write(outputDir, "reserved.sqlite", original)
 	t.runCLI(dir, "--no-history", "--output="+path).requireFailure(t)
 	t.equal([]byte(original), t.read(path))
 }
@@ -285,17 +293,18 @@ func TestCLISummaryWriteFailureKeepsSnapshot(t *testing.T) {
 }
 func (t *testHarness) checkCLISummaryWriteFailure() {
 	dir := t.fixture(cliFindingSource)
-	t.checkFailingSummarySink(dir)
-	db, err := openTestSnapshot(filepath.Join(dir, "summary.sqlite"))
+	path := filepath.Join(t.TempDir(), "summary.sqlite")
+	t.checkFailingSummarySink(dir, path)
+	db, err := openTestSnapshot(path)
 	t.noError(err, "summary delivery failure occurs after complete publication")
 	defer db.Close()
 	t.equal(1, t.sqlCount(db, `SELECT failed FROM summary`))
 	t.equal([]string{"dev"}, t.sqlStrings(db, `SELECT columbo_version FROM report`))
 }
-func (t *testHarness) checkFailingSummarySink(dir string) {
+func (t *testHarness) checkFailingSummarySink(dir, path string) {
 	var stderr bytes.Buffer
 	sink := &brokenSink{}
-	code := Run([]string{"--no-history", "--output=summary.sqlite"}, Invocation{Dir: dir, Stdout: sink, Stderr: &stderr})
+	code := Run([]string{"--staged=false", "--no-history", "--output=" + path}, Invocation{Dir: dir, Stdout: sink, Stderr: &stderr})
 	t.equal(2, code)
 	t.equal(3, sink.accepted)
 	t.contains(stderr.String(), "sink failure")
@@ -305,13 +314,16 @@ func TestCLIFailureLeavesPriorSnapshot(t *testing.T) {
 }
 func (t *testHarness) checkCLIFailureLeavesPriorSnapshot() {
 	dir := t.fixture(cliFindingSource)
-	t.equal(1, t.runCLI(dir, "--no-history").code)
-	path := t.onlyDefaultSnapshot(dir)
+	outputDir := t.TempDir()
+	t.Setenv("TMPDIR", outputDir)
+	t.equal(1, t.runCLI(dir, "--staged=false", "--no-history").code)
+	path := t.onlyDefaultSnapshot(outputDir)
 	before := t.read(path)
 	t.write(dir, "bad.go", "package fixture\nvar X=missing\n")
 	t.runCLI(dir, "--no-history").requireFailure(t)
 	t.equal(before, t.read(path))
-	t.length(t.defaultSnapshots(dir), 1)
+	t.length(t.defaultSnapshots(outputDir), 1)
+	t.empty(t.defaultSnapshots(dir), "snapshot publication must not change the source tree")
 }
 
 func TestStoredSummaryWithoutAnalysis(t *testing.T) {
@@ -623,12 +635,14 @@ func TestCLIUnusedSuppressionWarning(t *testing.T) {
 func (t *testHarness) TestCLIUnusedSuppressionWarning() {
 	source := "package fixture\n// columbo:ignore long-parameter-list -- kept for compatibility review\nfunc F(a,b int){}\n"
 	dir := t.fixture(source)
+	outputDir := t.TempDir()
+	t.Setenv("TMPDIR", outputDir)
 	result := t.runCLI(dir, "--no-history")
 	message := "Unused suppression for long-parameter-list on fixture.F."
 	t.equal(0, result.code)
 	t.equal(message+"\n", result.stderr)
 	t.contains(string(result.stdout), message)
-	t.checkUnusedSuppressionSnapshot(t.onlyDefaultSnapshot(dir))
+	t.checkUnusedSuppressionSnapshot(t.onlyDefaultSnapshot(outputDir))
 }
 func (t *testHarness) checkUnusedSuppressionSnapshot(path string) {
 	db, err := openTestSnapshot(path)
@@ -681,17 +695,18 @@ func TestAdvisoryPublicationIsAtomic(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.sqlite")
 	require.Error(t, WriteSnapshot(path, report, "test"))
 	_, err = os.Stat(path)
-	require.True(t, os.IsNotExist(err))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 func TestAdvisoryCLIUsesOneSnapshot(t *testing.T) {
 	h := &testHarness{T: t}
 	dir := h.fixture(tanglePrelude + tangleBody)
-	result := h.runCLI(dir, "--no-history", "--output=report.sqlite")
+	path := filepath.Join(t.TempDir(), "report.sqlite")
+	result := h.runCLI(dir, "--no-history", "--output="+path)
 	require.NotEqual(t, 2, result.code, result.stderr)
 	require.Contains(t, string(result.stdout), "nested-field-decision")
-	entries, err := filepath.Glob(filepath.Join(dir, "report.sqlite*"))
+	entries, err := filepath.Glob(path + "*")
 	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(dir, "report.sqlite")}, entries)
+	require.Equal(t, []string{path}, entries)
 	for _, flag := range []string{"--tangles-output", "--choice-sets-output"} {
 		rejected := h.runCLI(dir, flag, "unused.json")
 		require.Equal(t, 2, rejected.code)

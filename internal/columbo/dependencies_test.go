@@ -3,9 +3,11 @@ package columbo
 import (
 	"go/token"
 	"go/types"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type dependencyScenario struct {
@@ -30,7 +32,7 @@ func F(){s:=os.Getenv("X");s=strings.TrimSpace(s);n,_:=strconv.Atoi(s);_=filepat
 	{"alias and generic owners", `package fixture
 import("bytes";"sync/atomic")
 type Buffer = bytes.Buffer
-func F(p *atomic.Pointer[Buffer]){_=p.Load()}`, []string{"type:bytes.Buffer", "type:sync/atomic.Pointer[T any]", "type:sync/atomic.Pointer[bytes.Buffer]"}, false},
+func F(p *atomic.Pointer[Buffer]){_=p.Load()}`, []string{"type:bytes.Buffer", "type:sync/atomic.Pointer[bytes.Buffer]"}, false},
 	{"nonempty interface", `package fixture
 func F(s interface{Run()error}){_=s.Run()}`, []string{"interface:interface{Run() error}"}, false},
 	{"named interface", `package fixture
@@ -61,12 +63,12 @@ func dependencyConfig() Config {
 }
 func (h *testHarness) loadDependencyFixture(dir string, config Config) *engine {
 	engine, err := load(dir, []string{"./..."}, config)
-	h.require(err == nil, err)
+	require.NoError(h.T, err)
 	return engine
 }
 func (h *testHarness) dependencyMeasurement(engine *engine, declaration *declaration, want []string) {
 	declaration.measure(engine)
-	h.require(reflect.DeepEqual(sortedSet(declaration.deps), want), declaration.deps)
+	require.Equal(h.T, want, sortedSet(declaration.deps))
 	h.repeatDependencyMeasurement(engine, declaration)
 	h.dependencyReceiptKinds(declaration)
 }
@@ -83,17 +85,17 @@ func (h *testHarness) repeatDependencyMeasurement(engine *engine, declaration *d
 	before := captureDependencies(declaration)
 	declaration.measure(engine)
 	after := captureDependencies(declaration)
-	h.require(reflect.DeepEqual(after.dependencies, before.dependencies), "measurement is not repeatable")
-	h.require(reflect.DeepEqual(after.complexity, before.complexity), "repeat measurement duplicated complexity receipts")
+	require.Equal(h.T, before.dependencies, after.dependencies, "measurement is not repeatable")
+	require.Equal(h.T, before.complexity, after.complexity, "repeat measurement duplicated complexity receipts")
 }
 func (h *testHarness) dependencyReceiptKinds(declaration *declaration) {
 	for _, receipt := range declaration.depReceipts {
-		h.require((receipt.Kind == "dependency") == declaration.deps[receipt.Detail.Subject], receipt)
+		require.Equal(h.T, declaration.deps[receipt.Detail.Subject], receipt.Kind == "dependency", "%+v", receipt)
 	}
 }
 func (h *testHarness) dependencyVerdict(report Report, fail bool) {
-	h.require((report.Summary.Failed > 0) == fail, report)
-	h.require(report.Summary.Suppressed == 0, report)
+	require.Equal(h.T, fail, report.Summary.Failed > 0, "%+v", report)
+	require.Zero(h.T, report.Summary.Suppressed, "%+v", report)
 }
 func (h *testHarness) dependencyInventory(declaration *declaration) {
 	inventory := map[string]bool{}
@@ -102,7 +104,9 @@ func (h *testHarness) dependencyInventory(declaration *declaration) {
 			inventory[receipt.Detail.Subject] = true
 		}
 	}
-	h.require(inventory["type:error"] && inventory["interface:interface{}"] && inventory["package:go/parser"], inventory)
+	for _, subject := range []string{"type:error", "interface:interface{}", "package:go/parser"} {
+		require.Contains(h.T, inventory, subject)
+	}
 }
 
 const cosmeticPlumbingSource = `package fixture
@@ -122,7 +126,7 @@ func (h *testHarness) cosmeticPlumbingReport(overlap float64) Report {
 }
 func (h *testHarness) TestCosmeticDependencyPlumbing() {
 	report := h.cosmeticPlumbingReport(.75)
-	h.require(len(report.Cases) == 0, "error and any must not create shared collaborator overlap", report)
+	require.Empty(h.T, report.Cases, "error and any must not create shared collaborator overlap: %+v", report)
 	c := h.one(h.cosmeticPlumbingReport(0), "cosmetic-extraction")
 	h.noScoredPlumbingOverlap(c)
 	h.cosmeticPlumbingInventory(c)
@@ -130,7 +134,7 @@ func (h *testHarness) TestCosmeticDependencyPlumbing() {
 func (h *testHarness) noScoredPlumbingOverlap(c Case) {
 	for _, clue := range c.Clues {
 		if clue.Kind == "dependency-overlap" {
-			h.require(clue.Value == float64(0), clue)
+			require.Equal(h.T, float64(0), clue.Value, "%+v", clue)
 		}
 	}
 }
@@ -141,7 +145,7 @@ func (h *testHarness) cosmeticPlumbingInventory(c Case) {
 			inventory = true
 		}
 	}
-	h.require(inventory, "cosmetic receipts lost plumbing evidence")
+	require.True(h.T, inventory, "cosmetic receipts lost plumbing evidence")
 }
 func TestCosmeticDependencyPlumbing(t *testing.T) {
 	(&testHarness{T: t}).TestCosmeticDependencyPlumbing()
@@ -162,19 +166,19 @@ func (t *testHarness) requirePublicDependencies() {
 	dir := t.fixture(helpersSource1)
 	deps := t.measuredDependencySets(dir)[0]
 	for _, want := range []string{"type:fixture.Interface", "type:bytes.Buffer", "type:fixture.Private", "type:fixture.Shared"} {
-		t.checkf(deps[want], "missing %s in %v", want, deps)
+		assert.True(t.T, deps[want], "missing %s in %v", want, deps)
 	}
 }
 func (t *testHarness) requirePrivateDependencyExemptions() {
 	t.Helper()
 	dir := t.fixture(strings.ReplaceAll(helpersSource1, "Private", "private"))
 	deps := t.measuredDependencySets(dir)[0]
-	t.require(!deps["type:fixture.private"], deps)
+	require.False(t.T, deps["type:fixture.private"], "%v", deps)
 	t.write(dir, "other.go", "package fixture\nvar P private\n")
 	sets := t.measuredDependencySets(dir)
-	t.require(len(sets) > 0, "missing measured declarations")
+	require.NotEmpty(t.T, sets, "missing measured declarations")
 	for _, deps := range sets {
-		t.require(!deps["type:fixture.private"], deps)
+		require.False(t.T, deps["type:fixture.private"], "%v", deps)
 	}
 }
 
@@ -184,7 +188,7 @@ func (t *testHarness) TestPrivateTypeDispersionIgnoresTests() {
 	t.write(dir, "two.go", "package fixture\nfunc Two(p private){_=p.N}\n")
 	t.write(dir, "private_test.go", "package fixture\nfunc testOnly(p private){_=p.N}\n")
 	report := t.investigate(dir, quiet())
-	t.require(len(report.Warnings) == 0, report)
+	require.Empty(t.T, report.Warnings, "%+v", report)
 }
 func TestPrivateTypeDispersionIgnoresTests(t *testing.T) {
 	(&testHarness{T: t}).TestPrivateTypeDispersionIgnoresTests()
@@ -195,10 +199,12 @@ func (t *testHarness) TestPrivateTypeDispersionWarning() {
 	t.write(dir, "one.go", "package fixture\nfunc One(p private){_=p.N}\n")
 	t.write(dir, "two.go", "package fixture\nfunc Two(p private){_=p.N}\n")
 	t.write(dir, "three.go", "package fixture\nfunc Three(p private){_=p}\n")
-	warning := t.investigate(dir, quiet()).Warnings[0]
-	t.require(warning.Code == "private-type-dispersion", warning)
-	t.require(strings.Contains(warning.Message, "spans 4 production files (limit: 3)"), warning)
-	t.require(strings.Contains(warning.Message, "2 cross-file direct field accesses"), warning)
+	warnings := t.investigate(dir, quiet()).Warnings
+	require.NotEmpty(t.T, warnings)
+	warning := warnings[0]
+	require.Equal(t.T, "private-type-dispersion", warning.Code)
+	require.Contains(t.T, warning.Message, "spans 4 production files (limit: 3)")
+	require.Contains(t.T, warning.Message, "2 cross-file direct field accesses")
 }
 func TestPrivateTypeDispersionWarning(t *testing.T) {
 	(&testHarness{T: t}).TestPrivateTypeDispersionWarning()

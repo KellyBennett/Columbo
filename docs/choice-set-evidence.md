@@ -7,7 +7,7 @@ columbo --output report.sqlite ./...
 sqlite3 -readonly report.sqlite < docs/sqlite/advisories.sql
 ```
 
-The snapshot stores group identities, constants, projection fields, declaration-linked sites, seed ordering, input expressions, source excerpts and refactoring leads. The CLI and GitHub summary read this saved evidence. Advisory groups do not independently add FAIL/WARN cases or alter the normal analysis verdict. See [SQLite evidence snapshots](sqlite-schema.md) for the relational schema and publication guarantees.
+The snapshot stores group identities, constants, projection fields, declaration-linked sites, seed ordering, input expressions, source excerpts and refactoring leads. The CLI and GitHub summary read this saved evidence. Advisory groups do not independently add FAIL/WARN cases or alter the normal analysis verdict.
 
 ## Evidence collected
 

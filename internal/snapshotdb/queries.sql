@@ -201,3 +201,81 @@ SELECT * FROM refactoring_stages ORDER BY ordinal;
 SELECT * FROM stage_collectors WHERE stage_id=? ORDER BY ordinal;
 -- name: ActiveStageAdvisories :many
 SELECT g.* FROM advisory_groups g JOIN active_stage_issues a ON a.id=g.id ORDER BY g.kind,g.id;
+
+-- name: InsertSourceScan :exec
+INSERT INTO source_scan(id,root,go_version,source_sha256) VALUES (1,?,?,?);
+-- name: InsertSourceEnvironment :exec
+INSERT INTO source_environment(name,value) VALUES (?,?);
+-- name: InsertSourcePattern :exec
+INSERT INTO source_patterns(ordinal,pattern) VALUES (?,?);
+-- name: InsertSourceFile :exec
+INSERT INTO source_files(file_id,sha256,size,package,selected_runtime,ordinary_target,generated,scope) VALUES (?,?,?,?,?,?,?,?);
+-- name: InsertSourceConfig :exec
+INSERT INTO source_config(config_path,config_file_id,config_sha256,staged,history,max_commits) VALUES (?,?,?,?,?,?);
+-- name: InsertSourceConfigSeverity :exec
+INSERT INTO source_config_severity(smell,severity) VALUES (?,?);
+-- name: InsertSourceConfigCount :exec
+INSERT INTO source_config_counts(name,value) VALUES (?,?);
+-- name: InsertSourceConfigRatio :exec
+INSERT INTO source_config_ratios(name,value) VALUES (?,?);
+-- name: InsertSourceConfigExclusion :exec
+INSERT INTO source_config_exclusions(ordinal,pattern) VALUES (?,?);
+-- name: InsertSourceRange :execlastid
+INSERT INTO source_ranges(file_id,start_line,end_line,start_offset,end_offset,sha256) VALUES (?,?,?,?,?,?);
+-- name: InsertSourceType :execlastid
+INSERT INTO source_types(type_key,resolved_key,alias,file_id,range_id) VALUES (?,?,?,?,?);
+-- name: InsertSourceField :execlastid
+INSERT INTO source_fields(type_id,file_id,ordinal,range_id,embedded,type_text,type_key,target_type_id) VALUES (?,?,?,?,?,?,?,?);
+-- name: InsertSourceFieldName :exec
+INSERT INTO source_field_names(field_id,ordinal,name) VALUES (?,?,?);
+-- name: InsertSourceDeclaration :exec
+INSERT INTO source_declarations(declaration_id,file_id,kind,receiver_type_id,sha256) VALUES (?,?,?,?,?);
+-- name: InsertSourceCall :exec
+INSERT INTO source_calls(declaration_id,file_id,ordinal,range_id,expression,resolution,target_declaration_id,receiver_form,receiver_range_id,binding_range_id,binding_limit) VALUES (?,?,?,?,?,?,?,?,?,?,?);
+-- name: InspectionDeclarationLocation :one
+SELECT file_id,start_line,end_line,start_offset,end_offset FROM declarations WHERE id=?;
+-- name: InspectionAvailable :one
+SELECT EXISTS(SELECT 1 FROM source_scan);
+
+-- name: InspectionIdentity :one
+SELECT s.root,s.go_version,s.source_sha256,c.config_path,c.config_sha256,c.staged,c.history,c.max_commits
+FROM source_scan s JOIN source_config c ON c.scan_id=s.id WHERE s.id=1;
+-- name: InspectionEnvironment :many
+SELECT name,value FROM source_environment ORDER BY name;
+-- name: InspectionPatterns :many
+SELECT ordinal,pattern FROM source_patterns ORDER BY ordinal;
+-- name: InspectionConfigSeverity :many
+SELECT smell,severity FROM source_config_severity ORDER BY smell;
+-- name: InspectionConfigCounts :many
+SELECT name,value FROM source_config_counts ORDER BY name;
+-- name: InspectionConfigRatios :many
+SELECT name,value FROM source_config_ratios ORDER BY name;
+-- name: InspectionConfigExclusions :many
+SELECT ordinal,pattern FROM source_config_exclusions ORDER BY ordinal;
+-- name: InspectionFiles :many
+SELECT f.id AS file_id,f.path,s.sha256,s.size,s.package,s.selected_runtime,s.ordinary_target,s.generated,s.scope
+FROM source_files s JOIN files f ON f.id=s.file_id ORDER BY f.path;
+-- name: InspectionReceiverSeeds :many
+SELECT * FROM source_receiver_seeds ORDER BY type_key,case_id,path,start_offset,role;
+-- name: InspectionSiblings :many
+SELECT * FROM source_receiver_siblings WHERE receiver_type_id=sqlc.arg(receiver_type_id) ORDER BY path,start_offset,symbol;
+-- name: InspectionStoragePaths :many
+SELECT * FROM source_storage_paths WHERE receiver_type_id=sqlc.arg(receiver_type_id) ORDER BY field_path;
+-- name: InspectionFieldNames :many
+SELECT ordinal,name FROM source_field_names WHERE field_id=? ORDER BY ordinal;
+-- name: InspectionCalls :many
+SELECT * FROM source_one_hop_calls WHERE receiver_type_id=sqlc.arg(receiver_type_id) ORDER BY path,start_offset,ordinal;
+-- name: InspectionRange :one
+SELECT f.path,sf.sha256 AS file_sha256,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256
+FROM source_ranges r JOIN files f ON f.id=r.file_id JOIN source_files sf ON sf.file_id=f.id WHERE r.id=?;
+-- name: InspectionTypes :many
+SELECT t.id,t.type_key,t.resolved_key,t.alias,f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256,sf.sha256 AS file_sha256
+FROM source_types t JOIN source_ranges r ON r.id=t.range_id JOIN files f ON f.id=t.file_id JOIN source_files sf ON sf.file_id=t.file_id
+ORDER BY t.type_key;
+-- name: InspectionFields :many
+SELECT f.id,f.ordinal,f.embedded,f.type_text,f.type_key,f.target_type_id,r.start_line,r.end_line,r.start_offset,r.end_offset,r.sha256
+FROM source_fields f JOIN source_ranges r ON r.id=f.range_id WHERE f.type_id=sqlc.arg(type_id) ORDER BY f.ordinal;
+-- name: InspectionDeclarations :many
+SELECT d.id,d.symbol,f.path,d.start_line,d.end_line,d.start_offset,d.end_offset,s.kind,s.receiver_type_id,s.sha256,sf.sha256 AS file_sha256
+FROM source_declarations s JOIN declarations d ON d.id=s.declaration_id JOIN files f ON f.id=d.file_id JOIN source_files sf ON sf.file_id=f.id
+ORDER BY f.path,d.start_offset,d.symbol;

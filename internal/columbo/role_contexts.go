@@ -3,6 +3,7 @@ package columbo
 import (
 	"go/ast"
 	"go/types"
+	"maps"
 )
 
 func (a *engine) selectionRole(c *Case, site *selectionSite) { a.recordRole(site.roleGroup(), c) }
@@ -184,6 +185,7 @@ func (s *branchRoleScan) group(arms []roleArm) *roleGroup {
 	return g
 }
 func (g *roleGroup) include(other *roleGroup) {
+	maps.Copy(g.roles, other.roles)
 	for key, player := range other.players {
 		g.includePlayer(key, player)
 	}
