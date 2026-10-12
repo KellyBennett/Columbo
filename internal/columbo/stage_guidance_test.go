@@ -13,18 +13,20 @@ func TestReviewTaskGuidanceContract(t *testing.T) {
 			for _, obligation := range []string{
 				"source-backed review obligations, not edit or count targets",
 				"Attempt observable characterization on unchanged code before claiming blocked",
-				"prerequisite exceptions",
-				"honest changed/validated, retained or unresolved dispositions",
+				"identify the specific indispensable unavailable prerequisite",
+				"explain why it prevents a safe local oracle",
+				"changed/validated, intentionally retained or unresolved dispositions with evidence",
+				"work not reached is not reviewed retention",
 				"Do not suppress findings",
 				"Later review after current-phase dispositions",
 				"never clears locked tool stages or CI",
-				"docs/refactoring-stages.md#review-guidance",
 			} {
 				require.Contains(t, definition.task, obligation)
 			}
 			require.Equal(t, 1, strings.Count(definition.task, reviewTask))
 			require.NotContains(t, definition.task, "remove the current collector findings")
 			require.NotContains(t, definition.task, "Resolve the current collector evidence")
+			require.NotContains(t, definition.task, "docs/refactoring-stages.md", "review obligations must be self-contained")
 		})
 	}
 	require.Contains(t, untangleTask, "temporary duplication is acceptable")
@@ -98,5 +100,5 @@ func TestReviewGuidanceRendersOnlyActiveTask(t *testing.T) {
 	require.NotContains(t, string(rendered), consolidationTask)
 	require.Contains(t, string(rendered), "Stage Assign Ownership: locked")
 	require.Contains(t, string(rendered), "Stage Consolidate Shared Behavior: locked")
-	require.Equal(t, 3, h.sqlCount(db, "SELECT count(*) FROM refactoring_stages WHERE task LIKE '%docs/refactoring-stages.md#review-guidance%'"))
+	require.Equal(t, 3, h.sqlCount(db, "SELECT count(*) FROM refactoring_stages WHERE task LIKE ?", "%"+reviewTask+"%"))
 }

@@ -33,7 +33,7 @@ func TestInspectionSnapshotRejectsUnboundIdentity(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "rejected.sqlite")
 			require.Error(t, WriteSnapshot(path, changed, "test"))
 			_, err := os.Stat(path)
-			require.True(t, os.IsNotExist(err), "invalid inspection snapshot was published")
+			require.ErrorIs(t, err, os.ErrNotExist, "invalid inspection snapshot was published")
 		})
 	}
 }
@@ -63,17 +63,12 @@ func TestInspectionSnapshotPreservesRepeatedBlankFieldNames(t *testing.T) {
 	q := inspectionSQLReader(t, inspectionSQLAnalyze(t, root, ""))
 	types, err := q.InspectionTypes(context.Background())
 	require.NoError(t, err)
-	for _, typ := range types {
-		if typ.TypeKey != "fixture.Padding" {
-			continue
-		}
-		fields, err := q.InspectionFields(context.Background(), snapshotdb.InspectionFieldsParams{TypeID: typ.ID})
-		require.NoError(t, err)
-		require.Len(t, fields, 1)
-		names, err := q.InspectionFieldNames(context.Background(), snapshotdb.InspectionFieldNamesParams{FieldID: fields[0].ID})
-		require.NoError(t, err)
-		require.Equal(t, []snapshotdb.InspectionFieldNamesRow{{Ordinal: 0, Name: "_"}, {Ordinal: 1, Name: "_"}}, names)
-		return
-	}
-	t.Fatal("missing Padding source type")
+	index := slices.IndexFunc(types, func(typ snapshotdb.InspectionTypesRow) bool { return typ.TypeKey == "fixture.Padding" })
+	require.NotEqual(t, -1, index, "missing Padding source type")
+	fields, err := q.InspectionFields(context.Background(), snapshotdb.InspectionFieldsParams{TypeID: types[index].ID})
+	require.NoError(t, err)
+	require.Len(t, fields, 1)
+	names, err := q.InspectionFieldNames(context.Background(), snapshotdb.InspectionFieldNamesParams{FieldID: fields[0].ID})
+	require.NoError(t, err)
+	require.Equal(t, []snapshotdb.InspectionFieldNamesRow{{Ordinal: 0, Name: "_"}, {Ordinal: 1, Name: "_"}}, names)
 }

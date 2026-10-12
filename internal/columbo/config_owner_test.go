@@ -3,12 +3,13 @@ package columbo
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"syscall"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfigOwnerDecodeContract(t *testing.T) {
@@ -32,9 +33,7 @@ func TestConfigOwnerDecodeContract(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yml")
 			data := []byte(tc.data)
-			if err := os.WriteFile(path, data, 0600); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, os.WriteFile(path, data, 0600))
 			want := Defaults()
 			want.Counts["function-lines"] = tc.count
 			want.Severity["long-function"] = tc.severity
@@ -42,75 +41,64 @@ func TestConfigOwnerDecodeContract(t *testing.T) {
 			for _, explicit := range []bool{false, true} {
 				ordinary, ordinaryError := LoadConfig(path, explicit)
 				captured, hash, capturedError := loadInspectionConfig(path, explicit)
-				if !reflect.DeepEqual(ordinary, want) || !reflect.DeepEqual(captured, want) {
-					t.Fatalf("partial/default config mismatch: %#v %#v", ordinary, captured)
-				}
-				if hash != hex.EncodeToString(sum[:]) {
-					t.Fatalf("captured-byte hash mismatch: %q", hash)
-				}
+				assert.Equal(t, want, ordinary, "ordinary partial/default configuration")
+				assert.Equal(t, want, captured, "captured partial/default configuration")
+				assert.Equal(t, hex.EncodeToString(sum[:]), hash, "hash of captured bytes")
 				for _, err := range []error{ordinaryError, capturedError} {
 					if tc.message == "" {
-						if err != nil {
-							t.Fatal(err)
-						}
-						continue
-					}
-					if err == nil || err.Error() != tc.message {
-						t.Fatalf("error %v, want %q", err, tc.message)
+						assert.NoError(t, err)
+					} else {
+						assert.EqualError(t, err, tc.message)
 					}
 				}
-				if reflect.TypeOf(ordinaryError) != reflect.TypeOf(capturedError) {
-					t.Fatal("error type changed")
-				}
+				assert.IsType(t, ordinaryError, capturedError, "configuration error type")
 			}
 			got, err := os.ReadFile(path)
-			if err != nil || !reflect.DeepEqual(got, data) {
-				t.Fatal("input bytes changed")
-			}
+			require.NoError(t, err)
+			assert.Equal(t, data, got, "configuration input bytes must not change")
 		})
 	}
 }
 
 func TestConfigOwnerReadContract(t *testing.T) {
-	for _, directory := range []bool{false, true} {
-		path := filepath.Join(t.TempDir(), "config.yml")
-		if directory {
-			if err := os.Mkdir(path, 0700); err != nil {
-				t.Fatal(err)
+	for _, tc := range []struct {
+		name      string
+		directory bool
+		explicit  bool
+		wantError error
+	}{
+		{name: "implicit-missing"},
+		{name: "explicit-missing", explicit: true, wantError: syscall.ENOENT},
+		{name: "implicit-directory", directory: true, wantError: syscall.EISDIR},
+		{name: "explicit-directory", directory: true, explicit: true, wantError: syscall.EISDIR},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yml")
+			if tc.directory {
+				require.NoError(t, os.Mkdir(path, 0700))
 			}
-		}
-		for _, explicit := range []bool{false, true} {
-			ordinary, ordinaryError := LoadConfig(path, explicit)
-			captured, hash, capturedError := loadInspectionConfig(path, explicit)
-			if hash != "" || !reflect.DeepEqual(ordinary, Defaults()) || !reflect.DeepEqual(captured, Defaults()) {
-				t.Fatal("read failure changed defaults or absent hash")
-			}
+			ordinary, ordinaryError := LoadConfig(path, tc.explicit)
+			captured, hash, capturedError := loadInspectionConfig(path, tc.explicit)
+			assert.Empty(t, hash, "unreadable configuration must not have a captured hash")
+			assert.Equal(t, Defaults(), ordinary)
+			assert.Equal(t, Defaults(), captured)
 			for _, err := range []error{ordinaryError, capturedError} {
-				if !directory && !explicit {
-					if err != nil {
-						t.Fatal(err)
-					}
+				if tc.wantError == nil {
+					assert.NoError(t, err)
 					continue
 				}
 				var pe *os.PathError
-				if !errors.As(err, &pe) || pe.Path != path {
-					t.Fatalf("original path error missing: %v", err)
-				}
-				want := error(syscall.ENOENT)
-				if directory {
-					want = syscall.EISDIR
-				}
-				if !errors.Is(err, want) {
-					t.Fatalf("original errno missing: %v", err)
-				}
+				require.ErrorAs(t, err, &pe, "original path error")
+				assert.Equal(t, path, pe.Path)
+				assert.ErrorIs(t, err, tc.wantError, "original errno")
 			}
-			if ordinaryError != nil && ordinaryError.Error() != capturedError.Error() {
-				t.Fatal("read error text changed")
+			if ordinaryError != nil {
+				assert.EqualError(t, capturedError, ordinaryError.Error(), "read error text")
 			}
+			require.NotNil(t, ordinary.Counts)
 			ordinary.Counts["function-lines"] = 999
-			if captured.Counts["function-lines"] != 10 || Defaults().Counts["function-lines"] != 10 {
-				t.Fatal("defaults share mutable maps")
-			}
-		}
+			assert.Equal(t, int64(10), captured.Counts["function-lines"], "captured defaults must have independent maps")
+			assert.Equal(t, int64(10), Defaults().Counts["function-lines"], "fresh defaults must have independent maps")
+		})
 	}
 }

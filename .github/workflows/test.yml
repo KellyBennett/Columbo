@@ -55,12 +55,12 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/columbo
-      - name: Run published SQLite queries against all seven smells
+      - name: Run diagnostic SQLite queries against all seven smells
         shell: bash
         run: |
           root="$PWD"
           status=0
-          (cd internal/columbo/testdata/all && "$root/columbo" --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
+          (cd internal/columbo/testdata/all && "$root/columbo" --staged=false --no-history --output "$RUNNER_TEMP/columbo-fixture.sqlite" ./...) || status=$?
           if [ "$status" -gt 1 ]; then exit "$status"; fi
           ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
       - name: Test action runner exit status and evidence retention
@@ -94,7 +94,7 @@ jobs:
       CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@v4
-      - name: Investigate and publish all findings
+      - name: Investigate source evidence and publish active-stage findings
         uses: ./
         with:
           artifact-name: columbo-self-check-snapshot

@@ -50,13 +50,15 @@ func TestVariantCoordinationUncertainty(t *testing.T) {
 	h := &testHarness{T: t}
 	source := variantPrelude + variantFunction("SeedOne", variantSwitch("A,B")) + variantFunction("SeedTwo", variantSwitch("A,B")) + variantFunction("Operation", `n,m:=0,0;if x==A {n=1}; x=B; n=2; println(n); if x==B {m=n};_,_=n,m`)
 	c := h.one(h.investigate(h.fixture(source), variantConfig()), variantSmell)
+	var link *Clue
 	for _, clue := range c.Clues {
 		if clue.Kind == "variant-state-overlap" {
-			require.Contains(t, strings.Join(clue.Value.([]string), "\n"), "1 calls/conversions across span; 1 possible selector writes; 1 intervening location writes")
-			return
+			link = &clue
+			break
 		}
 	}
-	t.Fatal("missing lexical link with uncertainty")
+	require.NotNil(t, link, "missing lexical link with uncertainty")
+	require.Contains(t, strings.Join(link.Value.([]string), "\n"), "1 calls/conversions across span; 1 possible selector writes; 1 intervening location writes")
 }
 
 func TestVariantCoordinationSnapshot(t *testing.T) {

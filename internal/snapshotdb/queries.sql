@@ -234,6 +234,9 @@ INSERT INTO source_declarations(declaration_id,file_id,kind,receiver_type_id,sha
 INSERT INTO source_calls(declaration_id,file_id,ordinal,range_id,expression,resolution,target_declaration_id,receiver_form,receiver_range_id,binding_range_id,binding_limit) VALUES (?,?,?,?,?,?,?,?,?,?,?);
 -- name: InspectionDeclarationLocation :one
 SELECT file_id,start_line,end_line,start_offset,end_offset FROM declarations WHERE id=?;
+-- name: InspectionAvailable :one
+SELECT EXISTS(SELECT 1 FROM source_scan);
+
 -- name: InspectionIdentity :one
 SELECT s.root,s.go_version,s.source_sha256,c.config_path,c.config_sha256,c.staged,c.history,c.max_commits
 FROM source_scan s JOIN source_config c ON c.scan_id=s.id WHERE s.id=1;

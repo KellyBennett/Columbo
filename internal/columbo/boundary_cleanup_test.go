@@ -1,7 +1,6 @@
 package columbo
 
 import (
-	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -54,7 +53,7 @@ func TestBoundaryCleanupAdmission(t *testing.T) {
 	root := t.TempDir()
 	missing := filepath.Join(root, "missing.sqlite")
 	_, err := OpenSnapshot(missing)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 	for _, name := range []string{"directory", "link"} {
 		path := filepath.Join(root, name)
 		if name == "directory" {
@@ -126,7 +125,7 @@ func TestBoundaryCleanupPrepublicationRecheck(t *testing.T) {
 		require.EqualError(t, err, "snapshot has an unsupported sidecar: "+path+suffix)
 		require.False(t, published)
 		_, err = os.Lstat(path)
-		require.True(t, errors.Is(err, os.ErrNotExist))
+		require.ErrorIs(t, err, os.ErrNotExist)
 		matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".columbo-*"))
 		require.NoError(t, err)
 		require.Empty(t, matches)

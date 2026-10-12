@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 type inspectionInput struct {
 	root           string
+	dir            string
 	configRelative string
 	configSHA      string
 	config         Config
@@ -18,11 +20,20 @@ type inspectionInput struct {
 }
 
 func validateInspectionInput(dir, config string) (inspectionInput, error) {
-	root, err := inspectionRoot(dir)
+	input, err := inspectionLocation(dir)
 	if err != nil {
 		return inspectionInput{}, err
 	}
-	return inspectionConfiguration(root, config)
+	return input.withConfiguration(config)
+}
+
+func inspectionLocation(dir string) (inspectionInput, error) {
+	directory, err := inspectionRoot(dir)
+	if err != nil {
+		return inspectionInput{}, err
+	}
+	root, err := moduleRoot(directory)
+	return inspectionInput{root: root, dir: directory}, err
 }
 
 func inspectionRoot(dir string) (string, error) {
@@ -40,31 +51,33 @@ func inspectionRoot(dir string) (string, error) {
 	return root, nil
 }
 
-func inspectionConfiguration(root, config string) (inspectionInput, error) {
-	relative, err := inspectionConfigRelative(root, config)
+func (input inspectionInput) withConfiguration(config string) (inspectionInput, error) {
+	path := input.configurationPath(config)
+	relative, err := inspectionConfigRelative(input.root, path)
 	if err != nil {
 		return inspectionInput{}, err
 	}
-	path := filepath.Join(root, relative)
-	if err := inspectionConfigFile(path); err != nil {
-		return inspectionInput{}, err
-	}
-	cfg, hash, err := loadInspectionConfig(path, config != "")
-	return inspectionInput{root: root, configRelative: filepath.ToSlash(relative), configSHA: hash, config: cfg}, err
+	input.configRelative = filepath.ToSlash(relative)
+	input.config, input.configSHA, err = loadInspectionConfig(path, config != "")
+	return input, err
 }
 
-func inspectionConfigRelative(root, path string) (string, error) {
+func (input inspectionInput) configurationPath(path string) string {
 	if path == "" {
 		path = ".columbo.yml"
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(root, path)
+	if filepath.IsAbs(path) {
+		return path
 	}
+	return filepath.Join(input.dir, path)
+}
+
+func inspectionConfigRelative(root, path string) (string, error) {
 	relative, err := filepath.Rel(root, path)
 	if err != nil || inspectionOutside(relative) {
 		return "", fmt.Errorf("inspection configuration must be inside source root")
 	}
-	return relative, nil
+	return relative, inspectionConfigFile(path)
 }
 
 func inspectionConfigFile(path string) error {
@@ -124,20 +137,30 @@ func (input inspectionInput) verifyFiles(files []inspectionFile) error {
 }
 
 func (input inspectionInput) analyze(patterns []string) (Report, error) {
+	input.config = input.config.clone()
+	patterns = slices.Clone(patterns)
 	if err := input.capture(); err != nil {
 		return Report{}, err
 	}
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	a, err := load(input.root, patterns, input.config)
+	a, err := input.loadEngine(patterns)
 	if err != nil {
 		return Report{}, err
 	}
-	if a.root != input.root {
-		return Report{}, fmt.Errorf("root must be module root: %s", a.root)
-	}
 	return input.finish(a, patterns)
+}
+
+func (input inspectionInput) loadEngine(patterns []string) (*engine, error) {
+	a, err := load(input.dir, patterns, input.config)
+	if err != nil {
+		return nil, err
+	}
+	if a.root != input.root {
+		return nil, fmt.Errorf("source module changed during inspection; rerun with stable source")
+	}
+	return a, nil
 }
 
 func (input inspectionInput) finish(a *engine, patterns []string) (Report, error) {
@@ -178,7 +201,7 @@ func (report *Report) includeInspectionDeclarations(declarations []*declaration)
 	}
 }
 
-func (c *command) analyzeInspection() int {
+func (c *command) analyze() int {
 	input, err := c.inspectionInput()
 	if err != nil {
 		return c.fatal(err)

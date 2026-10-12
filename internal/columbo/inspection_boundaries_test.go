@@ -3,67 +3,53 @@ package columbo
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInspectionInventoryAcceptancePrecedesClassification(t *testing.T) {
 	root := inspectionTestModule(t)
 	a, err := load(root, []string{"./..."}, Defaults())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "model.go"), []byte("stale"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "model.go"), []byte("stale"), 0600))
 	link := filepath.Join(root, "a-not-go")
-	if err := os.Symlink("absent", link); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Symlink("absent", link))
 	files, err := a.inspectionFiles()
-	if err == nil || err.Error() != "symlink source path refused: "+link || len(files) != 0 {
-		t.Fatalf("earlier non-Go symlink must win: %v %#v", err, files)
-	}
-	if err := os.Remove(link); err != nil {
-		t.Fatal(err)
-	}
+	assert.EqualError(t, err, "symlink source path refused: "+link, "earlier non-Go symlink must win")
+	assert.Empty(t, files)
+	require.NoError(t, os.Remove(link))
 	files, err = a.inspectionFiles()
-	if err == nil || err.Error() != "source changed during inspection: model.go" || len(files) != 2 || files[0].Path != "generated.go" {
-		t.Fatalf("stale selected source must retain earlier entries: %v %#v", err, files)
-	}
+	assert.EqualError(t, err, "source changed during inspection: model.go")
+	require.Len(t, files, 2, "stale selected source must retain earlier entries")
+	assert.Equal(t, "generated.go", files[0].Path)
 }
 
 func TestInspectionInventoryPrunesGitAndRetainsNonSelectedBytes(t *testing.T) {
 	root := inspectionTestModule(t)
 	a, err := load(root, []string{"./..."}, Defaults())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(root, ".git"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("absent", filepath.Join(root, ".git", "bad.go")); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0700))
+	require.NoError(t, os.Symlink("absent", filepath.Join(root, ".git", "bad.go")))
 	data := []byte("changed non-selected source")
-	if err := os.WriteFile(filepath.Join(root, "platform_windows.go"), data, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "platform_windows.go"), data, 0600))
 	files, err := a.inspectionFiles()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	byPath := map[string]inspectionFile{}
 	for _, f := range files {
-		if f.Path == "platform_windows.go" && (f.SHA != inspectionHash(data) || f.Selected || f.Target || !strings.HasPrefix(f.Scope, "not-selected-runtime")) {
-			t.Fatalf("non-selected physical bytes changed scope: %#v", f)
-		}
-		if f.Path == "model_test.go" && (f.Selected || f.Scope != "test source: not selected") {
-			t.Fatalf("test scope: %#v", f)
-		}
+		byPath[f.Path] = f
 	}
-	if len(files) != 5 {
-		t.Fatalf("inventory: %#v", files)
-	}
+	assert.Len(t, files, 5)
+	require.Contains(t, byPath, "platform_windows.go")
+	unselected := byPath["platform_windows.go"]
+	assert.Equal(t, inspectionHash(data), unselected.SHA, "non-selected physical bytes")
+	assert.False(t, unselected.Selected)
+	assert.False(t, unselected.Target)
+	assert.Regexp(t, "^not-selected-runtime", unselected.Scope)
+	require.Contains(t, byPath, "model_test.go")
+	assert.False(t, byPath["model_test.go"].Selected)
+	assert.Equal(t, "test source: not selected", byPath["model_test.go"].Scope)
 }
 
 func TestInspectionLexicalBindingsRemainPhysicalAndOneHop(t *testing.T) {
@@ -76,15 +62,15 @@ func TestInspectionLexicalBindingsRemainPhysicalAndOneHop(t *testing.T) {
 					continue
 				}
 				data, err := os.ReadFile(filepath.Join(root, span.Path))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if span.FileSHA != inspectionHash(data) || span.SHA != inspectionHash(data[span.StartOffset:span.EndOffset]) {
-					t.Fatalf("physical binding changed: %#v", span)
-				}
+				require.NoError(t, err)
+				require.GreaterOrEqual(t, span.StartOffset, 0)
+				require.GreaterOrEqual(t, span.EndOffset, span.StartOffset)
+				require.LessOrEqual(t, span.EndOffset, len(data))
+				assert.Equal(t, inspectionHash(data), span.FileSHA, "physical binding file hash")
+				assert.Equal(t, inspectionHash(data[span.StartOffset:span.EndOffset]), span.SHA, "physical binding span hash")
 			}
-			if c.Target != nil && len(c.Target.Calls) != 0 {
-				t.Fatal("expanded beyond one hop")
+			if c.Target != nil {
+				assert.Empty(t, c.Target.Calls, "call targets must not expand beyond one hop")
 			}
 		}
 	}

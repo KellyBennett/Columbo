@@ -1,10 +1,12 @@
 package columbo
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const inspectionFixture = `package fixture
@@ -51,7 +53,9 @@ func TestInspectionCompleteRuntimeMethodsAndCallBounds(t *testing.T) {
 	for _, d := range facts.Declarations {
 		methods[d.Symbol] = d
 	}
+	require.Contains(t, methods, "fixture.(Cell).Read")
 	require.Equal(t, "fixture.Cell", methods["fixture.(Cell).Read"].ReceiverKey)
+	require.Contains(t, methods, "fixture.(*Box).Read")
 	require.Equal(t, "fixture.Box", methods["fixture.(*Box).Read"].ReceiverKey)
 	require.Contains(t, methods, "fixture.(*Owner).Generated")
 	require.NotContains(t, methods, "fixture.(*Owner).PlatformOnly")
@@ -69,19 +73,19 @@ func TestInspectionCompleteRuntimeMethodsAndCallBounds(t *testing.T) {
 			require.Empty(t, call.Target.Calls)
 		}
 	}
-	selected, generated := 0, 0
+	var selected, generated []string
 	for _, f := range facts.Files {
 		if f.Selected {
-			selected++
+			selected = append(selected, f.Path)
 		}
 		if f.Generated {
-			generated++
-			require.True(t, f.Selected)
-			require.False(t, f.Target)
+			generated = append(generated, f.Path)
+			assert.True(t, f.Selected)
+			assert.False(t, f.Target)
 		}
 	}
-	require.Equal(t, 2, selected)
-	require.Equal(t, 1, generated)
+	assert.ElementsMatch(t, []string{"model.go", "generated.go"}, selected)
+	assert.Equal(t, []string{"generated.go"}, generated)
 }
 func TestInspectionSourceRangesAndAnalysisUnchanged(t *testing.T) {
 	root := inspectionTestModule(t)
@@ -91,6 +95,9 @@ func TestInspectionSourceRangesAndAnalysisUnchanged(t *testing.T) {
 	for _, d := range facts.Declarations {
 		data, err := os.ReadFile(filepath.Join(root, d.Path))
 		require.NoError(t, err)
+		require.GreaterOrEqual(t, d.StartOffset, 0)
+		require.GreaterOrEqual(t, d.EndOffset, d.StartOffset)
+		require.LessOrEqual(t, d.EndOffset, len(data))
 		require.Equal(t, inspectionHash(data), d.FileSHA)
 		require.Equal(t, inspectionHash(data[d.StartOffset:d.EndOffset]), d.SHA)
 	}

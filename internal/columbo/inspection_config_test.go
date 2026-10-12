@@ -3,9 +3,10 @@ package columbo
 import (
 	"os"
 	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInspectionConfigurationSnapshotMatchesOrdinaryLoad(t *testing.T) {
@@ -29,113 +30,89 @@ func TestInspectionConfigurationSnapshotMatchesOrdinaryLoad(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yml")
 			if tc.exists {
-				if err := os.WriteFile(path, []byte(tc.data), 0600); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.WriteFile(path, []byte(tc.data), 0600))
 			}
 			if tc.directory {
-				if err := os.Mkdir(path, 0700); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, os.Mkdir(path, 0700))
 			}
 			ordinary, ordinaryError := LoadConfig(path, tc.explicit)
 			captured, hash, capturedError := loadInspectionConfig(path, tc.explicit)
-			if !reflect.DeepEqual(ordinary, captured) || reflect.TypeOf(ordinaryError) != reflect.TypeOf(capturedError) {
-				t.Fatalf("snapshot differs from ordinary config semantics: %v, %v", ordinaryError, capturedError)
-			}
+			assert.Equal(t, ordinary, captured, "ordinary configuration semantics")
+			assert.IsType(t, ordinaryError, capturedError, "ordinary configuration error type")
 			if ordinaryError != nil {
-				if ordinaryError.Error() != capturedError.Error() {
-					t.Fatalf("snapshot changed config error: %q != %q", ordinaryError, capturedError)
-				}
-				return
+				assert.EqualError(t, capturedError, ordinaryError.Error(), "ordinary configuration error text")
+			} else {
+				assert.NoError(t, capturedError)
 			}
 			want := ""
 			if tc.exists {
 				want = inspectionHash([]byte(tc.data))
 			}
-			if hash != want {
-				t.Fatalf("snapshot hash %q differs from decoded bytes %q", hash, want)
-			}
+			assert.Equal(t, want, hash, "hash of the bytes used to decode configuration")
 		})
 	}
 }
 
 func TestInspectionConfigurationSnapshotSurvivesLaterFilesystemChanges(t *testing.T) {
-	for _, mode := range []string{"mutate", "create", "remove"} {
-		t.Run(mode, func(t *testing.T) {
+	initial := []byte("thresholds:\n  function-lines: 11\n")
+	writeLater := func(path string) error {
+		return os.WriteFile(path, []byte("thresholds:\n  function-lines: 12\n"), 0600)
+	}
+	for _, tc := range []struct {
+		name      string
+		exists    bool
+		change    func(string) error
+		wantHash  string
+		wantLimit int64
+	}{
+		{name: "mutate", exists: true, change: writeLater, wantHash: inspectionHash(initial), wantLimit: 11},
+		{name: "create", change: writeLater, wantLimit: 10},
+		{name: "remove", exists: true, change: os.Remove, wantHash: inspectionHash(initial), wantLimit: 11},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), ".columbo.yml")
-			initial := []byte("thresholds:\n  function-lines: 11\n")
-			wantHash, wantLimit := "", int64(10)
-			if mode != "create" {
-				if err := os.WriteFile(path, initial, 0600); err != nil {
-					t.Fatal(err)
-				}
-				wantHash, wantLimit = inspectionHash(initial), 11
+			if tc.exists {
+				require.NoError(t, os.WriteFile(path, initial, 0600))
 			}
 			config, hash, err := loadInspectionConfig(path, false)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if mode == "remove" {
-				err = os.Remove(path)
-			} else {
-				err = os.WriteFile(path, []byte("thresholds:\n  function-lines: 12\n"), 0600)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if config.Counts["function-lines"] != wantLimit || hash != wantHash {
-				t.Fatal("later filesystem state altered the captured configuration")
-			}
+			require.NoError(t, err)
+			require.NoError(t, tc.change(path))
+			assert.Equal(t, tc.wantLimit, config.Counts["function-lines"], "later filesystem state must not alter captured configuration")
+			assert.Equal(t, tc.wantHash, hash, "later filesystem state must not alter captured hash")
 		})
 	}
 }
 
 func TestInspectionConfigurationErrorsPrecedeLoading(t *testing.T) {
 	root := inspectionTestModule(t)
-	if err := os.WriteFile(filepath.Join(root, "invalid.go"), []byte("package fixture\nfunc Broken(){missing()}"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "invalid.go"), []byte("package fixture\nfunc Broken(){missing()}"), 0600))
 	path := filepath.Join(root, ".columbo.yml")
-	if err := os.WriteFile(path, []byte("["), 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("["), 0600))
 	_, expected := LoadConfig(path, false)
+	require.Error(t, expected)
 	_, err := validateInspectionInput(root, "")
-	if err == nil || err.Error() != expected.Error() {
-		t.Fatalf("configuration error must precede source loading: %v", err)
-	}
-	if _, err := validateInspectionInput(root, "missing.yml"); !os.IsNotExist(err) {
-		t.Fatalf("explicit missing config must precede loading: %v", err)
-	}
-	if _, err := validateInspectionInput(root, "../outside.yml"); err == nil || err.Error() != "inspection configuration must be inside source root" {
-		t.Fatalf("source-bound path check must precede config read: %v", err)
-	}
+	assert.EqualError(t, err, expected.Error(), "configuration error must precede source loading")
+	_, err = validateInspectionInput(root, "missing.yml")
+	assert.ErrorIs(t, err, os.ErrNotExist, "explicit missing config must precede loading")
+	_, err = validateInspectionInput(root, "../outside.yml")
+	assert.EqualError(t, err, "inspection configuration must be inside source root", "source-bound path check must precede config read")
 	link := filepath.Join(t.TempDir(), "linked")
-	if err := os.Symlink(root, link); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := validateInspectionInput(link, "../outside.yml"); err == nil || !strings.HasPrefix(err.Error(), "symlink source root refused:") {
-		t.Fatalf("root check must precede config path check: %v", err)
-	}
+	require.NoError(t, os.Symlink(root, link))
+	_, err = validateInspectionInput(link, "../outside.yml")
+	assert.EqualError(t, err, "symlink source root refused: "+link, "root check must precede config path check")
 }
 
 func TestInspectionConfigurationCapturedInReport(t *testing.T) {
 	root := inspectionTestModule(t)
 	data := []byte("thresholds:\n  function-lines: 11\n")
-	if err := os.WriteFile(filepath.Join(root, "settings.yml"), data, 0600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "settings.yml"), data, 0600))
 	input, err := validateInspectionInput(root, "settings.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	report, err := input.analyze(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	facts := report.inspection
-	if facts.ConfigFile != "settings.yml" || facts.ConfigSHA != inspectionHash(data) || facts.Config.Counts["function-lines"] != 11 {
-		t.Fatal("inspection must contain the same source-bound configuration snapshot")
-	}
+	require.NotNil(t, facts)
+	assert.Equal(t, "settings.yml", facts.ConfigFile)
+	assert.Equal(t, inspectionHash(data), facts.ConfigSHA)
+	assert.Equal(t, int64(11), facts.Config.Counts["function-lines"])
 }

@@ -452,13 +452,14 @@ CREATE TABLE source_files (
 CREATE INDEX source_files_scope ON source_files(selected_runtime, ordinary_target);
 CREATE TABLE source_config (
  scan_id INTEGER PRIMARY KEY DEFAULT 1 REFERENCES source_scan(id),
- config_path TEXT NOT NULL CHECK (length(config_path) > 0),
+ config_path TEXT CHECK (config_path IS NULL OR length(config_path) > 0),
  config_file_id INTEGER,
  config_sha256 TEXT,
  staged INTEGER NOT NULL CHECK (staged IN (0, 1)),
  history INTEGER NOT NULL CHECK (history IN (0, 1)),
  max_commits INTEGER NOT NULL CHECK (max_commits > 0),
  CHECK ((config_file_id IS NULL) = (config_sha256 IS NULL)),
+ CHECK (config_file_id IS NULL OR config_path IS NOT NULL),
  FOREIGN KEY (config_file_id, config_sha256) REFERENCES source_files(file_id, sha256)
 ) STRICT;
 CREATE TABLE source_config_severity (

@@ -11,7 +11,10 @@ func (facts inspectionFacts) snapshotConfig(file inspectionFile, fileID int64) (
 	if facts.ConfigSHA != file.SHA {
 		return snapshotdb.InsertSourceConfigParams{}, fmt.Errorf("inspection configuration does not match source inventory")
 	}
-	params := snapshotdb.InsertSourceConfigParams{ConfigPath: facts.ConfigFile, Staged: snapshotFlag(facts.Config.Staged), History: snapshotFlag(facts.Config.History), MaxCommits: facts.Config.MaxCommits}
+	params := snapshotdb.InsertSourceConfigParams{Staged: snapshotFlag(facts.Config.Staged), History: snapshotFlag(facts.Config.History), MaxCommits: facts.Config.MaxCommits}
+	if facts.ConfigFile != "" {
+		params.ConfigPath = &facts.ConfigFile
+	}
 	if facts.ConfigSHA != "" {
 		params.ConfigFileID, params.ConfigSha256 = &fileID, &facts.ConfigSHA
 	}

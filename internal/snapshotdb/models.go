@@ -325,7 +325,7 @@ type SourceCall struct {
 
 type SourceConfig struct {
 	ScanID       int64
-	ConfigPath   string
+	ConfigPath   *string
 	ConfigFileID *int64
 	ConfigSha256 *string
 	Staged       int64

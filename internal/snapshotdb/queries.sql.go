@@ -936,7 +936,7 @@ INSERT INTO source_config(config_path,config_file_id,config_sha256,staged,histor
 `
 
 type InsertSourceConfigParams struct {
-	ConfigPath   string
+	ConfigPath   *string
 	ConfigFileID *int64
 	ConfigSha256 *string
 	Staged       int64
@@ -1350,6 +1350,17 @@ func (q *Queries) InsertWarning(ctx context.Context, arg InsertWarningParams) er
 		arg.Message,
 	)
 	return err
+}
+
+const inspectionAvailable = `-- name: InspectionAvailable :one
+SELECT EXISTS(SELECT 1 FROM source_scan)
+`
+
+func (q *Queries) InspectionAvailable(ctx context.Context) (bool, error) {
+	row := q.db.QueryRowContext(ctx, inspectionAvailable)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const inspectionCalls = `-- name: InspectionCalls :many
@@ -1809,7 +1820,7 @@ type InspectionIdentityRow struct {
 	Root         string
 	GoVersion    string
 	SourceSha256 string
-	ConfigPath   string
+	ConfigPath   *string
 	ConfigSha256 *string
 	Staged       int64
 	History      int64

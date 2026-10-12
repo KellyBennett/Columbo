@@ -1,8 +1,10 @@
 package columbo
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenericDependencyInventory(t *testing.T) {
@@ -51,13 +53,9 @@ func F(x Plain) {}`, []string{"type:fixture.Plain"}},
 			engine := h.loadDependencyFixture(h.fixture("package fixture\n"+tt.source), quiet())
 			d := engine.declarations[0]
 			d.measure(engine)
-			if got := sortedSet(d.deps); !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("dependencies: got %v; want %v", got, tt.want)
-			}
+			require.Equal(t, tt.want, sortedSet(d.deps), "dependencies")
 			for _, receipt := range d.depReceipts {
-				if receipt.DependencyIdentity == "type:fixture.Box[T any]" || receipt.DependencyIdentity == "type:sync/atomic.Pointer[T any]" {
-					t.Errorf("spurious generic-head receipt: %+v", receipt)
-				}
+				assert.NotContains(t, []string{"type:fixture.Box[T any]", "type:sync/atomic.Pointer[T any]"}, receipt.DependencyIdentity, "spurious generic-head receipt: %+v", receipt)
 			}
 			h.repeatDependencyMeasurement(engine, d)
 			h.dependencyReceiptKinds(d)

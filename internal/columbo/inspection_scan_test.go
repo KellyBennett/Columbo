@@ -6,12 +6,28 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInspectionRejectsSourceDriftBeforePublication(t *testing.T) {
-	for _, change := range []string{"selected", "unselected", "non-Go", "added", "removed", "configuration"} {
-		t.Run(change, func(t *testing.T) {
+	writeFile := func(name, contents string) func(string) error {
+		return func(root string) error {
+			return os.WriteFile(filepath.Join(root, name), []byte(contents), 0600)
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		change func(string) error
+	}{
+		{name: "selected", change: writeFile("model.go", inspectionFixture+"\n")},
+		{name: "unselected", change: writeFile("platform_windows.go", "package fixture\n")},
+		{name: "non-Go", change: writeFile("README.md", "after")},
+		{name: "added", change: writeFile("new.txt", "new")},
+		{name: "removed", change: func(root string) error { return os.Remove(filepath.Join(root, "README.md")) }},
+		{name: "configuration", change: writeFile(".columbo.yml", "exclude: []\n")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			root := inspectionTestModule(t)
 			require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("before"), 0600))
 			input, err := validateInspectionInput(root, "")
@@ -19,42 +35,36 @@ func TestInspectionRejectsSourceDriftBeforePublication(t *testing.T) {
 			require.NoError(t, input.capture())
 			a, err := load(root, []string{"./..."}, input.config)
 			require.NoError(t, err)
-			switch change {
-			case "selected":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "model.go"), []byte(inspectionFixture+"\n"), 0600))
-			case "unselected":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "platform_windows.go"), []byte("package fixture\n"), 0600))
-			case "non-Go":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("after"), 0600))
-			case "added":
-				require.NoError(t, os.WriteFile(filepath.Join(root, "new.txt"), []byte("new"), 0600))
-			case "removed":
-				require.NoError(t, os.Remove(filepath.Join(root, "README.md")))
-			case "configuration":
-				require.NoError(t, os.WriteFile(filepath.Join(root, ".columbo.yml"), []byte("exclude: []\n"), 0600))
-			}
+			require.NoError(t, tc.change(root))
 			report, err := input.finish(a, []string{"./..."})
-			require.ErrorContains(t, err, "source changed during inspection")
-			require.Nil(t, report.inspection)
+			assert.ErrorContains(t, err, "source changed during inspection")
+			assert.Nil(t, report.inspection)
 		})
 	}
 }
 
 func TestInspectionRejectsConfigurationDriftBeforeLoading(t *testing.T) {
-	for _, mode := range []string{"changed", "created", "removed"} {
-		t.Run(mode, func(t *testing.T) {
+	writeChanged := func(path string) error {
+		return os.WriteFile(path, []byte("thresholds:\n  function-lines: 11\n"), 0600)
+	}
+	for _, tc := range []struct {
+		name   string
+		exists bool
+		change func(string) error
+	}{
+		{name: "changed", exists: true, change: writeChanged},
+		{name: "created", change: writeChanged},
+		{name: "removed", exists: true, change: os.Remove},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			root := inspectionTestModule(t)
 			path := filepath.Join(root, ".columbo.yml")
-			if mode != "created" {
+			if tc.exists {
 				require.NoError(t, os.WriteFile(path, []byte("exclude: []\n"), 0600))
 			}
 			input, err := validateInspectionInput(root, "")
 			require.NoError(t, err)
-			if mode == "removed" {
-				require.NoError(t, os.Remove(path))
-			} else {
-				require.NoError(t, os.WriteFile(path, []byte("thresholds:\n  function-lines: 11\n"), 0600))
-			}
+			require.NoError(t, tc.change(path))
 			require.ErrorContains(t, input.capture(), "configuration changed during inspection")
 		})
 	}
@@ -80,7 +90,7 @@ func TestInspectionOutputBoundaries(t *testing.T) {
 func TestInspectionCLIRejectsUnsafeOutputWithoutSummary(t *testing.T) {
 	root := inspectionTestModule(t)
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"--inspect-source", "--no-history"}, Invocation{Dir: root, Stdout: &stdout, Stderr: &stderr})
+	code := Run([]string{"--no-history", "--output", filepath.Join(root, "report.sqlite")}, Invocation{Dir: root, Stdout: &stdout, Stderr: &stderr})
 	require.Equal(t, 2, code)
 	require.Empty(t, stdout.String())
 	require.Contains(t, stderr.String(), "outside source root")
@@ -89,13 +99,24 @@ func TestInspectionCLIRejectsUnsafeOutputWithoutSummary(t *testing.T) {
 	require.Empty(t, files)
 }
 
-func TestInspectionRequiresModuleRoot(t *testing.T) {
+func TestInspectionSupportsModuleSubdirectories(t *testing.T) {
 	root := inspectionTestModule(t)
 	subdirectory := filepath.Join(root, "sub")
 	require.NoError(t, os.Mkdir(subdirectory, 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(subdirectory, "sub.go"), []byte("package sub\n"), 0600))
 	input, err := validateInspectionInput(subdirectory, "")
 	require.NoError(t, err)
-	_, err = input.analyze(nil)
-	require.ErrorContains(t, err, "root must be module root")
+	report, err := input.analyze(nil)
+	require.NoError(t, err)
+	require.NotNil(t, report.inspection)
+	assert.Equal(t, root, report.inspection.Root)
+	byPath := map[string]inspectionFile{}
+	for _, file := range report.inspection.Files {
+		byPath[file.Path] = file
+	}
+	require.Contains(t, byPath, "model.go", "inventory covers the enclosing module")
+	assert.False(t, byPath["model.go"].Selected, "runtime selection stays in the invoked subdirectory")
+	require.Contains(t, byPath, "sub/sub.go")
+	assert.True(t, byPath["sub/sub.go"].Selected)
+	assert.True(t, byPath["sub/sub.go"].Target)
 }

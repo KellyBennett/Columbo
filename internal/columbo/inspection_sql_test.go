@@ -8,11 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,15 +46,12 @@ func inspectionSQLReader(t *testing.T, report Report) snapshotdb.Querier {
 
 func inspectionSQLCase(t *testing.T, report Report, id, symbol string) Case {
 	t.Helper()
-	for _, d := range report.Declarations {
-		if d.Ref.Symbol == symbol {
-			ref := d.Ref
-			return Case{ID: id, Smell: "long-function", Verdict: "FAIL", File: ref.File, Symbol: ref.Symbol,
-				StartLine: d.Source.StartLine, EndLine: d.Source.EndLine, PrimaryDeclaration: &ref}
-		}
-	}
-	t.Fatalf("missing fixture declaration %s", symbol)
-	return Case{}
+	index := slices.IndexFunc(report.Declarations, func(d DeclarationEvidence) bool { return d.Ref.Symbol == symbol })
+	require.NotEqual(t, -1, index, "missing fixture declaration %s", symbol)
+	d := report.Declarations[index]
+	ref := d.Ref
+	return Case{ID: id, Smell: "long-function", Verdict: "FAIL", File: ref.File, Symbol: ref.Symbol,
+		StartLine: d.Source.StartLine, EndLine: d.Source.EndLine, PrimaryDeclaration: &ref}
 }
 
 func inspectionSQLAddSupport(t *testing.T, report Report, c *Case, symbol string) {
@@ -70,14 +68,10 @@ func inspectionSQLReceiver(t *testing.T, q snapshotdb.Querier, key string) *int6
 	t.Helper()
 	seeds, err := q.InspectionReceiverSeeds(context.Background())
 	require.NoError(t, err)
-	for _, seed := range seeds {
-		if seed.TypeKey == key {
-			require.NotNil(t, seed.ReceiverTypeID)
-			return seed.ReceiverTypeID
-		}
-	}
-	t.Fatalf("missing receiver seed %s: %#v", key, seeds)
-	return nil
+	index := slices.IndexFunc(seeds, func(seed snapshotdb.SourceReceiverSeed) bool { return seed.TypeKey == key })
+	require.NotEqual(t, -1, index, "missing receiver seed %s: %#v", key, seeds)
+	require.NotNil(t, seeds[index].ReceiverTypeID)
+	return seeds[index].ReceiverTypeID
 }
 
 func TestInspectionSQLReceiverEligibilityAndSiblingCompleteness(t *testing.T) {
@@ -183,8 +177,8 @@ func TestInspectionSQLCallsArePhysicalBoundedAndTypeResolved(t *testing.T) {
 	require.Len(t, calls, 7, "callee bodies must not recursively expand the receiver's call list")
 	wantTargets := map[string]string{"o.held.Put(1)": "fixture.(*Cell).Put", "alias.Put(2)": "fixture.(*Cell).Put", "o.dynamic.Put(3)": "", "o.local.Put(4)": "fixture.(*Cell).Put", "(*Cell).Put(handle,5)": "fixture.(*Cell).Put", "b.Read()": "fixture.(*Box).Read", "a.Put(6)": "fixture.(*Cell).Put"}
 	for _, call := range calls {
-		want, present := wantTargets[call.Expression]
-		require.True(t, present, "unexpected call %s", call.Expression)
+		require.Contains(t, wantTargets, call.Expression, "unexpected call")
+		want := wantTargets[call.Expression]
 		require.Equal(t, call.Expression, inspectionSQLCheckRange(t, root, call.Path, call.StartOffset, call.EndOffset, call.Sha256, call.FileSha256))
 		require.NotEmpty(t, call.BindingLimit)
 		if want == "" {
@@ -196,6 +190,11 @@ func TestInspectionSQLCallsArePhysicalBoundedAndTypeResolved(t *testing.T) {
 			require.Equal(t, "local-one-hop", call.Relation)
 			require.NotNil(t, call.TargetSymbol)
 			require.Equal(t, want, *call.TargetSymbol)
+			require.NotNil(t, call.TargetPath)
+			require.NotNil(t, call.TargetStartOffset)
+			require.NotNil(t, call.TargetEndOffset)
+			require.NotNil(t, call.TargetSha256)
+			require.NotNil(t, call.TargetFileSha256)
 			body := inspectionSQLCheckRange(t, root, *call.TargetPath, *call.TargetStartOffset, *call.TargetEndOffset, *call.TargetSha256, *call.TargetFileSha256)
 			if want == "fixture.(*Cell).Put" {
 				require.Contains(t, body, "c.touch()", "one-hop witness must include complete target body")
@@ -285,7 +284,8 @@ func TestInspectionSQLIdentityConfigScopeAndDeterministicReruns(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, root, identity.Root)
 	require.Equal(t, runtime.Version(), identity.GoVersion)
-	require.Equal(t, "settings.yml", identity.ConfigPath)
+	require.NotNil(t, identity.ConfigPath)
+	require.Equal(t, "settings.yml", *identity.ConfigPath)
 	require.NotNil(t, identity.ConfigSha256)
 	require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(config))), *identity.ConfigSha256)
 	patterns, err := q.InspectionPatterns(context.Background())
@@ -293,13 +293,12 @@ func TestInspectionSQLIdentityConfigScopeAndDeterministicReruns(t *testing.T) {
 	require.Equal(t, []snapshotdb.InspectionPatternsRow{{Ordinal: 0, Pattern: "."}}, patterns)
 	counts, err := q.InspectionConfigCounts(context.Background())
 	require.NoError(t, err)
-	var functionLines int64
+	countByName := map[string]int64{}
 	for _, count := range counts {
-		if count.Name == "function-lines" {
-			functionLines = count.Value
-		}
+		countByName[count.Name] = count.Value
 	}
-	require.EqualValues(t, 2, functionLines)
+	require.Contains(t, countByName, "function-lines")
+	require.EqualValues(t, 2, countByName["function-lines"])
 	exclusions, err := q.InspectionConfigExclusions(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, []snapshotdb.InspectionConfigExclusionsRow{{Ordinal: 0, Pattern: "excluded.go"}}, exclusions)
@@ -308,6 +307,17 @@ func TestInspectionSQLIdentityConfigScopeAndDeterministicReruns(t *testing.T) {
 	require.Len(t, files, 9)
 	hash := sha256.New()
 	var names []string
+	wantScope := map[string]struct{ selected, target int64 }{
+		"model.go":            {1, 1},
+		"generated.go":        {1, 0},
+		"excluded.go":         {1, 0},
+		"child/child.go":      {},
+		"go.mod":              {},
+		"model_test.go":       {},
+		"notes.txt":           {},
+		"platform_windows.go": {},
+		"settings.yml":        {},
+	}
 	for _, file := range files {
 		names = append(names, file.Path)
 		data, err := os.ReadFile(filepath.Join(root, file.Path))
@@ -315,19 +325,11 @@ func TestInspectionSQLIdentityConfigScopeAndDeterministicReruns(t *testing.T) {
 		require.Equal(t, int64(len(data)), file.Size)
 		require.Equal(t, fmt.Sprintf("%x", sha256.Sum256(data)), file.Sha256)
 		fmt.Fprintf(hash, "%d:%s:%s\n", len(file.Path), file.Path, file.Sha256)
-		switch file.Path {
-		case "model.go":
-			require.EqualValues(t, 1, file.SelectedRuntime)
-			require.EqualValues(t, 1, file.OrdinaryTarget)
-		case "generated.go", "excluded.go":
-			require.EqualValues(t, 1, file.SelectedRuntime)
-			require.Zero(t, file.OrdinaryTarget)
-		default:
-			require.Zero(t, file.SelectedRuntime)
-			require.Zero(t, file.OrdinaryTarget)
-		}
+		require.Contains(t, wantScope, file.Path)
+		assert.Equal(t, wantScope[file.Path].selected, file.SelectedRuntime, "%s runtime selection", file.Path)
+		assert.Equal(t, wantScope[file.Path].target, file.OrdinaryTarget, "%s ordinary target", file.Path)
 	}
-	require.True(t, sort.StringsAreSorted(names))
+	require.IsNonDecreasing(t, names)
 	require.NotContains(t, names, ".git/ignored")
 	require.Equal(t, fmt.Sprintf("%x", hash.Sum(nil)), identity.SourceSha256)
 	second := inspectionSQLReader(t, inspectionSQLAnalyze(t, root, "settings.yml", "."))
@@ -394,40 +396,58 @@ func TestInspectionSQLStorageHasNoArbitraryDepthCutoff(t *testing.T) {
 	require.EqualValues(t, 13, deepest)
 }
 
-func inspectionSQLCLI(t *testing.T, root string, inspect bool) (snapshotdb.Querier, string, int) {
+func inspectionSQLCLI(t *testing.T, root string, options ...string) (snapshotdb.Querier, string, int) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "result.sqlite")
-	args := []string{"--staged", "--no-history", "--output", path}
-	if inspect {
-		args = append(args, "--inspect-source")
-	}
+	args := append([]string{"--no-history", "--output", path}, options...)
 	var stdout, stderr bytes.Buffer
 	code := Run(args, Invocation{Dir: root, Version: "integration", Stdout: &stdout, Stderr: &stderr})
 	require.Empty(t, stderr.String())
-	require.NotEqual(t, 2, code, "CLI must publish an ordinary or inspection report")
+	require.NotEqual(t, 2, code, "CLI must publish a source-backed report")
 	snapshot, err := OpenSnapshot(path)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, snapshot.Close()) })
 	return snapshot.Queries(), strings.ReplaceAll(stdout.String(), path, "result.sqlite"), code
 }
 
-func TestInspectionSQLCLIStagedUsesSameAnalyzerAndSummary(t *testing.T) {
+func TestInspectionSQLCLIDefaultUsesSameAnalyzerAndStagedSummary(t *testing.T) {
 	root := t.TempDir()
 	inspectionSQLWriteFile(t, root, "go.mod", "module fixture\n\ngo 1.25.1\n")
 	inspectionSQLWriteFile(t, root, "model.go", tanglePrelude+strings.Replace(tangleBody, "func update(x *Item)", "func (x *Item) update()", 1))
 	inspectionSQLWriteFile(t, root, ".columbo.yml", "thresholds:\n  function-lines: 2\n")
-	ordinary, ordinaryText, ordinaryCode := inspectionSQLCLI(t, root, false)
-	inspected, inspectionText, inspectionCode := inspectionSQLCLI(t, root, true)
-	require.Equal(t, ordinaryCode, inspectionCode)
-	require.Equal(t, 1, inspectionCode)
-	require.Equal(t, ordinaryText, inspectionText)
-	require.Contains(t, inspectionText, "Stage Untangle Behavior: active")
+	config, err := LoadConfig(filepath.Join(root, ".columbo.yml"), false)
+	require.NoError(t, err)
+	config.History = false
+	config.Staged = true
+	analyzer, err := load(root, []string{"./..."}, config)
+	require.NoError(t, err)
+	detectorReport, err := analyzer.Analyze()
+	require.NoError(t, err)
+	ordinary := inspectionSQLReader(t, detectorReport)
+	ordinaryText, ordinaryCode, err := RenderSnapshot(ordinary, "result.sqlite")
+	require.NoError(t, err)
+	inspected, inspectionText, inspectionCode := inspectionSQLCLI(t, root)
+	assert.Equal(t, ordinaryCode, inspectionCode)
+	assert.Equal(t, 1, inspectionCode)
+	require.Contains(t, inspectionText, "Source evidence:", "default CLI must include source-evidence guidance")
+	detectorSummary, guidance, _ := strings.Cut(inspectionText, "Source evidence:")
+	assert.Equal(t, string(ordinaryText), detectorSummary+"Database: result.sqlite\n")
+	assert.Contains(t, guidance, "Before editing:")
+	assert.Contains(t, guidance, "Evidence limits:")
+	assert.Regexp(t, "Database: result\\.sqlite\\n$", inspectionText)
+	assert.Contains(t, inspectionText, "Stage Untangle Behavior: active")
+	explicit, explicitText, explicitCode := inspectionSQLCLI(t, root, "--staged=true")
+	assert.Equal(t, inspectionCode, explicitCode)
+	assert.Equal(t, inspectionText, explicitText)
 	identity, err := inspected.InspectionIdentity(context.Background())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, identity.Staged)
 	require.Zero(t, identity.History)
+	explicitIdentity, err := explicit.InspectionIdentity(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, identity, explicitIdentity)
 	_, err = ordinary.InspectionIdentity(context.Background())
-	require.Error(t, err, "ordinary snapshots must not claim a source inspection")
+	require.Error(t, err, "explicit detector-only snapshots must not claim a source inspection")
 	stages, err := inspected.SummaryStages(context.Background())
 	require.NoError(t, err)
 	require.NotEmpty(t, stages)

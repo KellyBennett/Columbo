@@ -85,7 +85,7 @@ func (d *declaration) inspectionDeclaration() inspectionDeclaration {
 }
 
 func (a *engine) inspectionFacts(patterns []string) (inspectionFacts, error) {
-	facts := inspectionFacts{Root: a.root, GoVersion: runtime.Version(), Patterns: patterns, Config: a.config, Environment: map[string]string{}, Declarations: []inspectionDeclaration{}, Types: []inspectionType{}}
+	facts := inspectionFacts{Root: a.root, GoVersion: runtime.Version(), Patterns: patterns, Config: a.config, Environment: map[string]string{"PWD": a.dir}, Declarations: []inspectionDeclaration{}, Types: []inspectionType{}}
 	for _, key := range []string{"GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS", "GOWORK", "GOTOOLCHAIN", "GOEXPERIMENT", "GOENV", "GOROOT", "GOPATH", "GOMODCACHE", "GO111MODULE", "PATH"} {
 		facts.Environment[key] = os.Getenv(key)
 	}

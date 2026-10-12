@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
@@ -13,11 +14,11 @@ import (
 
 const usage = `Usage: columbo [flags] [packages...]
 
-Investigate Go code smells. Packages default to ./...; flags precede packages.
+Investigate Go code smells with source-backed SQLite evidence and ordered stages.
+Packages default to ./...; flags precede packages.
   --config PATH       configuration (default .columbo.yml)
-  --output PATH       fresh SQLite snapshot (default columbo-<random>.sqlite)
-  --staged            enforce only the current refactoring stage
-  --inspect-source    include source relationships in SQLite (output outside source)
+  --output PATH       fresh SQLite snapshot outside the module (default OS temp directory)
+  --staged=false      diagnose all rule verdicts instead of enforcing the current stage
   --no-history        disable optional Git provenance
   --version           print build version
   --help              print usage
@@ -28,14 +29,13 @@ type Invocation struct {
 	Stdout, Stderr io.Writer
 }
 type commandOptions struct {
-	config, output                                                           string
-	noHistory, showVersion, help, shortHelp, explicit, staged, inspectSource bool
-	patterns                                                                 []string
+	config, output                                            string
+	noHistory, showVersion, help, shortHelp, explicit, staged bool
+	patterns                                                  []string
 }
 type command struct {
 	invocation Invocation
 	options    commandOptions
-	config     Config
 }
 
 func Run(args []string, invocation Invocation) int {
@@ -48,9 +48,6 @@ func Run(args []string, invocation Invocation) int {
 	}
 	if c.options.showVersion {
 		return c.deliver(c.invocation.versionText())
-	}
-	if c.options.inspectSource {
-		return c.analyzeInspection()
 	}
 	return c.analyze()
 }
@@ -87,9 +84,8 @@ func (o *commandOptions) arguments(fs *flag.FlagSet) {
 }
 func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.config, "config", ".columbo.yml", "")
-	fs.StringVar(&o.output, "output", "columbo-"+rand.Text()+".sqlite", "")
-	fs.BoolVar(&o.staged, "staged", false, "")
-	fs.BoolVar(&o.inspectSource, "inspect-source", false, "")
+	fs.StringVar(&o.output, "output", filepath.Join(os.TempDir(), "columbo-"+rand.Text()+".sqlite"), "")
+	fs.BoolVar(&o.staged, "staged", true, "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
@@ -114,34 +110,6 @@ func writeOutput(w io.Writer, b []byte) error {
 		return io.ErrShortWrite
 	}
 	return nil
-}
-func (c *command) loadConfig() error {
-	path := c.options.config
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(c.invocation.Dir, path)
-	}
-	cfg, e := LoadConfig(path, c.options.explicit)
-	if e != nil {
-		return e
-	}
-	cfg.History = cfg.History && !c.options.noHistory
-	cfg.Staged = c.options.staged
-	c.config = cfg
-	return nil
-}
-func (c *command) analyze() int {
-	if e := c.loadConfig(); e != nil {
-		return c.fatal(e)
-	}
-	patterns := c.options.patterns
-	if len(patterns) == 0 {
-		patterns = []string{"./..."}
-	}
-	r, e := Analyze(c.invocation.Dir, patterns, c.config)
-	if e != nil {
-		return c.fatal(e)
-	}
-	return c.publish(r)
 }
 func (c *command) snapshotPath() string {
 	if filepath.IsAbs(c.options.output) {

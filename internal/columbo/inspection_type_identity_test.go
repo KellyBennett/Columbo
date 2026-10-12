@@ -33,11 +33,11 @@ func TestInspectionPreservesRepeatedBlankTypes(t *testing.T) {
 	require.Len(t, types, 5)
 	seen := map[string]bool{}
 	for _, typ := range types {
-		require.False(t, seen[typ.TypeKey], typ.TypeKey)
+		require.NotContains(t, seen, typ.TypeKey, "source type keys must be unique")
 		seen[typ.TypeKey] = true
 		if strings.Contains(typ.TypeKey, "._@") && typ.Alias == 0 {
 			require.Equal(t, typ.TypeKey, typ.ResolvedKey)
 		}
 	}
-	require.True(t, seen["fixture.Named"])
+	require.Contains(t, seen, "fixture.Named")
 }

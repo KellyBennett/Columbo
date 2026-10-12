@@ -66,6 +66,7 @@ type Querier interface {
 	InsertStageCollector(ctx context.Context, arg InsertStageCollectorParams) error
 	InsertSuppression(ctx context.Context, arg InsertSuppressionParams) error
 	InsertWarning(ctx context.Context, arg InsertWarningParams) error
+	InspectionAvailable(ctx context.Context) (bool, error)
 	InspectionCalls(ctx context.Context, arg InspectionCallsParams) ([]SourceOneHopCall, error)
 	InspectionConfigCounts(ctx context.Context) ([]InspectionConfigCountsRow, error)
 	InspectionConfigExclusions(ctx context.Context) ([]InspectionConfigExclusionsRow, error)

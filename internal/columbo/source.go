@@ -559,11 +559,12 @@ func (a *engine) inspectDeclarations() error {
 	return nil
 }
 func Analyze(dir string, patterns []string, c Config) (Report, error) {
-	a, e := load(dir, patterns, c)
-	if e != nil {
-		return Report{}, e
+	input, err := inspectionLocation(dir)
+	if err != nil {
+		return Report{}, err
 	}
-	return a.Analyze()
+	input.config = c
+	return input.analyze(patterns)
 }
 
 func (d *declaration) bodyRange() (token.Pos, token.Pos) {

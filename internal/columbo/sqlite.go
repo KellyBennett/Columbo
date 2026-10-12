@@ -10,6 +10,12 @@ import (
 )
 
 func WriteSnapshot(path string, report Report, version string) error {
+	if report.inspection != nil {
+		input := inspectionInput{root: report.inspection.Root}
+		if err := input.validateOutput(path); err != nil {
+			return err
+		}
+	}
 	return writeSnapshotWithIO(path, snapshotContents{report: report, version: version}, snapshotFilesystem{})
 }
 
