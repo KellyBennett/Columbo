@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+skill=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+repo=$(git -C "$skill" rev-parse --show-toplevel)
+
+die() { printf 'columbo-verify: %s\n' "$*" >&2; exit 2; }
+
+usage() {
+  cat <<'EOF'
+Usage: columbo-verify <command> [args]
+  launch                         build columbo into a fresh run dir; prints RUN
+  doctor  RUN                    read-only health check of a run dir
+  stage   RUN NAME [SOURCE]      copy a subject module into RUN/subjects/NAME
+                                 SOURCE: fixture-all | tangle | a module path (default fixture-all)
+  drive   RUN NAME LABEL [ARGS]  run columbo in subject NAME; ARGS precede ./...
+                                 evidence goes to RUN/evidence/LABEL/
+  sql     RUN LABEL QUERY.sql    run a read-only query against LABEL's snapshot
+  cleanup RUN                    remove binary and subjects; keep RUN/evidence
+EOF
+}
+
+go_version() { awk '$1 == "go" { print $2; exit }' "$repo/go.mod"; }
+
+resolve_go_bin() {
+  local want; want=$(go_version)
+  if command -v go >/dev/null && [[ "$(go env GOVERSION)" == "go$want" ]]; then
+    dirname "$(command -v go)"
+  elif command -v mise >/dev/null; then
+    mise exec "go@$want" -- sh -c 'dirname "$(command -v go)"'
+  else
+    die "need Go $want on PATH (or mise to fetch it)"
+  fi
+}
+
+require_run() {
+  [[ -n "${1:-}" && -f "$1/.columbo-verify" ]] || die "not a columbo-verify run dir: ${1:-<missing>}"
+}
+
+with_go() { PATH="$(cat "$RUN/go-bin"):$PATH" "$@"; }
+
+cmd_launch() {
+  RUN=$(cd "$(mktemp -d "${TMPDIR:-/tmp}/columbo-verify.XXXXXX")" && pwd -P)
+  touch "$RUN/.columbo-verify"
+  mkdir -p "$RUN/bin" "$RUN/subjects" "$RUN/evidence"
+  resolve_go_bin > "$RUN/go-bin"
+  git -C "$repo" rev-parse HEAD > "$RUN/evidence/columbo-commit.txt"
+  CGO_ENABLED=0 with_go go -C "$repo" build -o "$RUN/bin/columbo" ./cmd/columbo
+  printf '%s\n' "$RUN"
+}
+
+cmd_doctor() {
+  RUN=${1:-}; require_run "$RUN"
+  local ok=0
+  [[ "$RUN" == "$(cd "$RUN" && pwd -P)" ]] || { echo "FAIL run dir path is not symlink-free"; ok=1; }
+  if [[ -x "$RUN/bin/columbo" ]]; then
+    echo "ok   binary $("$RUN/bin/columbo" --version)"
+  else
+    echo "FAIL binary missing (run launch, or cleanup already ran)"; ok=1
+  fi
+  if with_go go version >/dev/null 2>&1; then
+    echo "ok   $(with_go go version)"
+  else
+    echo "FAIL go not runnable from $(cat "$RUN/go-bin")"; ok=1
+  fi
+  local built head
+  built=$(cat "$RUN/evidence/columbo-commit.txt"); head=$(git -C "$repo" rev-parse HEAD)
+  if [[ "$built" == "$head" ]] && git -C "$repo" diff --quiet HEAD -- . ':!.claude'; then
+    echo "ok   built from HEAD $head with a clean tree"
+  else
+    echo "WARN binary built from $built; checkout is now $head or dirty: relaunch to test current code"
+  fi
+  return $ok
+}
+
+cmd_stage() {
+  RUN=${1:-}; require_run "$RUN"
+  local name=${2:?NAME required} source=${3:-fixture-all} dest
+  dest="$RUN/subjects/$name"
+  [[ ! -e "$dest" ]] || die "subject $name already exists"
+  case "$source" in
+    fixture-all) source="$repo/internal/columbo/testdata/all" ;;
+    tangle) source="$skill/subjects/tangle" ;;
+  esac
+  [[ -f "$source/go.mod" ]] || die "$source is not a Go module root"
+  cp -R "$source" "$dest"
+  printf '%s\n' "$dest"
+}
+
+cmd_drive() {
+  RUN=${1:-}; require_run "$RUN"
+  local name=${2:?NAME required} label=${3:?LABEL required}; shift 3
+  local subject="$RUN/subjects/$name" out="$RUN/evidence/$label" status=0
+  [[ -d "$subject" ]] || die "no subject $name; run stage first"
+  [[ ! -e "$out" ]] || die "evidence label $label already used"
+  mkdir -p "$out"
+  local args=(--output "$out/report.sqlite" "$@" ./...)
+  printf 'cwd: %s\ncolumbo %s\n' "$subject" "${args[*]}" > "$out/command.txt"
+  (cd "$subject" && with_go "$RUN/bin/columbo" "${args[@]}") > "$out/stdout.txt" 2> "$out/stderr.txt" || status=$?
+  printf '%s\n' "$status" > "$out/exit-code.txt"
+  printf 'exit %s; evidence in %s\n' "$status" "$out"
+}
+
+cmd_sql() {
+  RUN=${1:-}; require_run "$RUN"
+  local db="$RUN/evidence/${2:?LABEL required}/report.sqlite" query=${3:?QUERY required}
+  [[ -f "$query" ]] || query="$repo/docs/sqlite/$query"
+  [[ -f "$db" ]] || die "no snapshot at $db"
+  sqlite3 -readonly -header "$db" < "$query"
+}
+
+cmd_cleanup() {
+  RUN=${1:-}; require_run "$RUN"
+  rm -rf "$RUN/bin" "$RUN/subjects"
+  printf 'removed binary and subjects; evidence kept in %s/evidence\n' "$RUN"
+}
+
+command=${1:-}; shift || true
+case "$command" in
+  launch|doctor|stage|drive|sql|cleanup) "cmd_$command" "$@" ;;
+  -h|--help|help|'') usage ;;
+  *) usage >&2; exit 2 ;;
+esac
