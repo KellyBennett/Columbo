@@ -17,8 +17,8 @@ jobs:
       CGO_ENABLED: '0'
       BOUNDARY_REPORT_DIR: ${{ github.workspace }}/.tools/database-boundary-report
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25.1'
           cache: true
@@ -31,7 +31,7 @@ jobs:
         run: python3 scripts/database-boundary/test-guards.py
       - name: Retain every boundary diagnostic
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: columbo-database-boundary-diagnostics
           path: .tools/database-boundary-report
@@ -48,8 +48,8 @@ jobs:
       GOFLAGS: '-buildvcs=false'
       CGO_ENABLED: '0'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25.1'
           cache: true
@@ -72,7 +72,7 @@ jobs:
         run: python3 -m unittest discover -s scripts -p test_github_check.py -v
       - name: Retain query fixture snapshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: columbo-query-fixture-snapshot
           path: ${{ runner.temp }}/columbo-fixture.sqlite
@@ -94,7 +94,7 @@ jobs:
       GOFLAGS: '-buildvcs=false'
       CGO_ENABLED: '0'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Investigate source evidence and publish active-stage findings
         uses: ./
         with:
@@ -110,8 +110,8 @@ jobs:
       GOFLAGS: '-buildvcs=false'
       CGO_ENABLED: '0'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25.1'
           cache: true
@@ -135,7 +135,7 @@ jobs:
           "$RUNNER_TEMP/calibrate" report --db "$RUNNER_TEMP/calibration.sqlite" --triage calibration/triage.yaml > "$RUNNER_TEMP/calibration-report.md" 2> "$RUNNER_TEMP/calibration-warnings.txt"
           cat "$RUNNER_TEMP/calibration-report.md" >> "$GITHUB_STEP_SUMMARY"
           if [ -s "$RUNNER_TEMP/calibration-warnings.txt" ]; then echo "::warning::$(cat "$RUNNER_TEMP/calibration-warnings.txt")"; fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && github.event_name == 'push'
         with:
           name: columbo-calibration
