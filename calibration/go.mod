@@ -3,6 +3,7 @@ module github.com/KellyBennett/Columbo/calibration
 go 1.25.1
 
 require (
+	github.com/mibk/dupl v1.1.0
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/uudashr/gocognit v1.2.0
 	golang.org/x/tools v0.37.0

@@ -14,6 +14,8 @@ type Snapshot struct {
 	Version    string
 	// Dependencies maps a declaration symbol to its scored dependency identities.
 	Dependencies map[string][]string
+	// DuplicateFragments holds every declaration symbol that anchors a duplicate-code fragment.
+	DuplicateFragments map[string]bool
 }
 
 func ReadSnapshot(path string) (Snapshot, error) {
@@ -22,7 +24,7 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	defer db.Close()
-	s := Snapshot{Thresholds: map[string]float64{}, Dependencies: map[string][]string{}}
+	s := Snapshot{Thresholds: map[string]float64{}, Dependencies: map[string][]string{}, DuplicateFragments: map[string]bool{}}
 	if err := db.QueryRow(`SELECT columbo_version FROM report`).Scan(&s.Version); err != nil {
 		return Snapshot{}, fmt.Errorf("read report: %w", err)
 	}
@@ -49,6 +51,9 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		}
 	}
 	if err := readDependencies(db, s.Dependencies); err != nil {
+		return Snapshot{}, err
+	}
+	if err := readDuplicateFragments(db, s.DuplicateFragments); err != nil {
 		return Snapshot{}, err
 	}
 	sortFindings(s.Findings)
@@ -101,4 +106,21 @@ func sortFindings(fs []Finding) {
 		}
 		return a.CaseID < b.CaseID
 	})
+}
+
+func readDuplicateFragments(db *sql.DB, into map[string]bool) error {
+	rows, err := db.Query(`SELECT DISTINCT d.symbol FROM source_receipts r
+		JOIN declarations d ON d.id = r.source_declaration_id WHERE r.kind = 'duplicate-fragment'`)
+	if err != nil {
+		return fmt.Errorf("read duplicate fragments: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return err
+		}
+		into[symbol] = true
+	}
+	return rows.Err()
 }

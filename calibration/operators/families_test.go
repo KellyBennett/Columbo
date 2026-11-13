@@ -55,3 +55,14 @@ func TestProseIsCaughtAStringConstantHidesItAndDeletionCures(t *testing.T) {
 		{"delete-prose-comments", clause, 1, "killed"},
 	})
 }
+
+func TestDuplicateSurvivesRenamesAndDelegationCuresExactCopies(t *testing.T) {
+	rows := runFixture(t, "dup", "duplicate-block", "rename-and-relabel", "delegate-duplicate")
+	expectRows(t, rows, []want{
+		{"duplicate-block", "example.com/dup.Score", 1, "killed"},
+		{"duplicate-block", "example.com/dup.Sign", 1, "equivalent"},
+		{"duplicate-block", "example.com/dup.Average", 1, "equivalent"},
+		{"rename-and-relabel", "example.com/dup.scoreDup", 1, "killed"},
+		{"delegate-duplicate", "example.com/dup.Mean", 1, "killed"},
+	})
+}

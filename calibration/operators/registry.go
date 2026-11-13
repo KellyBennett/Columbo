@@ -45,6 +45,9 @@ func init() {
 	register(addProseComment{})
 	register(proseToStringConstant{})
 	register(deleteProseComments{})
+	register(duplicateBlock{})
+	register(renameAndRelabel{})
+	register(delegateDuplicate{})
 }
 
 func All() []harness.Operator {
