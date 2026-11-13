@@ -171,7 +171,6 @@ var clusterBoundaries = map[reflect.Type]bool{
 	reflect.TypeOf((*ast.SwitchStmt)(nil)):     true,
 	reflect.TypeOf((*ast.TypeSwitchStmt)(nil)): true,
 	reflect.TypeOf((*ast.SelectStmt)(nil)):     true,
-	reflect.TypeOf((*ast.BlockStmt)(nil)):      true,
 	reflect.TypeOf((*ast.LabeledStmt)(nil)):    true,
 	reflect.TypeOf((*ast.GoStmt)(nil)):         true,
 	reflect.TypeOf((*ast.DeferStmt)(nil)):      true,
@@ -187,14 +186,15 @@ var nestedStatementScopes = map[reflect.Type]bool{
 }
 
 type clusterScan struct {
-	engine   *engine
-	owner    *declaration
-	out      []*helperCluster
-	sequence []*ast.CallExpr
+	engine      *engine
+	owner       *declaration
+	out         []*helperCluster
+	sequence    []*ast.CallExpr
+	transparent map[*ast.BlockStmt]bool
 }
 
 func (a *engine) clusters(d *declaration) []*helperCluster {
-	scan := &clusterScan{engine: a, owner: d, out: []*helperCluster{}}
+	scan := &clusterScan{engine: a, owner: d, out: []*helperCluster{}, transparent: map[*ast.BlockStmt]bool{}}
 	d.inspectBody(scan.visit)
 	return scan.out
 }
@@ -205,7 +205,7 @@ func (s *clusterScan) visit(n ast.Node) bool {
 	}
 	switch n := n.(type) {
 	case *ast.BlockStmt:
-		s.statements(n.List)
+		s.block(n)
 	case *ast.CaseClause:
 		s.statements(n.Body)
 	case *ast.CommClause:
@@ -219,11 +219,29 @@ func (s *clusterScan) statements(statements []ast.Stmt) {
 	}
 	s.flush()
 }
+func (s *clusterScan) block(block *ast.BlockStmt) {
+	if !s.transparent[block] {
+		s.statements(block.List)
+	}
+}
 func (s *clusterScan) statement(statement ast.Stmt) {
+	if block, ok := statement.(*ast.BlockStmt); ok {
+		s.bareBlock(block)
+		return
+	}
 	if clusterBoundaries[reflect.TypeOf(statement)] {
 		s.flush()
 		return
 	}
+	s.calls(statement)
+}
+func (s *clusterScan) bareBlock(block *ast.BlockStmt) {
+	s.transparent[block] = true
+	for _, inner := range block.List {
+		s.statement(inner)
+	}
+}
+func (s *clusterScan) calls(statement ast.Stmt) {
 	for _, call := range lexicalCalls(statement) {
 		helper := s.engine.calls[call]
 		if helper != nil && helper.candidate {
