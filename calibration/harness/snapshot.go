@@ -16,6 +16,8 @@ type Snapshot struct {
 	Dependencies map[string][]string
 	// DuplicateFragments holds every declaration symbol that anchors a duplicate-code fragment.
 	DuplicateFragments map[string]bool
+	// Parameters holds each case's parameter receipts, keyed by case ID.
+	Parameters map[string][]ParameterReceipt
 }
 
 func ReadSnapshot(path string) (Snapshot, error) {
@@ -57,6 +59,7 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if err := readDuplicateFragments(db, s.DuplicateFragments); err != nil {
+	if s.Parameters, err = readParameterReceipts(db); err != nil {
 		return Snapshot{}, err
 	}
 	sortFindings(s.Findings)

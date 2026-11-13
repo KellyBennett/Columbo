@@ -55,6 +55,8 @@ func init() {
 	register(packAnonymousStruct("pack-anonymous-struct", "inline-parameter-object", "data-clump"))
 	register(packAnonymousStruct("pack-anonymous-struct-lpl", "inline-parameter-object-lpl", "long-parameter-list"))
 	register(reorderParams("reorder-params", "inline-parameter-object", "data-clump"))
+	register(introduceParameterObject{})
+	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}})
 }
 
 func All() []harness.Operator {

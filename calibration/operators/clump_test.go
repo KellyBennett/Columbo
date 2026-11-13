@@ -42,3 +42,13 @@ func TestInlineParameterObjectKillsAtOccurrences(t *testing.T) {
 		}
 	}
 }
+
+func TestIntroduceParameterObjectReachesGreen(t *testing.T) {
+	rows := runFixture(t, "clumpcure", "introduce-parameter-object")
+	if len(rows) != 1 {
+		t.Fatalf("got %d cure rows, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].Status != "killed" {
+		t.Errorf("cure %s: %s", rows[0].Status, rows[0].Reason)
+	}
+}
