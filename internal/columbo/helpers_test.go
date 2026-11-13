@@ -405,3 +405,42 @@ func (t *testHarness) TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives() {
 func TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives(t *testing.T) {
 	(&testHarness{T: t}).TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives()
 }
+
+func TestFeatureEnvyCountsEachTypeSwitchClauseVariableSeparately(t *testing.T) {
+	(&testHarness{T: t}).TestFeatureEnvyCountsEachTypeSwitchClauseVariableSeparately()
+}
+
+const envyTypeSwitchSource = `package fixture
+
+type Pair struct{ A, B, C int }
+type Single struct{ A, B, C int }
+
+func Parts(v any) int {
+	switch v := v.(type) {
+	case Pair:
+		return v.A + v.B + v.C
+	case *Single:
+		return v.A + v.B
+	}
+	return 0
+}
+
+func Whole(v any) int {
+	switch v := v.(type) {
+	case Pair:
+		return v.A + v.B + v.C + v.A + v.B
+	}
+	return 0
+}
+`
+
+func (t *testHarness) TestFeatureEnvyCountsEachTypeSwitchClauseVariableSeparately() {
+	config := quiet()
+	config.Severity["feature-envy"] = "fail"
+	symbols := map[string]bool{}
+	for _, c := range t.investigate(t.fixture(envyTypeSwitchSource), config).Cases {
+		symbols[c.Symbol] = true
+	}
+	t.require(!symbols["fixture.Parts"], "each clause's v is its own variable: 3 and 2 accesses, neither reaches 5", symbols)
+	t.require(symbols["fixture.Whole"], "one clause's v with 5 accesses still qualifies", symbols)
+}
