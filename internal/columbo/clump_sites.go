@@ -79,11 +79,10 @@ func interfaceType(t types.Type) bool {
 	return types.IsInterface(t)
 }
 func looseName(name string) string {
-	return strings.ToLower(trimIDSuffix(name))
+	return strings.ToLower(trimCamelCaseIDSuffix(name))
 }
 
-// Only a camel-case word boundary marks an ID suffix; "avoid", "uuid" and "UUID" keep theirs.
-func trimIDSuffix(name string) string {
+func trimCamelCaseIDSuffix(name string) string {
 	stem, found := strings.CutSuffix(name, "ID")
 	if !found {
 		stem, found = strings.CutSuffix(name, "Id")
