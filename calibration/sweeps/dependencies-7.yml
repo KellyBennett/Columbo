@@ -1,0 +1,3 @@
+version: 1
+thresholds:
+  dependencies: 7

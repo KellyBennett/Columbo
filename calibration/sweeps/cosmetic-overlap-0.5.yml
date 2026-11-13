@@ -1,0 +1,3 @@
+version: 1
+thresholds:
+  cosmetic-dependency-overlap: 0.5
