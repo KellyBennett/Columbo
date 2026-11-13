@@ -85,8 +85,13 @@ func (v valueAccess) receipt(kind string) Source {
 
 type accessCollection struct {
 	own         []Source
-	groups      map[string]*accessGroup
+	groups      map[accessIdentity]*accessGroup
 	declaration *declaration
+}
+
+type accessIdentity struct {
+	root *types.Var
+	key  string
 }
 
 func (a *engine) envy(d *declaration) error {
@@ -134,7 +139,7 @@ func ownershipLeads(groups []*accessGroup) []string {
 	return leads
 }
 func (d *declaration) accesses() *accessCollection {
-	c := &accessCollection{declaration: d, own: []Source{}, groups: map[string]*accessGroup{}}
+	c := &accessCollection{declaration: d, own: []Source{}, groups: map[accessIdentity]*accessGroup{}}
 	d.inspectBody(c.visit)
 	return c
 }
@@ -169,10 +174,11 @@ func (d *declaration) accessReceipt(kind string, s *ast.SelectorExpr, key string
 }
 func (c *accessCollection) foreign(access valueAccess) {
 	receipt := access.receipt("foreign-access")
-	group := c.groups[access.key]
+	id := accessIdentity{access.root, access.key}
+	group := c.groups[id]
 	if group == nil {
 		group = access.newGroup(receipt.StartOffset)
-		c.groups[access.key] = group
+		c.groups[id] = group
 	}
 	group.receipts = append(group.receipts, receipt)
 }
