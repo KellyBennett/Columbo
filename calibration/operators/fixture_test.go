@@ -130,3 +130,15 @@ func TestInlineKillsAtPredictedDoseAndSplitIsCosmetic(t *testing.T) {
 		t.Error("no split evade ran on a killed inline mutant")
 	}
 }
+
+func TestExtractFunctionCuresLongFunction(t *testing.T) {
+	rows := runFixture(t, "extract", "extract-function")
+	if len(rows) == 0 {
+		t.Fatal("no cure mutants ran")
+	}
+	for _, r := range rows {
+		if r.Status != "killed" {
+			t.Errorf("dose %d: %s (%s)", r.Dose, r.Status, r.Reason)
+		}
+	}
+}

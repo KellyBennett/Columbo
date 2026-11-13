@@ -56,7 +56,7 @@ func Score(o *Outcome, exp Expectation, before, after []Finding) {
 func hits(fs []Finding, smells []string, touched []string) []Finding {
 	var out []Finding
 	for _, f := range fs {
-		if slices.Contains(smells, f.Smell) && (len(touched) == 0 || slices.Contains(touched, f.Symbol)) {
+		if (smells == nil || slices.Contains(smells, f.Smell)) && (len(touched) == 0 || slices.Contains(touched, f.Symbol)) {
 			out = append(out, f)
 		}
 	}
@@ -87,21 +87,40 @@ func scoreEvade(o *Outcome, exp Expectation, _, _ []Finding) {
 	o.Status, o.Reason = Survived, "evade silenced "+o.Target
 }
 
+// scoreCure counts a smell as moved, not new, when the same smell left a touched
+// declaration in the same mutant: extracting envious code carries its envy to the helper.
 func scoreCure(o *Outcome, exp Expectation, _, _ []Finding) {
 	if len(hits(o.Removed, []string{o.Target}, exp.Touched)) == 0 {
 		o.Status, o.Reason = Survived, "target case remains"
 		return
 	}
-	if len(o.Added) > 0 {
-		names := make([]string, len(o.Added))
-		for i, f := range o.Added {
-			names[i] = f.Smell + "@" + shortSymbol(f.Symbol)
+	left := map[string]int{}
+	for _, f := range hits(o.Removed, nil, exp.Touched) {
+		left[f.Smell]++
+	}
+	left[o.Target]--
+	var added, moved []string
+	for _, f := range o.Added {
+		name := f.Smell + "@" + shortSymbol(f.Symbol)
+		if left[f.Smell] > 0 && containsSymbol(exp.Touched, f.Symbol) {
+			left[f.Smell]--
+			moved = append(moved, name)
+			continue
 		}
-		o.Status, o.Reason = Conflict, "cleared target but added "+strings.Join(names, ", ")
+		added = append(added, name)
+	}
+	note := ""
+	if len(moved) > 0 {
+		note = "; moved " + strings.Join(moved, ", ")
+	}
+	if len(added) > 0 {
+		o.Status, o.Reason = Conflict, "cleared target but added "+strings.Join(added, ", ")+note
 		return
 	}
-	o.Status, o.Reason = Killed, "target cleared, nothing added"
+	o.Status, o.Reason = Killed, "target cleared, nothing new added"+note
 }
+
+func containsSymbol(touched []string, s string) bool { return slices.Contains(touched, s) }
 
 // scoreNeutral compares case IDs. A case whose primary declaration was renamed or moved
 // must reappear under its new symbol; every other case must keep its exact ID.

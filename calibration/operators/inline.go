@@ -367,6 +367,9 @@ func (ic inlineCall) expand(k int) (string, error) {
 }
 
 func recvVar(f fn) *types.Var {
+	if f.decl.Recv == nil {
+		return nil
+	}
 	names := f.decl.Recv.List[0].Names
 	if len(names) == 0 {
 		return nil
