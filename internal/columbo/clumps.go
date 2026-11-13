@@ -2,9 +2,9 @@ package columbo
 
 import "sort"
 
-type typeMultiset map[string]int
+type parameterMultiset map[string]int
 
-func (m typeMultiset) types() []string {
+func (m parameterMultiset) elements() []string {
 	out := []string{}
 	for t, n := range m {
 		for i := 0; i < n; i++ {
@@ -14,8 +14,8 @@ func (m typeMultiset) types() []string {
 	sort.Strings(out)
 	return out
 }
-func (m typeMultiset) intersection(other typeMultiset) typeMultiset {
-	out := typeMultiset{}
+func (m parameterMultiset) intersection(other parameterMultiset) parameterMultiset {
+	out := parameterMultiset{}
 	for t, n := range m {
 		if k := other[t]; k > 0 {
 			out[t] = min(n, k)
@@ -23,7 +23,7 @@ func (m typeMultiset) intersection(other typeMultiset) typeMultiset {
 	}
 	return out
 }
-func (m typeMultiset) contains(other typeMultiset) bool {
+func (m parameterMultiset) contains(other parameterMultiset) bool {
 	for t, n := range other {
 		if m[t] < n {
 			return false
@@ -31,17 +31,19 @@ func (m typeMultiset) contains(other typeMultiset) bool {
 	}
 	return true
 }
-func (m typeMultiset) copy() typeMultiset {
-	out := typeMultiset{}
+func (m parameterMultiset) copy() parameterMultiset {
+	out := parameterMultiset{}
 	for t, n := range m {
 		out[t] = n
 	}
 	return out
 }
-func (d *declaration) parameterTypes() typeMultiset {
-	m := typeMultiset{}
+func (d *declaration) clumpParameters() parameterMultiset {
+	m := parameterMultiset{}
 	for _, p := range d.params {
-		m[canonicalType(p.typ, d.signature)]++
+		if key, ok := d.clumpElement(p); ok {
+			m[key]++
+		}
 	}
 	return m
 }
@@ -55,8 +57,8 @@ func (d *declaration) before(other *declaration) bool {
 type clumpMiner struct {
 	engine       *engine
 	declarations []*declaration
-	signatures   map[*declaration]typeMultiset
-	patterns     []typeMultiset
+	signatures   map[*declaration]parameterMultiset
+	patterns     []parameterMultiset
 	seen         map[string]bool
 }
 
@@ -79,24 +81,24 @@ func (a *engine) clumps() error {
 }
 func (a *engine) mineClumps(ds []*declaration) error {
 	sort.Slice(ds, func(i, j int) bool { return ds[i].before(ds[j]) })
-	m := &clumpMiner{engine: a, declarations: ds, signatures: map[*declaration]typeMultiset{}, seen: map[string]bool{}}
+	m := &clumpMiner{engine: a, declarations: ds, signatures: map[*declaration]parameterMultiset{}, seen: map[string]bool{}}
 	m.signaturesFromParameters()
 	m.intersections()
 	return m.report()
 }
 func (m *clumpMiner) signaturesFromParameters() {
 	for _, d := range m.declarations {
-		s := d.parameterTypes()
+		s := d.clumpParameters()
 		m.signatures[d] = s
 		m.add(s)
 	}
 }
-func (m *clumpMiner) add(s typeMultiset) {
-	ts := s.types()
-	if int64(len(ts)) < m.engine.config.Counts["data-clump-size"] {
+func (m *clumpMiner) add(s parameterMultiset) {
+	keys := s.elements()
+	if int64(len(keys)) < m.engine.config.Counts["data-clump-size"] {
 		return
 	}
-	key := canonical(ts)
+	key := canonical(keys)
 	if m.seen[key] {
 		return
 	}
@@ -109,12 +111,12 @@ func (m *clumpMiner) intersections() {
 		m.intersectSignatures(m.patterns[i])
 	}
 }
-func (m *clumpMiner) intersectSignatures(s typeMultiset) {
+func (m *clumpMiner) intersectSignatures(s parameterMultiset) {
 	for _, d := range m.declarations {
 		m.add(s.intersection(m.signatures[d]))
 	}
 }
-func (m *clumpMiner) support(s typeMultiset) []*declaration {
+func (m *clumpMiner) support(s parameterMultiset) []*declaration {
 	out := []*declaration{}
 	for _, d := range m.declarations {
 		if m.signatures[d].contains(s) {
@@ -131,7 +133,7 @@ func (m *clumpMiner) report() error {
 	}
 	return nil
 }
-func (m *clumpMiner) reportPattern(s typeMultiset) error {
+func (m *clumpMiner) reportPattern(s parameterMultiset) error {
 	support := m.support(s)
 	if int64(len(support)) < m.engine.config.Counts["data-clump-occurrences"] {
 		return nil
@@ -143,35 +145,35 @@ func (m *clumpMiner) reportPattern(s typeMultiset) error {
 	m.engine.report.Cases = append(m.engine.report.Cases, *c)
 	return nil
 }
-func (m *clumpMiner) patternCase(pattern typeMultiset, support []*declaration) (*Case, error) {
-	types := pattern.types()
-	c, err := m.engine.newCase(support[0], "data-clump", canonical(types))
+func (m *clumpMiner) patternCase(pattern parameterMultiset, support []*declaration) (*Case, error) {
+	parameters := pattern.elements()
+	c, err := m.engine.newCase(support[0], "data-clump", canonical(parameters))
 	if err != nil || c == nil {
 		return c, err
 	}
-	evidence := c.clumpClues(types, len(support), m.engine.config)
+	evidence := c.clumpClues(parameters, len(support), m.engine.config)
 	evidence.include(support, pattern)
 	return c, nil
 }
 
 type clumpEvidence struct {
-	finding                  *Case
-	types, size, occurrences *clueSupport
+	finding                       *Case
+	parameters, size, occurrences *clueSupport
 }
 
-func (c *Case) clumpClues(types []string, count int, config Config) *clumpEvidence {
-	typeClue := metric("clump-types", c.Symbol, types).forDeclaration(c.PrimaryDeclaration)
-	sizeClue := metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration)
+func (c *Case) clumpClues(parameters []string, count int, config Config) *clumpEvidence {
+	parameterClue := metric("clump-parameters", c.Symbol, parameters).forDeclaration(c.PrimaryDeclaration)
+	sizeClue := metric("clump-size", c.Symbol, len(parameters)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration)
 	occurrenceClue := metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">=").forDeclaration(c.PrimaryDeclaration)
-	return &clumpEvidence{finding: c, types: newClueSupport(&typeClue), size: newClueSupport(&sizeClue), occurrences: newClueSupport(&occurrenceClue)}
+	return &clumpEvidence{finding: c, parameters: newClueSupport(&parameterClue), size: newClueSupport(&sizeClue), occurrences: newClueSupport(&occurrenceClue)}
 }
-func (e *clumpEvidence) include(support []*declaration, pattern typeMultiset) {
+func (e *clumpEvidence) include(support []*declaration, pattern parameterMultiset) {
 	for _, d := range support {
 		e.declarationReceipts(d, pattern)
 	}
-	e.finding.Clues = append(e.finding.Clues, *e.types.clue, *e.size.clue, *e.occurrences.clue)
+	e.finding.Clues = append(e.finding.Clues, *e.parameters.clue, *e.size.clue, *e.occurrences.clue)
 }
-func (e *clumpEvidence) declarationReceipts(d *declaration, s typeMultiset) {
+func (e *clumpEvidence) declarationReceipts(d *declaration, s parameterMultiset) {
 	e.finding.includeDeclaration(d, "clump-support")
 	e.occurrences.add(d.declReceipt())
 	need := s.copy()
@@ -179,20 +181,24 @@ func (e *clumpEvidence) declarationReceipts(d *declaration, s typeMultiset) {
 		e.parameter(d, need, p)
 	}
 }
-func (e *clumpEvidence) parameter(d *declaration, need typeMultiset, p parameter) {
-	t := d.parameterType(p)
-	if need[t] == 0 {
+func (e *clumpEvidence) parameter(d *declaration, need parameterMultiset, p parameter) {
+	key, ok := d.clumpElement(p)
+	if !ok || need[key] == 0 {
 		return
 	}
-	need[t]--
+	need[key]--
 	e.parameterReceipt(d.parameterReceipt(p))
 }
 
-func (d *declaration) parameterType(p parameter) string {
-	return canonicalType(p.typ, d.signature)
+func (d *declaration) clumpElement(p parameter) (string, bool) {
+	name, t := p.obj.Name(), canonicalType(p.typ, d.signature)
+	if name == "" || name == "_" || t == "context.Context" {
+		return "", false
+	}
+	return name + " " + t, true
 }
 func (e *clumpEvidence) parameterReceipt(receipt Source) {
 	e.finding.Receipts = append(e.finding.Receipts, receipt)
-	e.types.add(receipt)
+	e.parameters.add(receipt)
 	e.size.add(receipt)
 }

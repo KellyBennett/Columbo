@@ -20,10 +20,6 @@
 [case_declarations] case_id | declaration_id | role
 "C-3d6d2adfd3" | 5 | "primary"
 "C-4063b2b57c" | 1 | "primary"
-"C-47c5c497d6" | 2 | "clump-support"
-"C-47c5c497d6" | 2 | "primary"
-"C-47c5c497d6" | 3 | "clump-support"
-"C-47c5c497d6" | 4 | "clump-support"
 "C-4fb5041cb7" | 6 | "primary"
 "C-5522b4859c" | 9 | "cluster-owner"
 "C-5522b4859c" | 9 | "expansion"
@@ -37,6 +33,10 @@
 "C-ad03ea5957" | 8 | "primary"
 "C-b06ec7d1d9" | 13 | "primary"
 "C-b10bccb46b" | 7 | "primary"
+"C-b79a56258e" | 2 | "clump-support"
+"C-b79a56258e" | 2 | "primary"
+"C-b79a56258e" | 3 | "clump-support"
+"C-b79a56258e" | 4 | "clump-support"
 "C-bd6e66f9ad" | 12 | "primary"
 "C-cf8ec1ee12" | 6 | "primary"
 
@@ -47,9 +47,6 @@
 "C-4063b2b57c" | "avoid" | 0 | "Renaming or aliasing a collaborator solely to split the access count."
 "C-4063b2b57c" | "lead" | 0 | "Review each qualifying foreign value and its contributing accesses."
 "C-4063b2b57c" | "lead" | 1 | "Consider moving cohesive behavior toward the owner of that data."
-"C-47c5c497d6" | "avoid" | 0 | "Bundling unrelated values solely to silence the repeated-type rule."
-"C-47c5c497d6" | "lead" | 0 | "Inspect the participating signatures for a shared domain concept."
-"C-47c5c497d6" | "lead" | 1 | "Introduce a parameter object only if the values belong together."
 "C-4fb5041cb7" | "avoid" | 0 | "Introducing a facade or moving code solely to lower the dependency count."
 "C-4fb5041cb7" | "avoid" | 1 | "Treating a lower dependency score as proof of a better design."
 "C-4fb5041cb7" | "lead" | 0 | "Does the caller know details its dependency could own?"
@@ -87,6 +84,9 @@
 "C-b10bccb46b" | "avoid" | 1 | "Moving the same procedure into another file."
 "C-b10bccb46b" | "lead" | 0 | "Look for cohesive responsibilities with different reasons to change."
 "C-b10bccb46b" | "lead" | 1 | "Move behavior toward the object that owns its data."
+"C-b79a56258e" | "avoid" | 0 | "Bundling unrelated values solely to silence the repeated-parameter rule."
+"C-b79a56258e" | "lead" | 0 | "Inspect the participating signatures for a shared domain concept."
+"C-b79a56258e" | "lead" | 1 | "Introduce a parameter object only if the values belong together."
 "C-bd6e66f9ad" | "avoid" | 0 | "Deleting a comment that describes an untested invariant without first preserving that invariant in a regression test."
 "C-bd6e66f9ad" | "avoid" | 1 | "Disguising prose as a machine directive, generated code, or an unused string."
 "C-bd6e66f9ad" | "avoid" | 2 | "Writing tests that merely assert comment absence instead of the behavior the comment was intended to protect."
@@ -109,13 +109,13 @@
 [cases] id | ordinal | primary_declaration_id | smell | verdict | suppressed | start_line | end_line | why | diagnosis
 "C-3d6d2adfd3" | 2 | 5 | "high-cognitive-complexity" | "FAIL" | 0 | 27 | 37 | "Deep or repeated decision structures make behavior harder to follow." | "fixture.Complex exceeds the configured cognitive-complexity limit; its decision structure may need simplification."
 "C-4063b2b57c" | 5 | 1 | "feature-envy" | "FAIL" | 0 | 44 | 46 | "Concentrated access to another value can indicate misplaced behavior." | "fixture.(Own).Envy meets the configured foreign-access and ratio conditions; behavior may belong nearer a qualifying foreign value. Zero own accesses satisfies the ratio condition once the foreign minimum is met."
-"C-47c5c497d6" | 6 | 2 | "data-clump" | "FAIL" | 0 | 47 | 47 | "Repeated groups of parameter types can indicate a missing shared concept." | "The parameter multiset anchored at fixture.ClumpA recurs at the configured support and size; it may represent a missing domain object."
 "C-4fb5041cb7" | 3 | 6 | "excessive-dependencies" | "FAIL" | 0 | 38 | 39 | "A broad dependency set is a lead to inspect where knowledge and decisions belong; the count alone does not establish mixed responsibilities." | "fixture.Dependencies exceeds the configured dependency limit. Inspect its evidence for repeated policy, exposed implementation details, implicit contracts, and cohesive collaboration."
 "C-5522b4859c" | 7 | 9 | "cosmetic-extraction" | "FAIL" | 0 | 50 | 53 | "Single-use helper sequences can retain the original procedure's coupling while hiding its metrics." | "fixture.Parent has helper clusters meeting the configured overlap conditions, and candidate expansion exceeds a configured metric limit; this may be cosmetic decomposition even if the helper names sound meaningful."
 "C-82bc134f4f" | 10 | 15 | "repeated-variant-decision" | "FAIL" | 0 | 10 | 17 | "Repeated decisions over the same variant domain distribute knowledge of that taxonomy. Adding or changing a variant may require coordinated edits across otherwise unrelated code." | "Multiple decision sites repeatedly distinguish variants of the same typed domain. This may indicate distributed variant knowledge, a missing behavioral role, or a decision that should be centralized."
 "C-ad03ea5957" | 1 | 8 | "long-parameter-list" | "FAIL" | 0 | 26 | 26 | "Many parameters can obscure which inputs belong together." | "fixture.Parameters exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
 "C-b06ec7d1d9" | 9 | 13 | "selection-use-coupling" | "FAIL" | 0 | 16 | 27 | "Selecting a concrete implementation and collaborating with the resulting role in the same function couples construction policy to behavioral use. Changes to implementation selection can therefore affect code whose primary job is collaboration." | "fixture.Deliver selects among multiple concrete implementations of the same role and subsequently sends messages to the selected collaborator. This may indicate that implementation selection belongs at a separate construction or factory boundary."
 "C-b10bccb46b" | 0 | 7 | "long-function" | "FAIL" | 0 | 13 | 25 | "Long functions can obscure responsibility boundaries and ownership." | "fixture.LongFunction exceeds the configured source-line limit; this may indicate responsibilities that deserve separate boundaries."
+"C-b79a56258e" | 6 | 2 | "data-clump" | "FAIL" | 0 | 47 | 47 | "Repeated groups of named parameters can indicate a missing shared concept." | "The parameter multiset anchored at fixture.ClumpA recurs at the configured support and size; it may represent a missing domain object."
 "C-bd6e66f9ad" | 8 | 12 | "prose-comment" | "FAIL" | 0 | 3 | 3 | "Prose comments cannot reliably enforce behavior or prevent a future agent from undoing an intentional omission." | "The file contains prose comments prohibited by policy; recognized machine directives are exempt. This proves a policy violation, not that the documented intent is unimportant."
 "C-cf8ec1ee12" | 4 | 6 | "long-parameter-list" | "FAIL" | 0 | 38 | 39 | "Many parameters can obscure which inputs belong together." | "fixture.Dependencies exceeds the configured parameter limit; its inputs may represent a missing domain concept or mixed responsibilities."
 
@@ -134,27 +134,6 @@
 "C-4063b2b57c" | 9 | 47
 "C-4063b2b57c" | 9 | 48
 "C-4063b2b57c" | 9 | 49
-"C-47c5c497d6" | 11 | 50
-"C-47c5c497d6" | 11 | 54
-"C-47c5c497d6" | 11 | 58
-"C-47c5c497d6" | 12 | 51
-"C-47c5c497d6" | 12 | 52
-"C-47c5c497d6" | 12 | 53
-"C-47c5c497d6" | 12 | 55
-"C-47c5c497d6" | 12 | 56
-"C-47c5c497d6" | 12 | 57
-"C-47c5c497d6" | 12 | 59
-"C-47c5c497d6" | 12 | 60
-"C-47c5c497d6" | 12 | 61
-"C-47c5c497d6" | 13 | 51
-"C-47c5c497d6" | 13 | 52
-"C-47c5c497d6" | 13 | 53
-"C-47c5c497d6" | 13 | 55
-"C-47c5c497d6" | 13 | 56
-"C-47c5c497d6" | 13 | 57
-"C-47c5c497d6" | 13 | 59
-"C-47c5c497d6" | 13 | 60
-"C-47c5c497d6" | 13 | 61
 "C-4fb5041cb7" | 4 | 24
 "C-4fb5041cb7" | 4 | 26
 "C-4fb5041cb7" | 4 | 28
@@ -305,6 +284,27 @@
 "C-b10bccb46b" | 1 | 10
 "C-b10bccb46b" | 1 | 11
 "C-b10bccb46b" | 1 | 12
+"C-b79a56258e" | 11 | 50
+"C-b79a56258e" | 11 | 54
+"C-b79a56258e" | 11 | 58
+"C-b79a56258e" | 12 | 51
+"C-b79a56258e" | 12 | 52
+"C-b79a56258e" | 12 | 53
+"C-b79a56258e" | 12 | 55
+"C-b79a56258e" | 12 | 56
+"C-b79a56258e" | 12 | 57
+"C-b79a56258e" | 12 | 59
+"C-b79a56258e" | 12 | 60
+"C-b79a56258e" | 12 | 61
+"C-b79a56258e" | 13 | 51
+"C-b79a56258e" | 13 | 52
+"C-b79a56258e" | 13 | 53
+"C-b79a56258e" | 13 | 55
+"C-b79a56258e" | 13 | 56
+"C-b79a56258e" | 13 | 57
+"C-b79a56258e" | 13 | 59
+"C-b79a56258e" | 13 | 60
+"C-b79a56258e" | 13 | 61
 "C-bd6e66f9ad" | 29 | 121
 "C-cf8ec1ee12" | 7 | 37
 "C-cf8ec1ee12" | 7 | 38
@@ -326,9 +326,9 @@
 6 | 3 | "type:regexp.Regexp"
 6 | 4 | "type:strings.Reader"
 6 | 5 | "type:time.Time"
-13 | 0 | "bool"
-13 | 1 | "int"
-13 | 2 | "string"
+12 | 0 | "a int"
+12 | 1 | "b string"
+12 | 2 | "c bool"
 17 | 0 | "package:fmt"
 18 | 0 | "package:fmt"
 21 | 0 | "fixture.Parent:a@813"
@@ -362,9 +362,9 @@
 8 | "C-4063b2b57c" | 0 | "foreign-accesses" | "fixture.(Own).Envy:f@626" | "integer" | 5 | "integer" | 5 | ">=" | 1 | NULL | NULL | NULL | NULL
 9 | "C-4063b2b57c" | 1 | "foreign-own-ratio" | "fixture.(Own).Envy:f@626" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
 10 | "C-4063b2b57c" | 2 | "own-accesses" | "fixture.(Own).Envy" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
-11 | "C-47c5c497d6" | 0 | "clump-occurrences" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
-12 | "C-47c5c497d6" | 1 | "clump-size" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
-13 | "C-47c5c497d6" | 2 | "clump-types" | "fixture.ClumpA" | "list" | NULL | NULL | NULL | NULL | 2 | NULL | NULL | NULL | NULL
+11 | "C-b79a56258e" | 0 | "clump-occurrences" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
+12 | "C-b79a56258e" | 1 | "clump-parameters" | "fixture.ClumpA" | "list" | NULL | NULL | NULL | NULL | 2 | NULL | NULL | NULL | NULL
+13 | "C-b79a56258e" | 2 | "clump-size" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
 14 | "C-5522b4859c" | 0 | "cognitive-complexity" | "fixture.Parent" | "integer" | 0 | NULL | NULL | NULL | 9 | NULL | NULL | NULL | NULL
 15 | "C-5522b4859c" | 1 | "dependency-overlap" | "all.go:826:[\"fixture.stepOne\",\"fixture.stepTwo\"]" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | NULL | 1 | 2
 16 | "C-5522b4859c" | 2 | "dependency-overlap" | "all.go:826:mean" | "real" | 1 | "real" | 0.75 | ">=" | 9 | 1 | NULL | NULL | NULL
@@ -705,18 +705,18 @@
 47 | "C-4063b2b57c" | 3 | "foreign-access" | 1 | 45 | 45 | 663 | 666 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
 48 | "C-4063b2b57c" | 4 | "foreign-access" | 1 | 45 | 45 | 669 | 672 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
 49 | "C-4063b2b57c" | 5 | "foreign-access" | 1 | 45 | 45 | 675 | 678 | "fixture.(Own).Envy:f@626" | NULL | NULL | NULL | 1 | ""
-50 | "C-47c5c497d6" | 0 | "declaration" | 1 | 47 | 47 | 681 | 720 | "fixture.ClumpA" | NULL | NULL | NULL | 2 | ""
-51 | "C-47c5c497d6" | 1 | "parameter" | 1 | 47 | 47 | 693 | 698 | "0:int" | "integer" | 1 | NULL | 2 | ""
-52 | "C-47c5c497d6" | 2 | "parameter" | 1 | 47 | 47 | 700 | 708 | "1:string" | "integer" | 1 | NULL | 2 | ""
-53 | "C-47c5c497d6" | 3 | "parameter" | 1 | 47 | 47 | 710 | 716 | "2:bool" | "integer" | 1 | NULL | 2 | ""
-54 | "C-47c5c497d6" | 4 | "declaration" | 1 | 48 | 48 | 721 | 760 | "fixture.ClumpB" | NULL | NULL | NULL | 3 | ""
-55 | "C-47c5c497d6" | 5 | "parameter" | 1 | 48 | 48 | 733 | 738 | "0:int" | "integer" | 1 | NULL | 3 | ""
-56 | "C-47c5c497d6" | 6 | "parameter" | 1 | 48 | 48 | 740 | 748 | "1:string" | "integer" | 1 | NULL | 3 | ""
-57 | "C-47c5c497d6" | 7 | "parameter" | 1 | 48 | 48 | 750 | 756 | "2:bool" | "integer" | 1 | NULL | 3 | ""
-58 | "C-47c5c497d6" | 8 | "declaration" | 1 | 49 | 49 | 761 | 800 | "fixture.ClumpC" | NULL | NULL | NULL | 4 | ""
-59 | "C-47c5c497d6" | 9 | "parameter" | 1 | 49 | 49 | 773 | 778 | "0:int" | "integer" | 1 | NULL | 4 | ""
-60 | "C-47c5c497d6" | 10 | "parameter" | 1 | 49 | 49 | 780 | 788 | "1:string" | "integer" | 1 | NULL | 4 | ""
-61 | "C-47c5c497d6" | 11 | "parameter" | 1 | 49 | 49 | 790 | 796 | "2:bool" | "integer" | 1 | NULL | 4 | ""
+50 | "C-b79a56258e" | 0 | "declaration" | 1 | 47 | 47 | 681 | 720 | "fixture.ClumpA" | NULL | NULL | NULL | 2 | ""
+51 | "C-b79a56258e" | 1 | "parameter" | 1 | 47 | 47 | 693 | 698 | "0:int" | "integer" | 1 | NULL | 2 | ""
+52 | "C-b79a56258e" | 2 | "parameter" | 1 | 47 | 47 | 700 | 708 | "1:string" | "integer" | 1 | NULL | 2 | ""
+53 | "C-b79a56258e" | 3 | "parameter" | 1 | 47 | 47 | 710 | 716 | "2:bool" | "integer" | 1 | NULL | 2 | ""
+54 | "C-b79a56258e" | 4 | "declaration" | 1 | 48 | 48 | 721 | 760 | "fixture.ClumpB" | NULL | NULL | NULL | 3 | ""
+55 | "C-b79a56258e" | 5 | "parameter" | 1 | 48 | 48 | 733 | 738 | "0:int" | "integer" | 1 | NULL | 3 | ""
+56 | "C-b79a56258e" | 6 | "parameter" | 1 | 48 | 48 | 740 | 748 | "1:string" | "integer" | 1 | NULL | 3 | ""
+57 | "C-b79a56258e" | 7 | "parameter" | 1 | 48 | 48 | 750 | 756 | "2:bool" | "integer" | 1 | NULL | 3 | ""
+58 | "C-b79a56258e" | 8 | "declaration" | 1 | 49 | 49 | 761 | 800 | "fixture.ClumpC" | NULL | NULL | NULL | 4 | ""
+59 | "C-b79a56258e" | 9 | "parameter" | 1 | 49 | 49 | 773 | 778 | "0:int" | "integer" | 1 | NULL | 4 | ""
+60 | "C-b79a56258e" | 10 | "parameter" | 1 | 49 | 49 | 780 | 788 | "1:string" | "integer" | 1 | NULL | 4 | ""
+61 | "C-b79a56258e" | 11 | "parameter" | 1 | 49 | 49 | 790 | 796 | "2:bool" | "integer" | 1 | NULL | 4 | ""
 62 | "C-5522b4859c" | 0 | "declaration" | 1 | 50 | 53 | 801 | 856 | "fixture.Parent" | NULL | NULL | NULL | 9 | ""
 63 | "C-5522b4859c" | 1 | "metric-contribution" | 1 | 51 | 51 | 825 | 840 | "function-lines" | "integer" | 1 | NULL | 9 | ""
 64 | "C-5522b4859c" | 2 | "helper-call" | 1 | 51 | 51 | 826 | 839 | "fixture.stepOne" | NULL | NULL | NULL | 9 | ""

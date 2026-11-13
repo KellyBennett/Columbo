@@ -18,7 +18,7 @@ CASE C-4063b2b57c fixture.(Own).Envy all.go:44-46
   foreign-accesses fixture.(Own).Envy:f@626: 5 (limit >= 5)
   foreign-own-ratio fixture.(Own).Envy:f@626: 0.000000
   own-accesses fixture.(Own).Envy: 0
-CASE C-47c5c497d6 fixture.ClumpA all.go:47-47
+CASE C-b79a56258e fixture.ClumpA all.go:47-47
   data-clump: FAIL
   clump-occurrences fixture.ClumpA: 3 (limit >= 3)
   clump-size fixture.ClumpA: 3 (limit >= 3)

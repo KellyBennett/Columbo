@@ -68,7 +68,7 @@ var canonicalAllCases = []string{
 	"C-4fb5041cb7|excessive-dependencies|fixture.Dependencies",
 	"C-cf8ec1ee12|long-parameter-list|fixture.Dependencies",
 	"C-4063b2b57c|feature-envy|fixture.(Own).Envy",
-	"C-47c5c497d6|data-clump|fixture.ClumpA",
+	"C-b79a56258e|data-clump|fixture.ClumpA",
 	"C-5522b4859c|cosmetic-extraction|fixture.Parent",
 	"C-bd6e66f9ad|prose-comment|fixture.<package-clause>",
 	"C-b06ec7d1d9|selection-use-coupling|fixture.Deliver",
@@ -125,16 +125,16 @@ const inventoryDependenciesQuery = `SELECT DISTINCT dep.identity FROM declaratio
 JOIN dependencies dep ON dep.id=dd.dependency_id JOIN dependency_receipts dr ON dr.declaration_id=dd.declaration_id AND dr.dependency_id=dd.dependency_id
 JOIN source_receipts r ON r.id=dr.receipt_id WHERE dd.scored=0 AND r.kind='dependency-inventory' ORDER BY dep.identity`
 
-func TestSnapshotClumpMultiplicity(t *testing.T) {
-	(&testHarness{T: t}).TestSnapshotClumpMultiplicity()
+func TestSnapshotClumpParameters(t *testing.T) {
+	(&testHarness{T: t}).TestSnapshotClumpParameters()
 }
-func (h *testHarness) TestSnapshotClumpMultiplicity() {
+func (h *testHarness) TestSnapshotClumpParameters() {
 	source := "package fixture\nfunc A(a,b int,c string){}\nfunc B(a,b int,c string){}\nfunc C(a,b int,c string){}\n"
 	config := quiet()
 	config.Severity["data-clump"] = "fail"
 	db := h.snapshot(h.investigate(h.fixture(source), config))
-	types := h.sqlStrings(db, `SELECT v.value FROM clue_values v JOIN clues q ON q.id=v.clue_id WHERE q.kind='clump-types' ORDER BY v.ordinal`)
-	h.equal([]string{"int", "int", "string"}, types)
+	parameters := h.sqlStrings(db, `SELECT v.value FROM clue_values v JOIN clues q ON q.id=v.clue_id WHERE q.kind='clump-parameters' ORDER BY v.ordinal`)
+	h.equal([]string{"a int", "b int", "c string"}, parameters)
 	support := h.sqlStrings(db, `SELECT DISTINCT d.symbol FROM case_declarations cd JOIN declarations d ON d.id=cd.declaration_id ORDER BY d.symbol`)
 	h.equal([]string{"fixture.A", "fixture.B", "fixture.C"}, support)
 }
