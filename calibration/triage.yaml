@@ -10,3 +10,41 @@
     Wrapping each helper call of a cosmetic parent in a bare block ends the cluster sequence,
     because SPEC cluster formation treats an explicit nested block as a sequence break. The
     design is unchanged and no rule reports it. Fixture: fixtures/cosmetic.
+- operator: decision-to-map-lookup
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    A map from the same variants to values repeats the variant knowledge at a second site, but
+    Columbo counts only switches and if-chains as decision sites. Fixture: fixtures/variants.
+- operator: route-through-facade
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    The scored dependency set excludes unexported same-package types by design, so one private
+    struct with forwarding methods hides any number of collaborators. SPEC only says not to
+    recommend a facade; nothing detects one. Fixture: fixtures/deps.
+- operator: prose-to-string-constant
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    docs/prose-comments.md tells agents not to move prose into unused strings, but no rule
+    enforces it. Fixture: fixtures/prose.
+- operator: launder-selection-through-role
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Passing each concrete construction through an identity helper returning the interface makes
+    every origin unknown, while the caller still picks every implementation. The SUC doc's avoid
+    list names this cosmetic change. Fixture: fixtures/selection.
+- operator: copy-fields-to-locals
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Feature Envy counts reads, not distinct fields, so hoisting reads into locals silences a
+    case whenever the envied value has fewer distinct fields than feature-envy-foreign-accesses.
+    Fixture: fixtures/envy.
