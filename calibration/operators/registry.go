@@ -42,6 +42,9 @@ func init() {
 	register(addCollaborators{})
 	register(routeThroughFacade{})
 	register(splitByCollaborators{})
+	register(addProseComment{})
+	register(proseToStringConstant{})
+	register(deleteProseComments{})
 }
 
 func All() []harness.Operator {

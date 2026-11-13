@@ -45,3 +45,13 @@ func TestCollaboratorsFireAboveTheLimitAndAFacadeHidesThem(t *testing.T) {
 		{"split-by-collaborators", "example.com/deps.Summary", 1, "killed"},
 	})
 }
+
+func TestProseIsCaughtAStringConstantHidesItAndDeletionCures(t *testing.T) {
+	rows := runFixture(t, "prose", "add-prose-comment", "prose-to-string-constant", "delete-prose-comments")
+	const clause = "example.com/prose.<package-clause>"
+	expectRows(t, rows, []want{
+		{"add-prose-comment", clause, 1, "killed"},
+		{"prose-to-string-constant", clause, 1, "survived"},
+		{"delete-prose-comments", clause, 1, "killed"},
+	})
+}
