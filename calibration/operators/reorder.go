@@ -36,7 +36,7 @@ func (reorderDecls) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.
 		}
 		spans := reorderSpans(u)
 		if len(spans) < 2 {
-			return harness.Applied{}, errors.New("fewer than two movable declarations")
+			return harness.Applied{}, errors.New("fewer than two declMovable declarations")
 		}
 		ss := make([]splice, len(spans))
 		for i, s := range spans {

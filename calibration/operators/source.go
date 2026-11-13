@@ -36,13 +36,13 @@ type fn struct {
 func units(c *harness.Corpus) []unit {
 	var out []unit
 	for _, p := range c.Packages {
-		out = append(out, packageUnits(c.Root, p)...)
+		out = append(out, loadPackageUnits(c.Root, p)...)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].rel < out[j].rel })
 	return out
 }
 
-func packageUnits(root string, p *packages.Package) []unit {
+func loadPackageUnits(root string, p *packages.Package) []unit {
 	var out []unit
 	for i, f := range p.Syntax {
 		path := p.CompiledGoFiles[i]

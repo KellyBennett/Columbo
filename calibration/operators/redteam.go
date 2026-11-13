@@ -7,10 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/KellyBennett/Columbo/calibration/harness"
 	"gopkg.in/yaml.v3"
 )
+
+// frozenSuffix keeps frozen Go sources out of this module's ./... and out of the
+// repository's database-boundary scan, which inspect every .go file.
+const frozenSuffix = ".frozen"
 
 // redTeam replays evasions an agent wrote against real Columbo output, frozen as whole files.
 // No model runs during calibration; only these files do.
@@ -80,7 +85,7 @@ func (o redTeam) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.App
 		}
 		rel, _ := filepath.Rel(root, path)
 		data, err := os.ReadFile(path)
-		edit[filepath.ToSlash(rel)] = data
+		edit[strings.TrimSuffix(filepath.ToSlash(rel), frozenSuffix)] = data
 		return err
 	})
 	if err != nil {

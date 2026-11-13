@@ -43,8 +43,8 @@ func (renameLocal) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.A
 	if id == nil || f.offset(id.Pos()) != site.Offset {
 		return harness.Applied{}, errors.New("local vanished")
 	}
-	taken := identNames(f.file)
-	edit, err := renameObject([]unit{f.unit}, f.pkg.TypesInfo.Defs[id], fresh(id.Name, taken))
+	taken := neutralIdentNames(f.file)
+	edit, err := renameObject([]unit{f.unit}, f.pkg.TypesInfo.Defs[id], neutralFresh(id.Name, taken))
 	if err != nil {
 		return harness.Applied{}, err
 	}
@@ -105,8 +105,8 @@ func (renameDecl) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.Ap
 		return harness.Applied{}, errors.New("no longer renamable")
 	}
 	target := names.objectAt(f.path, f.offset(f.decl.Name.Pos()))
-	name := fresh(f.decl.Name.Name, names.all)
-	edit, err := renameObject(packageUnits(c.Root, names.pkg), target, name)
+	name := neutralFresh(f.decl.Name.Name, names.all)
+	edit, err := renameObject(loadPackageUnits(c.Root, names.pkg), target, name)
 	if err != nil {
 		return harness.Applied{}, err
 	}
@@ -184,7 +184,7 @@ func scopeOf(c *harness.Corpus, p *packages.Package) *packageNames {
 }
 
 func (n *packageNames) add(f *ast.File, unchecked bool) {
-	for name := range identNames(f) {
+	for name := range neutralIdentNames(f) {
 		n.all[name] = true
 		if unchecked {
 			n.unchecked[name] = true
@@ -211,7 +211,7 @@ func (n *packageNames) objectAt(path string, offset int) types.Object {
 	return nil
 }
 
-func identNames(f *ast.File) map[string]bool {
+func neutralIdentNames(f *ast.File) map[string]bool {
 	out := map[string]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {
@@ -222,9 +222,9 @@ func identNames(f *ast.File) map[string]bool {
 	return out
 }
 
-// fresh returns a name no identifier in scope already spells, so the rename can neither
+// neutralFresh returns a name no identifier in scope already spells, so the rename can neither
 // collide with nor shadow anything.
-func fresh(base string, taken map[string]bool) string {
+func neutralFresh(base string, taken map[string]bool) string {
 	name := base + "Renamed"
 	for i := 2; taken[name]; i++ {
 		name = base + "Renamed" + strconv.Itoa(i)
