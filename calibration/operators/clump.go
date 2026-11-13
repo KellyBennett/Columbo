@@ -117,6 +117,14 @@ func (o inlineParameterObject) Apply(c *harness.Corpus, site harness.Site, dose 
 		kill = sup.count >= occ
 		reason = fmt.Sprintf("%d declarations carry {%s} after expanding %d (occurrences >= %d)", sup.count, strings.Join(st.fieldTypes(), ","), dose, occ)
 		touched = append(touched, sup.symbols...)
+		size := int(threshold(c, "data-clump-size", 3))
+		if inc, ok := incidentalClump(p, st, es, size, occ); ok {
+			touched = append(touched, inc.symbols...)
+			if !kill {
+				kill = true
+				reason = fmt.Sprintf("expanded parameters newly share {%s} with %d declarations (size >= %d, occurrences >= %d)", strings.Join(inc.types, ","), len(inc.symbols), size, occ)
+			}
+		}
 	}
 	return harness.Applied{
 		Edit: edit,
@@ -524,4 +532,98 @@ func support(p *program, pkgPath string, clump []string, es []expansion) support
 	}
 	sort.Strings(s.symbols)
 	return s
+}
+
+type clumpDecl struct {
+	symbol     string
+	now, was   map[string]int
+	isExpanded bool
+}
+
+type incidental struct {
+	types   []string
+	symbols []string
+}
+
+// incidentalClump finds a multiset of at least size types that an expanded declaration now
+// shares with occ-1 other declarations, and did not carry before. Columbo reports every
+// closed frequent multiset, so a wide struct can complete a clump of common types (three
+// strings, say) with unrelated declarations long before its own field set recurs.
+func incidentalClump(p *program, st paramStruct, es []expansion, size, occ int) (incidental, bool) {
+	expanded := map[string]expansion{}
+	for _, e := range es {
+		expanded[e.f.symbol] = e
+	}
+	var decls []clumpDecl
+	for _, f := range p.funcs() {
+		if f.pkg.PkgPath != st.pkgPath() {
+			continue
+		}
+		ts := paramTypes(f)
+		d := clumpDecl{symbol: f.symbol, was: multiset(ts), now: multiset(ts)}
+		if e, ok := expanded[f.symbol]; ok {
+			d.now[ts[e.index]]--
+			for _, t := range st.fieldTypes() {
+				d.now[t]++
+			}
+			d.isExpanded = true
+		}
+		if total(d.now) >= size {
+			decls = append(decls, d)
+		}
+	}
+	for _, e := range decls {
+		if !e.isExpanded {
+			continue
+		}
+		if common, chosen, ok := shareWith(decls, e, e.now, []string{e.symbol}, 0, size, occ); ok {
+			var types []string
+			for t, n := range common {
+				for range n {
+					types = append(types, t)
+				}
+			}
+			sort.Strings(types)
+			return incidental{types: types, symbols: chosen}, true
+		}
+	}
+	return incidental{}, false
+}
+
+func shareWith(decls []clumpDecl, e clumpDecl, common map[string]int, chosen []string, from, size, occ int) (map[string]int, []string, bool) {
+	if len(chosen) == occ {
+		return common, chosen, !contains(e.was, common)
+	}
+	for i := from; i < len(decls); i++ {
+		d := decls[i]
+		if d.symbol == e.symbol {
+			continue
+		}
+		next := intersect(common, d.now)
+		if total(next) < size || contains(e.was, next) {
+			continue
+		}
+		if c, ch, ok := shareWith(decls, e, next, append(append([]string{}, chosen...), d.symbol), i+1, size, occ); ok {
+			return c, ch, true
+		}
+	}
+	return nil, nil, false
+}
+
+func intersect(a, b map[string]int) map[string]int {
+	out := map[string]int{}
+	for t, n := range a {
+		if m := min(n, b[t]); m > 0 {
+			out[t] = m
+		}
+	}
+	return out
+}
+
+func total(m map[string]int) int {
+	n := 0
+	for _, c := range m {
+		n += c
+	}
+	return n
 }
