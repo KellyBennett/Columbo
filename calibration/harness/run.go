@@ -260,7 +260,11 @@ func (r *Runner) evaluate(j job) *result {
 		res.outcome.Status, res.outcome.Reason = Invalid, err.Error()
 		return res
 	}
-	Score(&res.outcome, j.applied.Expectation, r.corpus.Baseline.Findings, snap.Findings)
+	exp := j.applied.Expectation
+	if j.parent != nil {
+		exp.Touched = append(append([]string{}, exp.Touched...), j.parent.job.applied.Touched...)
+	}
+	Score(&res.outcome, exp, r.corpus.Baseline.Findings, snap.Findings)
 	keep = j.parent == nil && res.outcome.Status == Killed
 	return res
 }

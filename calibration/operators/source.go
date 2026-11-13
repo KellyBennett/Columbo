@@ -76,10 +76,16 @@ func generated(f *ast.File) bool {
 func funcs(c *harness.Corpus) []fn {
 	var out []fn
 	for _, u := range units(c) {
+		ordinal := map[string]int{}
 		for _, d := range u.file.Decls {
 			if d, ok := d.(*ast.FuncDecl); ok {
 				obj, _ := u.pkg.TypesInfo.Defs[d.Name].(*types.Func)
-				out = append(out, fn{unit: u, decl: d, symbol: symbolOf(u.pkg.PkgPath, d), obj: obj})
+				symbol := symbolOf(u.pkg.PkgPath, d)
+				if d.Recv == nil && (d.Name.Name == "init" || d.Name.Name == "_") {
+					ordinal[d.Name.Name]++
+					symbol = fmt.Sprintf("%s#%d", symbol, ordinal[d.Name.Name])
+				}
+				out = append(out, fn{unit: u, decl: d, symbol: symbol, obj: obj})
 			}
 		}
 	}
