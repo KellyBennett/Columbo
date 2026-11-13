@@ -12,6 +12,8 @@ type Snapshot struct {
 	Findings   []Finding
 	Thresholds map[string]float64
 	Version    string
+	// Dependencies maps a declaration symbol to its scored dependency identities.
+	Dependencies map[string][]string
 }
 
 func ReadSnapshot(path string) (Snapshot, error) {
@@ -20,7 +22,7 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	defer db.Close()
-	s := Snapshot{Thresholds: map[string]float64{}}
+	s := Snapshot{Thresholds: map[string]float64{}, Dependencies: map[string][]string{}}
 	if err := db.QueryRow(`SELECT columbo_version FROM report`).Scan(&s.Version); err != nil {
 		return Snapshot{}, fmt.Errorf("read report: %w", err)
 	}
@@ -46,8 +48,29 @@ func ReadSnapshot(path string) (Snapshot, error) {
 			return Snapshot{}, err
 		}
 	}
+	if err := readDependencies(db, s.Dependencies); err != nil {
+		return Snapshot{}, err
+	}
 	sortFindings(s.Findings)
 	return s, nil
+}
+
+func readDependencies(db *sql.DB, into map[string][]string) error {
+	rows, err := db.Query(`SELECT d.symbol, dep.identity FROM declaration_dependencies dd
+		JOIN declarations d ON d.id = dd.declaration_id JOIN dependencies dep ON dep.id = dd.dependency_id
+		WHERE dd.scored = 1 ORDER BY d.symbol, dep.identity`)
+	if err != nil {
+		return fmt.Errorf("read dependencies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var symbol, identity string
+		if err := rows.Scan(&symbol, &identity); err != nil {
+			return err
+		}
+		into[symbol] = append(into[symbol], identity)
+	}
+	return rows.Err()
 }
 
 func readThresholds(db *sql.DB, table string, into map[string]float64) error {

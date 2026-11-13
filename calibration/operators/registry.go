@@ -37,6 +37,11 @@ func init() {
 	register(selectThenUse{})
 	register(launderSelection{})
 	register(extractFactory{})
+	register(splitForwarding{id: "split-forwarding-helpers", follows: "inline-function", target: "long-function", catches: []string{"long-function", "cosmetic-extraction"}})
+	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}})
+	register(addCollaborators{})
+	register(routeThroughFacade{})
+	register(splitByCollaborators{})
 }
 
 func All() []harness.Operator {

@@ -202,3 +202,23 @@ func bodyLines(src []byte, body *ast.BlockStmt, fset *token.FileSet) int {
 	}
 	return len(lines)
 }
+
+// lineAware widens a deletion to its whole line when the comment is the only thing on it,
+// so removing a comment does not leave blank lines behind.
+func lineAware(src []byte, start, end int) splice {
+	ls := start
+	for ls > 0 && (src[ls-1] == ' ' || src[ls-1] == '\t') {
+		ls--
+	}
+	le := end
+	for le < len(src) && (src[le] == ' ' || src[le] == '\t' || src[le] == '\r') {
+		le++
+	}
+	if (ls == 0 || src[ls-1] == '\n') && (le == len(src) || src[le] == '\n') {
+		if le < len(src) {
+			le++
+		}
+		return splice{ls, le, ""}
+	}
+	return splice{ls, end, " "}
+}
