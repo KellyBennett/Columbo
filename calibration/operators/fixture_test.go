@@ -65,7 +65,7 @@ func runFixture(t *testing.T, fixture string, ops ...string) []row {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	src, _ := filepath.Abs(filepath.Join("..", "testdata", fixture))
+	src, _ := filepath.Abs(filepath.Join("..", "fixtures", fixture))
 	r := &harness.Runner{
 		Env:     harness.Env{Columbo: columbo(t), Validity: harness.ValidityTest},
 		Store:   store,

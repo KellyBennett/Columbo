@@ -42,7 +42,7 @@ killed inject mutant). Register it in `operators/registry.go`.
 A mutant that fails `go vet` or the mutated packages' tests is `invalid` and discarded.
 Prefer a narrower operator to one that produces many invalid mutants.
 
-Each operator lands with a fixture module under `testdata/` and a test in
+Each operator lands with a fixture module under `fixtures/` and a test in
 `operators/fixture_test.go` style that shows its kill (or, for neutral operators, zero
 drift).
 
