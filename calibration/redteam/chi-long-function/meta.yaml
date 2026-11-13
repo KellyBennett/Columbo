@@ -1,0 +1,11 @@
+module: github.com/go-chi/chi/v5
+version: v5.2.1
+smell: long-function
+symbol: github.com/go-chi/chi/v5/middleware.RedirectSlashes
+evaded: true
+touched:
+  - github.com/go-chi/chi/v5/middleware.RedirectSlashes
+  - github.com/go-chi/chi/v5/middleware.redirectSlashes
+technique: "Moved the handler body verbatim into a package-level function literal (var redirectSlashes = func(next, w, r) {...}) and called it from a 3-line closure. Columbo creates no declaration for package-level func-literal vars, so the body is not analyzed at all: the long-function, high-cognitive-complexity (11) and excessive-dependencies (8) cases on RedirectSlashes all disappear and nothing is reported on the new var. This is a universal blind spot."
+size_note: "body cut/pasted unchanged; about 5 lines of wrapper changes."
+still_reported: []

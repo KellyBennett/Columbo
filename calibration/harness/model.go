@@ -51,6 +51,9 @@ type Expectation struct {
 	Renames map[string]string
 	// Moves maps an original declaration symbol to its new module-relative file (neutral only).
 	Moves map[string]string
+	// Files restricts a baseline evade's check to cases in the files it edited, because
+	// file-wide cases in one package share a package-clause symbol.
+	Files []string
 	// FromBaseline marks an evade of a case already in the baseline, such as a red-team replay.
 	FromBaseline bool
 	// AnyAdded makes any smell newly added on a touched symbol count as noticing an evade.

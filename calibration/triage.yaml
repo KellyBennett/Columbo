@@ -48,3 +48,12 @@
     Feature Envy counts reads, not distinct fields, so hoisting reads into locals silences a
     case whenever the envied value has fewer distinct fields than feature-envy-foreign-accesses.
     Fixture: fixtures/envy.
+- operator: redteam-replay
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    13 of 14 frozen agent evasions silence their case without improving the design (see
+    calibration/redteam/*/meta.yaml technique). Three techniques silence any rule: a hand-written
+    "Code generated ... DO NOT EDIT." header hides a whole file; a function literal in a
+    package-level var is never a finding subject; a //nolint: prefix turns prose into a directive.

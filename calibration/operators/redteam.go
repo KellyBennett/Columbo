@@ -94,6 +94,11 @@ func (o redTeam) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.App
 	if len(edit) == 0 {
 		return harness.Applied{}, errors.New("no frozen files")
 	}
+	files := make([]string, 0, len(edit))
+	for f := range edit {
+		files = append(files, f)
+	}
+	sort.Strings(files)
 	return harness.Applied{
 		Edit: edit,
 		Expectation: harness.Expectation{
@@ -101,6 +106,7 @@ func (o redTeam) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.App
 			Catches:      []string{e.Smell, "cosmetic-extraction"},
 			AnyAdded:     true,
 			FromBaseline: true,
+			Files:        files,
 			Target:       e.Smell,
 		},
 	}, nil

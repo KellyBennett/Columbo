@@ -1,0 +1,12 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: excessive-dependencies
+symbol: github.com/spf13/cobra.(*Command).InheritedFlags
+evaded: true
+touched:
+  - github.com/spf13/cobra.(*Command).InheritedFlags
+  - github.com/spf13/cobra.(*Command).flagErrorOutput
+technique: "Extracted the lazy flagErrorBuf init into a single-use helper returning io.Writer, so bytes.Buffer leaves the dependency set (6 -> 5). The same init block stays duplicated in four sibling methods."
+size_note: "about 10 lines: 4-line block replaced by one call plus a 6-line helper."
+still_reported:
+  - long-function (pre-existing)

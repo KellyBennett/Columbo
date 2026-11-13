@@ -111,7 +111,7 @@ func scoreEvade(o *Outcome, exp Expectation, _, after []Finding) {
 	}
 	seen := o.Added
 	if exp.FromBaseline {
-		seen = after
+		seen = inFiles(after, exp.Files)
 	}
 	if h := hits(seen, catches, exp.Touched); len(h) > 0 {
 		o.Status, o.Reason = Killed, "still reported as "+h[0].Smell+" "+h[0].CaseID
@@ -344,4 +344,17 @@ func shortSymbol(s string) string {
 		return s[i+1:]
 	}
 	return s
+}
+
+func inFiles(fs []Finding, files []string) []Finding {
+	if len(files) == 0 {
+		return fs
+	}
+	var out []Finding
+	for _, f := range fs {
+		if slices.Contains(files, f.File) {
+			out = append(out, f)
+		}
+	}
+	return out
 }

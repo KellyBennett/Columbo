@@ -1,0 +1,11 @@
+module: github.com/go-chi/chi/v5
+version: v5.2.1
+smell: feature-envy
+symbol: github.com/go-chi/chi/v5.(*node).FindRoute
+evaded: true
+touched:
+  - github.com/go-chi/chi/v5.(*node).FindRoute
+technique: "Introduced four aliases of the same *Context (a, b, c, d := rctx) and spread the 15 rctx accesses across them so each local has at most 4 accesses, below the minimum of 5. No behavior moved toward Context, and the code is strictly worse. The guidance lists renaming or aliasing under avoid."
+size_note: "4 alias lines added plus identifier substitutions on 5 lines."
+still_reported:
+  - long-function (pre-existing)
