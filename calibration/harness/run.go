@@ -16,6 +16,7 @@ type Runner struct {
 	Store    *Store
 	Info     RunInfo
 	Source   string
+	Config   []byte
 	Ops      []Operator
 	Workers  int
 	MaxSites int
@@ -56,6 +57,11 @@ func (r *Runner) Prepare() error {
 	if err := CopyModule(r.Source, base); err != nil {
 		return err
 	}
+	if r.Config != nil {
+		if err := os.WriteFile(filepath.Join(base, ".columbo.yml"), r.Config, 0o644); err != nil {
+			return err
+		}
+	}
 	if why := r.Env.Check(base, nil); why != "" {
 		return fmt.Errorf("unmutated corpus is not valid: %s", why)
 	}
@@ -69,7 +75,7 @@ func (r *Runner) Prepare() error {
 	}
 	r.corpus = &Corpus{Root: base, Module: r.Info.Module, Packages: pkgs, Baseline: snap}
 	r.Info.Columbo = snap.Version + "+sha256:" + fileHash(r.Env.Columbo)
-	r.Info.ConfigHash = configHash(r.Source)
+	r.Info.ConfigHash = configHash(base)
 	r.run, err = r.Store.BeginRun(r.Info, snap.Findings)
 	r.logf("baseline: %d findings, columbo %s", len(snap.Findings), snap.Version)
 	return err

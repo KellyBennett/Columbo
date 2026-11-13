@@ -94,6 +94,10 @@ func scoreCure(o *Outcome, exp Expectation, _, _ []Finding) {
 		o.Status, o.Reason = Survived, "target case remains"
 		return
 	}
+	if h := hits(o.Added, []string{o.Target}, exp.Touched); len(h) > 0 {
+		o.Status, o.Reason = Survived, "target moved into "+shortSymbol(h[0].Symbol)
+		return
+	}
 	left := map[string]int{}
 	for _, f := range hits(o.Removed, nil, exp.Touched) {
 		left[f.Smell]++

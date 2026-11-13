@@ -57,6 +57,7 @@ func runCmd(args []string) error {
 	validity := fs.String("validity", "test", "test or build")
 	workers := fs.Int("workers", 4, "parallel mutants")
 	maxSites := fs.Int("max-sites", 0, "deterministic per-operator site cap; 0 means all")
+	config := fs.String("config", "", "columbo configuration written into every copy as .columbo.yml")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -72,12 +73,19 @@ func runCmd(args []string) error {
 	if err != nil {
 		return err
 	}
+	var configBytes []byte
+	if *config != "" {
+		if configBytes, err = os.ReadFile(*config); err != nil {
+			return err
+		}
+	}
 	store, err := harness.OpenStore(*db)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
 	r := &harness.Runner{
+		Config:   configBytes,
 		Env:      harness.Env{Columbo: bin, Validity: harness.Validity(*validity), Timeout: 15 * time.Minute},
 		Store:    store,
 		Info:     harness.RunInfo{Module: *module, Version: *version, Validity: harness.Validity(*validity)},
