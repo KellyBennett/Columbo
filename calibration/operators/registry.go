@@ -18,6 +18,10 @@ func register(op harness.Operator) {
 
 func init() {
 	register(noop{})
+	register(inlineFunction{id: "inline-function", target: "long-function"})
+	register(inlineFunction{id: "inline-function-complexity", target: "high-cognitive-complexity"})
+	register(splitForwarding{id: "split-forwarding-helpers", follows: "inline-function", target: "long-function", catches: []string{"long-function", "cosmetic-extraction"}})
+	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}})
 }
 
 func All() []harness.Operator {
