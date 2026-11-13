@@ -91,10 +91,17 @@ func cureForecast(c *harness.Corpus, out []byte, f fn, names []string, segs []se
 		parts = append(parts, fmt.Sprintf("%s %d lines cc %d", n, hl, hc))
 		ok = ok && hl <= lineLimit && hc <= ccLimit
 	}
+	helpersFit := true
+	for i, n := range names {
+		hl, hc, _ := metricsOf(out, n, segs[i].usesRecv)
+		if target == "long-function" && hl > lineLimit || target == "high-cognitive-complexity" && hc > ccLimit {
+			helpersFit = false
+		}
+	}
 	if target == "long-function" {
-		ok = lines <= lineLimit
+		ok = lines <= lineLimit && helpersFit
 	} else if target == "high-cognitive-complexity" {
-		ok = cc <= ccLimit
+		ok = cc <= ccLimit && helpersFit
 	}
 	return ok, strings.Join(parts, "; ") + fmt.Sprintf(" (limits %d lines, cc %d)", lineLimit, ccLimit), nil
 }

@@ -60,7 +60,7 @@ func declDistance(before, after []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	total := 0
+	total := distance(commentSequence(before), commentSequence(after))
 	for name, seq := range b {
 		total += distance(seq, a[name])
 	}
@@ -133,14 +133,15 @@ func nodeSequence(n ast.Node) []string {
 		if n == nil {
 			return false
 		}
+		if _, isComment := n.(*ast.CommentGroup); isComment {
+			return false
+		}
 		label := reflect.TypeOf(n).Elem().Name()
 		switch n := n.(type) {
 		case *ast.Ident:
 			label += ":" + n.Name
 		case *ast.BasicLit:
 			label += ":" + n.Value
-		case *ast.Comment:
-			label += ":" + n.Text
 		}
 		seq = append(seq, label)
 		return true
@@ -162,4 +163,23 @@ func distance(a, b []string) int {
 		prev, cur = cur, prev
 	}
 	return len(a) + len(b) - 2*prev[len(b)]
+}
+
+// commentSequence covers comments outside declarations, such as file-level prose, which
+// the per-declaration node sequences never visit.
+func commentSequence(src []byte) []string {
+	if src == nil {
+		return nil
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), "", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, g := range f.Comments {
+		for _, c := range g.List {
+			out = append(out, c.Text)
+		}
+	}
+	return out
 }
