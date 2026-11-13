@@ -18,7 +18,7 @@ var (
 	columboErr  error
 )
 
-func columbo(t *testing.T) string {
+func columbo(t testing.TB) string {
 	t.Helper()
 	columboOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "calibration-columbo-")

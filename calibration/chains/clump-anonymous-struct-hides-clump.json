@@ -1,0 +1,18 @@
+{
+  "fixture": "clump",
+  "steps": [
+    {
+      "operator": "inline-parameter-object",
+      "symbol": "example.com/clump.Address",
+      "dose": 2
+    },
+    {
+      "operator": "pack-anonymous-struct",
+      "symbol": "example.com/clump.Address",
+      "dose": 1
+    }
+  ],
+  "invariant": "inject-chain-is-noticed",
+  "verdict": "violated",
+  "reason": "no finding added on clump.Address, clump.normalize, clump.valid"
+}
