@@ -10,8 +10,8 @@ func TestSnapshotClueSupportRoles(t *testing.T) {
 
 var clueSupportRoles = []string{
 	"clump-occurrences|declaration|3",
+	"clump-parameters|parameter|9",
 	"clump-size|parameter|9",
-	"clump-types|parameter|9",
 	"foreign-accesses|foreign-access|5",
 	"foreign-own-ratio|foreign-access|5",
 	"own-accesses|none|0",

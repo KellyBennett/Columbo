@@ -326,9 +326,9 @@
 6 | 3 | "type:regexp.Regexp"
 6 | 4 | "type:strings.Reader"
 6 | 5 | "type:time.Time"
-13 | 0 | "a int"
-13 | 1 | "b string"
-13 | 2 | "c bool"
+12 | 0 | "a int"
+12 | 1 | "b string"
+12 | 2 | "c bool"
 17 | 0 | "package:fmt"
 18 | 0 | "package:fmt"
 21 | 0 | "fixture.Parent:a@813"
@@ -363,8 +363,8 @@
 9 | "C-4063b2b57c" | 1 | "foreign-own-ratio" | "fixture.(Own).Envy:f@626" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
 10 | "C-4063b2b57c" | 2 | "own-accesses" | "fixture.(Own).Envy" | "integer" | 0 | NULL | NULL | NULL | 1 | NULL | NULL | NULL | NULL
 11 | "C-b79a56258e" | 0 | "clump-occurrences" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
-12 | "C-b79a56258e" | 1 | "clump-size" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
-13 | "C-b79a56258e" | 2 | "clump-types" | "fixture.ClumpA" | "list" | NULL | NULL | NULL | NULL | 2 | NULL | NULL | NULL | NULL
+12 | "C-b79a56258e" | 1 | "clump-parameters" | "fixture.ClumpA" | "list" | NULL | NULL | NULL | NULL | 2 | NULL | NULL | NULL | NULL
+13 | "C-b79a56258e" | 2 | "clump-size" | "fixture.ClumpA" | "integer" | 3 | "integer" | 3 | ">=" | 2 | NULL | NULL | NULL | NULL
 14 | "C-5522b4859c" | 0 | "cognitive-complexity" | "fixture.Parent" | "integer" | 0 | NULL | NULL | NULL | 9 | NULL | NULL | NULL | NULL
 15 | "C-5522b4859c" | 1 | "dependency-overlap" | "all.go:826:[\"fixture.stepOne\",\"fixture.stepTwo\"]" | "real" | 1 | NULL | NULL | NULL | 9 | 1 | NULL | 1 | 2
 16 | "C-5522b4859c" | 2 | "dependency-overlap" | "all.go:826:mean" | "real" | 1 | "real" | 0.75 | ">=" | 9 | 1 | NULL | NULL | NULL

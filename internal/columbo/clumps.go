@@ -146,32 +146,32 @@ func (m *clumpMiner) reportPattern(s parameterMultiset) error {
 	return nil
 }
 func (m *clumpMiner) patternCase(pattern parameterMultiset, support []*declaration) (*Case, error) {
-	types := pattern.elements()
-	c, err := m.engine.newCase(support[0], "data-clump", canonical(types))
+	parameters := pattern.elements()
+	c, err := m.engine.newCase(support[0], "data-clump", canonical(parameters))
 	if err != nil || c == nil {
 		return c, err
 	}
-	evidence := c.clumpClues(types, len(support), m.engine.config)
+	evidence := c.clumpClues(parameters, len(support), m.engine.config)
 	evidence.include(support, pattern)
 	return c, nil
 }
 
 type clumpEvidence struct {
-	finding                  *Case
-	types, size, occurrences *clueSupport
+	finding                       *Case
+	parameters, size, occurrences *clueSupport
 }
 
-func (c *Case) clumpClues(types []string, count int, config Config) *clumpEvidence {
-	typeClue := metric("clump-types", c.Symbol, types).forDeclaration(c.PrimaryDeclaration)
-	sizeClue := metric("clump-size", c.Symbol, len(types)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration)
+func (c *Case) clumpClues(parameters []string, count int, config Config) *clumpEvidence {
+	parameterClue := metric("clump-parameters", c.Symbol, parameters).forDeclaration(c.PrimaryDeclaration)
+	sizeClue := metric("clump-size", c.Symbol, len(parameters)).compare(config.Counts["data-clump-size"], ">=").forDeclaration(c.PrimaryDeclaration)
 	occurrenceClue := metric("clump-occurrences", c.Symbol, count).compare(config.Counts["data-clump-occurrences"], ">=").forDeclaration(c.PrimaryDeclaration)
-	return &clumpEvidence{finding: c, types: newClueSupport(&typeClue), size: newClueSupport(&sizeClue), occurrences: newClueSupport(&occurrenceClue)}
+	return &clumpEvidence{finding: c, parameters: newClueSupport(&parameterClue), size: newClueSupport(&sizeClue), occurrences: newClueSupport(&occurrenceClue)}
 }
 func (e *clumpEvidence) include(support []*declaration, pattern parameterMultiset) {
 	for _, d := range support {
 		e.declarationReceipts(d, pattern)
 	}
-	e.finding.Clues = append(e.finding.Clues, *e.types.clue, *e.size.clue, *e.occurrences.clue)
+	e.finding.Clues = append(e.finding.Clues, *e.parameters.clue, *e.size.clue, *e.occurrences.clue)
 }
 func (e *clumpEvidence) declarationReceipts(d *declaration, s parameterMultiset) {
 	e.finding.includeDeclaration(d, "clump-support")
@@ -199,6 +199,6 @@ func (d *declaration) clumpElement(p parameter) (string, bool) {
 }
 func (e *clumpEvidence) parameterReceipt(receipt Source) {
 	e.finding.Receipts = append(e.finding.Receipts, receipt)
-	e.types.add(receipt)
+	e.parameters.add(receipt)
 	e.size.add(receipt)
 }

@@ -133,7 +133,7 @@ func (h *testHarness) TestSnapshotClumpParameters() {
 	config := quiet()
 	config.Severity["data-clump"] = "fail"
 	db := h.snapshot(h.investigate(h.fixture(source), config))
-	parameters := h.sqlStrings(db, `SELECT v.value FROM clue_values v JOIN clues q ON q.id=v.clue_id WHERE q.kind='clump-types' ORDER BY v.ordinal`)
+	parameters := h.sqlStrings(db, `SELECT v.value FROM clue_values v JOIN clues q ON q.id=v.clue_id WHERE q.kind='clump-parameters' ORDER BY v.ordinal`)
 	h.equal([]string{"a int", "b int", "c string"}, parameters)
 	support := h.sqlStrings(db, `SELECT DISTINCT d.symbol FROM case_declarations cd JOIN declarations d ON d.id=cd.declaration_id ORDER BY d.symbol`)
 	h.equal([]string{"fixture.A", "fixture.B", "fixture.C"}, support)

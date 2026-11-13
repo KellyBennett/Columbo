@@ -43,7 +43,7 @@ func Label(ctx context.Context, key, value string) {}
 func TestClumpIgnoresCommonSignatures(t *testing.T) {
 	h := &testHarness{T: t}
 	c := h.one(h.investigate(h.fixture(contextClumpSource), clumpConfig()), "data-clump")
-	require.Equal(t, []string{"orgID string", "sectionID string", "studentIDs []string"}, h.clueValue(c, "clump-types"))
+	require.Equal(t, []string{"orgID string", "sectionID string", "studentIDs []string"}, h.clueValue(c, "clump-parameters"))
 	require.Equal(t, []string{"fixture.Drop", "fixture.Enroll", "fixture.Notify"}, supportSymbols(c))
 }
 
@@ -59,7 +59,7 @@ func TestClumpIgnoresUninformativeParameters(t *testing.T) {
 	config := clumpConfig()
 	config.Counts["data-clump-size"] = 2
 	c := h.one(h.investigate(h.fixture(source), config), "data-clump")
-	require.Equal(t, []string{"a string", "b bool"}, h.clueValue(c, "clump-types"))
+	require.Equal(t, []string{"a string", "b bool"}, h.clueValue(c, "clump-parameters"))
 }
 
 func clumpConfig() Config {
