@@ -98,3 +98,44 @@ jobs:
         uses: ./
         with:
           artifact-name: columbo-self-check-snapshot
+
+  calibration:
+    name: Mutation calibration
+    runs-on: ubuntu-24.04
+    env:
+      GOTOOLCHAIN: local
+      GOTELEMETRY: 'off'
+      GOWORK: 'off'
+      GOFLAGS: '-buildvcs=false'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            calibration/go.sum
+      - name: Harness and operator fixtures
+        working-directory: calibration
+        run: go test ./...
+      - name: Calibrate Columbo's own module
+        run: |
+          go build -o "$RUNNER_TEMP/columbo" ./cmd/columbo
+          (cd calibration && go build -o "$RUNNER_TEMP/calibrate" ./cmd/calibrate)
+          "$RUNNER_TEMP/calibrate" run --corpus . --module github.com/KellyBennett/Columbo --version "$GITHUB_SHA" \
+            --columbo "$RUNNER_TEMP/columbo" --db "$RUNNER_TEMP/calibration.sqlite" --operators all \
+            --validity build --max-sites 8 --workers 4
+      - name: Report, warning on untriaged survivors
+        run: |
+          "$RUNNER_TEMP/calibrate" report --db "$RUNNER_TEMP/calibration.sqlite" --triage calibration/triage.yaml > "$RUNNER_TEMP/calibration-report.md" 2> "$RUNNER_TEMP/calibration-warnings.txt"
+          cat "$RUNNER_TEMP/calibration-report.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s "$RUNNER_TEMP/calibration-warnings.txt" ]; then echo "::warning::$(cat "$RUNNER_TEMP/calibration-warnings.txt")"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: columbo-calibration
+          path: |
+            ${{ runner.temp }}/calibration.sqlite
+            ${{ runner.temp }}/calibration-report.md

@@ -467,9 +467,15 @@ func qualifier(u unit) types.Qualifier {
 func renameLocals(callee fn, n ast.Node, suffix string, subst map[types.Object]string) string {
 	start := callee.offset(n.Pos())
 	var ss []splice
+	symbolic := typeSwitchSymbols(n)
 	ast.Inspect(n, func(x ast.Node) bool {
 		id, ok := x.(*ast.Ident)
 		if !ok || id.Name == "_" {
+			return true
+		}
+		if symbolic[id] {
+			off := callee.offset(id.Pos()) - start
+			ss = append(ss, splice{off, off + len(id.Name), id.Name + suffix})
 			return true
 		}
 		obj := callee.pkg.TypesInfo.Defs[id]
@@ -492,4 +498,21 @@ func renameLocals(callee fn, n ast.Node, suffix string, subst map[types.Object]s
 	})
 	text := callee.src[start:callee.offset(n.End())]
 	return string(applySplices(text, ss))
+}
+
+// typeSwitchSymbols finds the x in `switch x := v.(type)`, which go/types never records as a
+// definition; only its per-clause implicit objects exist.
+func typeSwitchSymbols(n ast.Node) map[*ast.Ident]bool {
+	out := map[*ast.Ident]bool{}
+	ast.Inspect(n, func(x ast.Node) bool {
+		if ts, ok := x.(*ast.TypeSwitchStmt); ok {
+			if as, ok := ts.Assign.(*ast.AssignStmt); ok && len(as.Lhs) == 1 {
+				if id, ok := as.Lhs[0].(*ast.Ident); ok {
+					out[id] = true
+				}
+			}
+		}
+		return true
+	})
+	return out
 }

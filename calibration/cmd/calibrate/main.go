@@ -10,6 +10,7 @@ import (
 
 	"github.com/KellyBennett/Columbo/calibration/harness"
 	"github.com/KellyBennett/Columbo/calibration/operators"
+	"github.com/KellyBennett/Columbo/calibration/report"
 )
 
 func main() {
@@ -101,5 +102,31 @@ func selectOperators(spec string) ([]harness.Operator, error) {
 }
 
 func reportCmd(args []string) error {
-	return fmt.Errorf("report: not built yet")
+	fs := flag.NewFlagSet("report", flag.ContinueOnError)
+	db := fs.String("db", "calibration.sqlite", "results database")
+	triagePath := fs.String("triage", "triage.yaml", "survivor triage file")
+	failUntriaged := fs.Bool("fail-untriaged", false, "exit 1 when a survivor is not triaged")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	triage, err := report.LoadTriage(*triagePath)
+	if err != nil {
+		return err
+	}
+	store, err := harness.OpenStore(*db)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	untriaged, err := report.Write(os.Stdout, store.DB(), triage)
+	if err != nil {
+		return err
+	}
+	if untriaged > 0 {
+		fmt.Fprintf(os.Stderr, "warning: %d untriaged survivors\n", untriaged)
+		if *failUntriaged {
+			os.Exit(1)
+		}
+	}
+	return nil
 }
