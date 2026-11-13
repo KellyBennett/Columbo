@@ -278,6 +278,43 @@ Provisional entries are permitted during dogfooding. Before public v1 release, e
 - **Required evidence:** Receipts identify the parent, helper declarations, and qualifying call sites. Clues report the forwarded-input sets, dependency sets, calculated overlaps and configured thresholds, and original and expanded metrics. Multiple qualifying clusters are individually identifiable in the evidence.
 - **Evaluation:** Review examples where humans judge the flagged decomposition meaningful, alongside examples of arbitrary helper extraction. Resolve whether to retain, revise, or remove the structural policy.
 - **Required regression coverage:** Include an arbitrary helper extraction that fails and a plausibly meaningful decomposition that nevertheless fails because all four conditions hold. The latter fixture locks the deliberate strictness, not a claim that the design is objectively wrong.
+- **Calibration changes:** Two changes since the entry was written make the policy stricter, and the evaluation above should weigh both. A bare block statement no longer ends a cluster sequence, so wrapping each helper call in `{ }` cannot split a cluster (`bare-blocks-transparent`, `nested-bare-blocks`, `control-inside-bare-block` and `single-helper-in-block-only` in `TestClusterBoundaries`). The default `cosmetic-dependency-overlap` fell from 0.75 to 0.5 under TH-003. Mutation calibration found that block-wrapping silenced 10 of 14 sampled cases before the first change and none after, and that the second raised forwarding splits of real long functions caught from 20 to 49 of 100. The only new natural case across five corpora was Columbo's own `(*complexityVisitor).visitIfStmt`, a split of the kind this policy targets.
+
+### TH-001: default `dependencies` limit of 7
+
+- **Status:** `revised`.
+- **Decision:** The default `dependencies` limit is 7, up from 5. A declaration with more than 7 scored dependencies fails Excessive Dependencies.
+- **Rationale:** At 5, Excessive Dependencies reported most single-purpose `go/types` and `go/ast` walks, and Extract Function tended to produce two functions that each still exceeded the limit, because extraction copies the parent's parameter types into the helper's signature.
+- **Applicability:** Every emitted `excessive-dependencies` case.
+- **Review note:** "The default dependency limit was raised from 5 to 7 on mutation-calibration evidence. Calibration counted findings; it did not judge whether each finding removed was a false positive."
+- **Human-review prompt:** "Show the human the scored dependency set and the limit. Discuss whether the declaration mixes responsibilities, independent of the count."
+- **Required evidence:** Natural FAIL counts on Columbo and external corpora at each limit, injected collaborators caught past the line, and refactorings blocked by this rule, from `calibration/` report rows.
+- **Resolution:** Revised from 5 to 7. Across Columbo, cobra, chi, BurntSushi/toml and google/uuid, natural FAIL cases fell from 77 to 26 (Columbo's own from 20 to 8). Every injected collaborator past the new limit was still caught (100 of 100). Sampled Extract Function cures blocked by this rule fell from 3 to 0 and parameter-object cures from 1 to 0. Evidence: CAL-005 in `docs/calibration-tuning-proposals.md`. Whether the removed findings were false positives was not judged. Real-use evidence that they were not reopens this decision under a new ID.
+- **Required regression coverage:** `TestDefaultDependencyLimitAllowsSevenAndFailsEight` (seven pass and eight fail at the defaults), `TestAllSevenDefaultFail` with its `all-rows` and `all-summary` goldens, and the publisher's `8 (limit > 7)` line in `scripts/test_github_check.py`.
+
+### TH-002: default `feature-envy-foreign-accesses` limit of 6
+
+- **Status:** `revised`.
+- **Decision:** The default `feature-envy-foreign-accesses` limit is 6, up from 5. The `feature-envy-ratio` default of 2 is unchanged.
+- **Rationale:** At 5, Feature Envy fired at the margin. Most of its cases on real code sat within one access of the limit, and small free helpers produced by Extract Function tripped it.
+- **Applicability:** Every emitted `feature-envy` case.
+- **Review note:** "The default foreign-access limit was raised from 5 to 6 on mutation-calibration evidence. Calibration counted findings; it did not judge whether each finding removed was a false positive."
+- **Human-review prompt:** "Show the human each qualifying foreign group, its access count, and the own-access count. Discuss whether the behavior belongs with the data it reads."
+- **Required evidence:** Natural FAIL counts at each limit, injected envy caught, and refactorings blocked by this rule, from `calibration/` report rows.
+- **Resolution:** Revised from 5 to 6. Natural FAIL cases across the five corpora fell from 78 to 49 (Columbo's own from 24 to 10). Injected envy at exactly 5 accesses is no longer reported, so sampled moves caught fell from 50 of 70 to 45 of 61. Sampled Extract Function cures blocked by this rule fell from 5 to 2 and parameter-object cures from 4 to 3. Lowering `feature-envy-ratio` to 1.5 instead added 14 natural cases for one more injected catch and was rejected. Evidence: CAL-006 in `docs/calibration-tuning-proposals.md`. Whether the removed findings were false positives was not judged.
+- **Required regression coverage:** `TestDefaultFeatureEnvyAllowsFiveForeignReadsAndFailsSix` (five foreign reads pass and six fail at the defaults), and `TestAllSevenDefaultFail` with its goldens.
+
+### TH-003: default `cosmetic-dependency-overlap` of 0.5
+
+- **Status:** `revised`.
+- **Decision:** The default `cosmetic-dependency-overlap` is 0.5, down from 0.75. `cosmetic-parameter-overlap` is unchanged at 0.75.
+- **Rationale:** At 0.75, most mechanical splits of real long functions were not reported. Two helpers forwarding the same inputs commonly share two of three dependencies, an overlap of 0.67.
+- **Applicability:** Every emitted `cosmetic-extraction` case. CE-001's review note continues to apply to the same cases.
+- **Review note:** "The default dependency-overlap threshold was lowered from 0.75 to 0.5 on mutation-calibration evidence, which makes CE-001 stricter."
+- **Human-review prompt:** "Show the human the helpers' dependency sets and calculated overlaps. Discuss whether the helpers are cosmetic, under CE-001."
+- **Required evidence:** Forwarding splits caught, natural cases introduced, and refactorings blocked by this rule at each threshold, from `calibration/` report rows.
+- **Resolution:** Revised from 0.75 to 0.5. Forwarding splits of real long functions caught rose from 20 to 49 of 100, with no refactorings newly blocked. The one natural case it adds across five corpora, Columbo's own `visitIfStmt`, was judged by hand as a true cosmetic split. 0.25 caught more but added 17 natural cases nobody has judged, so it was rejected. Evidence: CAL-004 in `docs/calibration-tuning-proposals.md`.
+- **Required regression coverage:** `TestDefaultCosmeticOverlapCatchesTwoOfThreeSharedDependencies` (helpers sharing two of three dependencies are reported at the defaults), and `TestAllSevenDefaultFail` with its goldens.
 
 ## Advisory evidence
 
