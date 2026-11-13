@@ -62,6 +62,21 @@ func TestClumpIgnoresUninformativeParameters(t *testing.T) {
 	require.Equal(t, []string{"a string", "b bool"}, h.clueValue(c, "clump-parameters"))
 }
 
+func TestClumpFamilyReportsSharedCoreOnce(t *testing.T) {
+	h := &testHarness{T: t}
+	source := `package fixture
+func A(a int, b bool, c string, d float64) {}
+func B(a int, b bool, c string, d float64) {}
+func C(a int, b bool, c string, d float64) {}
+func D(a int, b bool, c string, e byte) {}
+func E(a int, b bool, c string, e byte) {}
+func F(a int, b bool, c string, e byte) {}
+`
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.Equal(t, []string{"a int", "b bool", "c string"}, h.clueValue(c, "clump-parameters"))
+	require.Equal(t, []string{"fixture.A", "fixture.B", "fixture.C", "fixture.D", "fixture.E", "fixture.F"}, supportSymbols(c))
+}
+
 func clumpConfig() Config {
 	config := quiet()
 	config.Severity["data-clump"] = "fail"

@@ -31,6 +31,13 @@ func (m parameterMultiset) contains(other parameterMultiset) bool {
 	}
 	return true
 }
+func (m parameterMultiset) size() int {
+	total := 0
+	for _, n := range m {
+		total += n
+	}
+	return total
+}
 func (m parameterMultiset) copy() parameterMultiset {
 	out := parameterMultiset{}
 	for t, n := range m {
@@ -93,24 +100,42 @@ func (m *clumpMiner) support(s parameterMultiset) []clumpSite {
 	}
 	return out
 }
-func (m *clumpMiner) report() error {
+type clumpPattern struct {
+	members parameterMultiset
+	support []clumpSite
+}
+
+func (m *clumpMiner) qualifying() []clumpPattern {
+	out := []clumpPattern{}
 	for _, s := range m.patterns {
-		if e := m.reportPattern(s); e != nil {
-			return e
+		if support := m.support(s); int64(len(support)) >= m.engine.config.Counts["data-clump-occurrences"] {
+			out = append(out, clumpPattern{members: s, support: support})
 		}
 	}
-	return nil
+	return out
 }
-func (m *clumpMiner) reportPattern(s parameterMultiset) error {
-	support := m.support(s)
-	if int64(len(support)) < m.engine.config.Counts["data-clump-occurrences"] {
-		return nil
+func (p clumpPattern) minimal(qualifying []clumpPattern) bool {
+	for _, other := range qualifying {
+		if other.members.size() < p.members.size() && p.members.contains(other.members) {
+			return false
+		}
 	}
-	c, err := m.patternCase(s, support)
-	if err != nil || c == nil {
-		return err
+	return true
+}
+func (m *clumpMiner) report() error {
+	qualifying := m.qualifying()
+	for _, p := range qualifying {
+		if !p.minimal(qualifying) {
+			continue
+		}
+		c, err := m.patternCase(p.members, p.support)
+		if err != nil {
+			return err
+		}
+		if c != nil {
+			m.engine.report.Cases = append(m.engine.report.Cases, *c)
+		}
 	}
-	m.engine.report.Cases = append(m.engine.report.Cases, *c)
 	return nil
 }
 func (m *clumpMiner) patternCase(pattern parameterMultiset, support []clumpSite) (*Case, error) {
