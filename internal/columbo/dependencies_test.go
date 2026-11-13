@@ -59,6 +59,7 @@ func (s dependencyScenario) verify(h *testHarness) {
 func dependencyConfig() Config {
 	config := quiet()
 	config.Severity["excessive-dependencies"] = "fail"
+	config.Counts["dependencies"] = 5
 	return config
 }
 func (h *testHarness) loadDependencyFixture(dir string, config Config) *engine {

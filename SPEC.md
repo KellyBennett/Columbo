@@ -325,9 +325,9 @@ thresholds:
   function-lines: 10
   parameters: 4
   cognitive-complexity: 7
-  dependencies: 5
+  dependencies: 7
   private-type-files: 3
-  feature-envy-foreign-accesses: 5
+  feature-envy-foreign-accesses: 6
   feature-envy-ratio: 2.0
   data-clump-size: 3
   data-clump-occurrences: 3
@@ -335,7 +335,7 @@ thresholds:
   duplicate-tokens: 50
   repeated-variant-sites: 2
   repeated-variant-variants: 2
-  cosmetic-dependency-overlap: 0.75
+  cosmetic-dependency-overlap: 0.5
   cosmetic-parameter-overlap: 0.75
 history:
   enabled: true
@@ -388,7 +388,7 @@ Trigger when complexity > `cognitive-complexity` (default 7). Lead toward simpli
 
 ### Excessive Dependencies
 
-Trigger when dependency count > `dependencies` (default 5). Do not recommend a facade whose only purpose is hiding the count.
+Trigger when dependency count > `dependencies` (default 7). Do not recommend a facade whose only purpose is hiding the count.
 
 Dependency origin evidence is descriptive and does not change the scored set or limit. An Excessive Dependencies case retains `dependency-set` and adds sorted, nonempty list clues `dependency-use-declared`, `dependency-use-signature`, `dependency-use-supplied`, `dependency-use-consumed`, `dependency-use-discarded`, `dependency-use-receiver`, `dependency-use-value`, and `dependency-use-package` where present. Each list contains scored identities and links to the physical receipts showing that origin. Declaration/type construction, callable signatures, supplied argument expressions, consumed call results, discarded call results, selector receivers, selected field values, and package references are distinguished. The existing type normalization and recursive collection policy applies to each expression; these labels describe source use, not runtime behavior or data flow. A result bound to a variable is consumed even if a later statement ignores that variable. Origins may overlap; they must never be summed to reconstruct the score.
 

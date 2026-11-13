@@ -177,7 +177,7 @@ class PublisherTests(unittest.TestCase):
     def test_dependency_origins_are_projected(self):
         annotations, _ = publisher.read_snapshot(self.snapshot, 1)
         finding = next(item for item in annotations if "excessive-dependencies" in item["title"])
-        self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
+        self.assertIn("dependencies fixture.Dependencies: 8 (limit > 7)", finding["message"])
         self.assertIn("Dependency origins (lists overlap; each identity counts once)", finding["message"])
         self.assertIn("Declared or constructed types:", finding["message"])
         self.assertIn("Does the caller know details its dependency could own?", finding["message"])
@@ -209,7 +209,7 @@ class PublisherTests(unittest.TestCase):
         self.assertEqual(11, len(annotations))
         self.assertIn("11 failed, 0 warned, 0 suppressed", summary)
         finding = next(item for item in annotations if "excessive-dependencies" in item["title"])
-        self.assertIn("dependencies fixture.Dependencies: 6 (limit > 5)", finding["message"])
+        self.assertIn("dependencies fixture.Dependencies: 8 (limit > 7)", finding["message"])
         self.assertNotIn("Dependency origins", finding["message"])
 
     def test_coordination_clues_are_projected(self):

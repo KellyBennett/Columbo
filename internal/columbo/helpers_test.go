@@ -153,6 +153,7 @@ func (t *testHarness) TestFeatureEnvyValuesAndSelectors() {
 	dir := t.fixture(helpersSource0)
 	c := quiet()
 	c.Severity["feature-envy"] = "fail"
+	c.Counts["feature-envy-foreign-accesses"] = 5
 	c.Ratios["feature-envy-ratio"] = .5
 	r := t.investigate(dir, c)
 	cc := t.one(r, "feature-envy")
@@ -364,6 +365,7 @@ func (Calculator) Method(d Data) int { return d.A + d.B + d.C + d.D + d.E }
 func (t *testHarness) TestFeatureEnvyIgnoresWhetherAReceiverExists() {
 	config := quiet()
 	config.Severity["feature-envy"] = "fail"
+	config.Counts["feature-envy-foreign-accesses"] = 5
 	r := t.investigate(t.fixture(receiverlessEnvySource), config)
 	symbols := map[string]bool{}
 	for _, c := range r.Cases {
@@ -393,6 +395,7 @@ func Both(d Data, u url.URL) string {
 func (t *testHarness) TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives() {
 	config := quiet()
 	config.Severity["feature-envy"] = "fail"
+	config.Counts["feature-envy-foreign-accesses"] = 5
 	leads := map[string][]string{}
 	for _, c := range t.investigate(t.fixture(envyOwnershipSource), config).Cases {
 		leads[c.Symbol] = c.Leads
@@ -437,6 +440,7 @@ func Whole(v any) int {
 func (t *testHarness) TestFeatureEnvyCountsEachTypeSwitchClauseVariableSeparately() {
 	config := quiet()
 	config.Severity["feature-envy"] = "fail"
+	config.Counts["feature-envy-foreign-accesses"] = 5
 	symbols := map[string]bool{}
 	for _, c := range t.investigate(t.fixture(envyTypeSwitchSource), config).Cases {
 		symbols[c.Symbol] = true
