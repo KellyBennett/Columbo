@@ -218,6 +218,7 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 		return true
 	})
 	renamed := map[types.Object]string{}
+	guards := typeSwitchSymbols(f)
 	var ss []splice
 	ast.Inspect(f.decl, func(n ast.Node) bool {
 		switch n := n.(type) {
@@ -228,6 +229,9 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 			obj := f.pkg.TypesInfo.Defs[n]
 			if obj == nil {
 				obj = f.pkg.TypesInfo.Uses[n]
+			}
+			if g, ok := guards[n]; ok {
+				obj = g
 			}
 			if _, isVar := obj.(*types.Var); !isVar || !local(f, obj) {
 				return true
@@ -255,6 +259,43 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 		Edit:        harness.Edit{f.rel: out},
 		Expectation: harness.Expectation{Touched: touched, Catches: []string{duplicateSmell}},
 	}, nil
+}
+
+// typeSwitchSymbols maps each `switch x := v.(type)` symbol, which has no object of its own,
+// to one of the per-clause objects it declares, and maps every per-clause object to that
+// same representative, so the symbol and its uses get one new name.
+func typeSwitchSymbols(f fn) map[*ast.Ident]types.Object {
+	out := map[*ast.Ident]types.Object{}
+	ast.Inspect(f.decl, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSwitchStmt)
+		if !ok {
+			return true
+		}
+		assign, ok := ts.Assign.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		sym := assign.Lhs[0].(*ast.Ident)
+		var rep types.Object
+		for _, cc := range ts.Body.List {
+			if obj := f.pkg.TypesInfo.Implicits[cc]; obj != nil {
+				if rep == nil {
+					rep = obj
+				}
+				ast.Inspect(cc, func(m ast.Node) bool {
+					if id, ok := m.(*ast.Ident); ok && f.pkg.TypesInfo.Uses[id] == obj {
+						out[id] = rep
+					}
+					return true
+				})
+			}
+		}
+		if rep != nil {
+			out[sym] = rep
+		}
+		return true
+	})
+	return out
 }
 
 func relabel(lit *ast.BasicLit) (string, bool) {

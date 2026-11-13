@@ -29,3 +29,5 @@ func Summary(name string, n int) string {
 	z.SetInt64(int64(n) * 3)
 	return buf.String() + " " + z.String()
 }
+
+func Wrap(words []string) string { return Quiet(words, ";") }

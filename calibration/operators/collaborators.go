@@ -96,7 +96,7 @@ func (o addCollaborators) Apply(c *harness.Corpus, site harness.Site, dose int) 
 		fmt.Fprintf(&b, "\nvar %s %s.%s\n_ = %s.%s", name, col.name, col.typ, name, col.use)
 	}
 	at := f.offset(f.decl.Body.Lbrace) + 1
-	out, err := finish(f.path, applySplices(f.src, []splice{{at, at, b.String()}}))
+	out, err := finish(f.path, applySplices(f.src, []splice{{at, at, b.String() + "\n"}}))
 	if err != nil {
 		return harness.Applied{}, err
 	}

@@ -27,3 +27,9 @@ func TestSizes(t *testing.T) {
 		t.Errorf("Widths = %d, Heights = %d", Widths(rs), Heights(rs))
 	}
 }
+
+func TestKind(t *testing.T) {
+	if got := Kind([]any{3, "ab", []int{1}, 1.5}); got != 8 {
+		t.Errorf("Kind = %d", got)
+	}
+}

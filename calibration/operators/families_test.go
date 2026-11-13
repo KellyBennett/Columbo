@@ -41,7 +41,10 @@ func TestCollaboratorsFireAboveTheLimitAndAFacadeHidesThem(t *testing.T) {
 	expectRows(t, rows, []want{
 		{"add-collaborators", "example.com/deps.Quiet", 3, "equivalent"},
 		{"add-collaborators", "example.com/deps.Quiet", 4, "killed"},
+		{"add-collaborators", "example.com/deps.Wrap", 5, "equivalent"},
+		{"add-collaborators", "example.com/deps.Wrap", 6, "killed"},
 		{"route-through-facade", "example.com/deps.Quiet", 1, "survived"},
+		{"route-through-facade", "example.com/deps.Wrap", 1, "survived"},
 		{"split-by-collaborators", "example.com/deps.Summary", 1, "killed"},
 	})
 }
@@ -62,7 +65,9 @@ func TestDuplicateSurvivesRenamesAndDelegationCuresExactCopies(t *testing.T) {
 		{"duplicate-block", "example.com/dup.Score", 1, "killed"},
 		{"duplicate-block", "example.com/dup.Sign", 1, "equivalent"},
 		{"duplicate-block", "example.com/dup.Average", 1, "equivalent"},
+		{"duplicate-block", "example.com/dup.Kind", 1, "killed"},
 		{"rename-and-relabel", "example.com/dup.scoreDup", 1, "killed"},
+		{"rename-and-relabel", "example.com/dup.kindDup", 1, "killed"},
 		{"delegate-duplicate", "example.com/dup.Mean", 1, "killed"},
 	})
 }

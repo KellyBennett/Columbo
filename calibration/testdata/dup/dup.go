@@ -86,3 +86,20 @@ func Heights(rs []rect) int {
 }
 
 func Average(values []float64) float64 { return average(values) }
+
+func Kind(vs []any) int {
+	n := 0
+	for _, v := range vs {
+		switch x := v.(type) {
+		case int:
+			n += x
+		case string:
+			n += len(x)
+		case []int:
+			n += len(x) * 2
+		default:
+			n++
+		}
+	}
+	return n
+}

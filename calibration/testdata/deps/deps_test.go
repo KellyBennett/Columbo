@@ -14,3 +14,9 @@ func TestSummary(t *testing.T) {
 		t.Errorf("Summary = %q, want %q", got, want)
 	}
 }
+
+func TestWrap(t *testing.T) {
+	if got := Wrap([]string{"y", "x"}); got != "x;y" {
+		t.Errorf("Wrap = %q", got)
+	}
+}
