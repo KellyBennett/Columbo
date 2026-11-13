@@ -152,7 +152,7 @@ func (a *engine) inspectionEntry(path string, selected map[string]*file) (inspec
 	if err != nil {
 		return inspectionFile{}, err
 	}
-	item := inspectionFile{Path: rel, SHA: inspectionHash(data), Size: int64(len(data)), Generated: strings.HasSuffix(rel, ".go") && generated(data)}
+	item := inspectionFile{Path: rel, SHA: inspectionHash(data), Size: int64(len(data)), Generated: strings.HasSuffix(rel, ".go") && generatedMarker(data) > 0}
 	f := selected[rel]
 	if f != nil && string(data) != string(f.data) {
 		return inspectionFile{}, fmt.Errorf("source changed during inspection: %s", rel)

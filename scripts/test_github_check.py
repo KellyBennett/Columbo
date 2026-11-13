@@ -252,6 +252,23 @@ class PublisherTests(unittest.TestCase):
             self.assertIn(text, finding["message"])
         self.assertEqual(2, finding["message"].count("Variant decision: variants.go:"))
 
+    def test_generated_exclusion_warning_lands_on_its_header(self):
+        message = "Generated-code header excludes all.go from analysis; function and method declarations hidden: 3. A matching exclude pattern acknowledges it."
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "generated.sqlite"
+            shutil.copyfile(self.snapshot, path)
+            with sqlite3.connect(path) as db:
+                file_id = db.execute("SELECT id FROM files WHERE path='all.go'").fetchone()[0]
+                ordinal = db.execute("SELECT COALESCE(MAX(ordinal)+1,0) FROM warnings").fetchone()[0]
+                db.execute("INSERT INTO warnings(ordinal,code,file_id,line,message) VALUES (?,?,?,?,?)", (ordinal, "generated-exclusion", file_id, 3, message))
+            annotations, summary = publisher.read_snapshot(path, 1)
+        warning = next(item for item in annotations if item["title"] == "Columbo: generated-exclusion")
+        self.assertEqual(("all.go", 3, 3, "warning"), (warning["path"], warning["start_line"], warning["end_line"], warning["annotation_level"]))
+        self.assertEqual(message, warning["message"])
+        self.assertEqual(12, len(annotations))
+        self.assertIn("11 failed, 0 warned, 0 suppressed", summary)
+        self.assertIn("Analysis warnings:\n" + message, summary)
+
     def test_batches_do_not_drop_or_duplicate_findings(self):
         for count in (0, 1, 50, 51, 155):
             with self.subTest(count=count):
