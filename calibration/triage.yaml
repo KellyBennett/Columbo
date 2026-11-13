@@ -45,10 +45,10 @@
   dose: 0
   status: blind-spot
   reason: >-
-    13 of 14 frozen agent evasions silence their case without improving the design (see
-    calibration/redteam/*/meta.yaml technique). Three techniques silence any rule: a hand-written
-    "Code generated ... DO NOT EDIT." header hides a whole file; a function literal in a
-    package-level var is never a finding subject; a //nolint: prefix turns prose into a directive.
+    11 of 14 frozen agent evasions silence their case without improving the design (see
+    calibration/redteam/*/meta.yaml technique). Two techniques silence any rule: a hand-written
+    "Code generated ... DO NOT EDIT." header hides a whole file; a //nolint: prefix turns prose
+    into a directive. A function literal in a package-level var is a finding subject under FS-001.
 - operator: pack-anonymous-struct
   symbol: "*"
   dose: 0

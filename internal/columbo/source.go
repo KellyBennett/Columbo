@@ -267,8 +267,8 @@ func (f *file) exclude(patterns []string) error {
 func (a *engine) fileDeclarations(f *file) error {
 	ordinals := map[string]int{}
 	for _, node := range f.ast.Decls {
-		if fn, ok := node.(*ast.FuncDecl); ok {
-			if e := a.addDeclaration(f, fn, ordinals); e != nil {
+		for _, syntax := range declarationSubjects(node) {
+			if e := a.addDeclaration(f, syntax, ordinals); e != nil {
 				return e
 			}
 		}
@@ -282,8 +282,8 @@ func declarationName(name string, ordinals map[string]int) string {
 	ordinals[name]++
 	return name + "#" + strconv.Itoa(ordinals[name])
 }
-func newDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) (*declaration, error) {
-	d := &declaration{syntax: funcSubject(fn), file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
+func newDeclaration(f *file, syntax *subjectSyntax, ordinals map[string]int) (*declaration, error) {
+	d := &declaration{syntax: syntax, file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
 	if err := d.resolveSignature(); err != nil {
 		return nil, err
 	}
@@ -294,8 +294,8 @@ func newDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) (*declar
 func (d *declaration) assignSymbol(ordinals map[string]int) {
 	d.symbol = d.symbolName(declarationName(d.functionName().Name, ordinals))
 }
-func (a *engine) addDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) error {
-	d, err := newDeclaration(f, fn, ordinals)
+func (a *engine) addDeclaration(f *file, syntax *subjectSyntax, ordinals map[string]int) error {
+	d, err := newDeclaration(f, syntax, ordinals)
 	if err != nil {
 		return err
 	}

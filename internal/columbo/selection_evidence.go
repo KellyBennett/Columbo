@@ -136,7 +136,7 @@ func (site *selectionSite) messageSet() []string {
 }
 
 func (d *declaration) isRuntimeBoundary() bool {
-	if d.hasReceiver() {
+	if d.hasReceiver() || d.obj == nil {
 		return false
 	}
 	return d.obj.Name() == "init" || d.obj.Name() == "main" && d.obj.Pkg().Name() == "main"
