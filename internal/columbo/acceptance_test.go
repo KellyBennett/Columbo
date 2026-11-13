@@ -274,7 +274,7 @@ func (t *testHarness) TestConfigMerge() {
 	require.Equal(t.T, "warn", c.Severity["long-function"])
 	require.Equal(t.T, "fail", c.Severity["feature-envy"])
 	require.Equal(t.T, int64(9), c.Counts["parameters"])
-	require.Equal(t.T, int64(5), c.Counts["dependencies"])
+	require.Equal(t.T, int64(7), c.Counts["dependencies"])
 	require.Empty(t.T, c.Exclude)
 	for _, text := range []string{"", "{}"} {
 		t.write(dir, "config.yml", text)

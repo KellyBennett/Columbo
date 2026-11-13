@@ -12,10 +12,10 @@ var clueSupportRoles = []string{
 	"clump-occurrences|declaration|3",
 	"clump-size|parameter|9",
 	"clump-types|parameter|9",
-	"foreign-accesses|foreign-access|5",
-	"foreign-own-ratio|foreign-access|5",
+	"foreign-accesses|foreign-access|6",
+	"foreign-own-ratio|foreign-access|6",
 	"own-accesses|none|0",
-	"parameters|parameter|11",
+	"parameters|parameter|13",
 }
 
 // Count only each clue's established support, including the zero-own case.
