@@ -30,7 +30,8 @@ The recognized spellings are defined in `internal/columbo/comment_directives.go`
   linking, WebAssembly import/export, `//go:debug`, and the named compiler/cgo
   pragmas in the allowlist.
 - Line directives (`//line` and `/*line ...*/`) and cgo `//export` directives.
-- `//nolint` with optional linter names and its trailing justification syntax.
+- `//nolint` with optional linter names. A trailing justification after a second `//`
+  is prose: the directive token stays exempt, and the receipt starts at the second `//`.
 - Staticcheck `//lint:ignore` and `//lint:file-ignore`, including their reasons.
 - Columbo `//columbo:ignore` directives, including their required justifications.
   Existing parsing, attachment, and justification checks still apply.

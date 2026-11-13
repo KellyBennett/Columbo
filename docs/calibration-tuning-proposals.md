@@ -122,6 +122,10 @@ rule goes quiet at once.
   a machine directive, because docs/prose-comments.md exempts nolint's trailing justification.
   *Proposal:* exempt the directive, and classify text after its second `//` as prose.
   *Evidence:* `redteam/chi-prose-comment`.
+  **Done**: the justification is now prose and its receipt starts at the second `//`. The
+  chi-prose-comment replay goes from survived to killed; no other red-team entry or corpus
+  baseline changes. A `//lint:ignore` reason is the same shape of escape and stays exempt,
+  because staticcheck requires the reason.
 
 ### 2. Close the cheap per-rule evades (CAL-002)
 
