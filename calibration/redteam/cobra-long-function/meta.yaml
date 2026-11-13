@@ -1,0 +1,10 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: long-function
+symbol: github.com/spf13/cobra.writePostscript
+evaded: true
+touched:
+  - github.com/spf13/cobra.writePostscript
+technique: "Hoisted the two multi-line bash template string literals out of the function body into package-level consts (bashStartFuncTmpl, bashCompleteCmdTmpl). Function drops from 40 counted lines to 6."
+size_note: "pure cut-and-paste of two raw string literals; byte-identical output."
+still_reported: []

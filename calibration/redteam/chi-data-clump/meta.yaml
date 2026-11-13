@@ -1,0 +1,12 @@
+module: github.com/go-chi/chi/v5
+version: v5.2.1
+smell: data-clump
+symbol: github.com/go-chi/chi/v5.(*Mux).handle
+evaded: true
+touched:
+  - github.com/go-chi/chi/v5.(*Mux).handle
+technique: "Replaced the parameter type http.Handler with the structurally identical anonymous interface { ServeHTTP(http.ResponseWriter, *http.Request) }. All callers still compile, but the multiset {methodTyp, http.Handler, string} no longer matches, so the clump drops below 3 occurrences (InsertRoute, setEndpoint untouched)."
+size_note: "one signature changed (gofmt splits it over 3 lines)."
+still_reported:
+  - excessive-dependencies (pre-existing)
+  - long-function (pre-existing)

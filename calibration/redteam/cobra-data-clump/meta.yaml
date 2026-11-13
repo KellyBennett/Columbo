@@ -1,0 +1,12 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: data-clump
+symbol: github.com/spf13/cobra/doc.GenMarkdownTreeCustom
+evaded: true
+touched:
+  - github.com/spf13/cobra/doc.GenMarkdownTreeCustom
+technique: "Retyped both func(string) string parameters as a new unexported defined type (type filePrependerFunc func(string) string); callers still compile by assignability, but the clump multiset no longer matches the other two signatures, so the clump drops below 3 occurrences."
+size_note: "2 lines: one type declaration plus the edited signature; no caller changes."
+still_reported:
+  - high-cognitive-complexity (pre-existing)
+  - long-function (pre-existing)

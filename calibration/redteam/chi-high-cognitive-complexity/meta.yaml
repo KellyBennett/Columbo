@@ -1,0 +1,14 @@
+module: github.com/go-chi/chi/v5
+version: v5.2.1
+smell: high-cognitive-complexity
+symbol: github.com/go-chi/chi/v5.walk
+evaded: true
+touched:
+  - github.com/go-chi/chi/v5.walk
+  - github.com/go-chi/chi/v5.walkHandlers
+technique: "Moved the inner per-method loop into a walkHandlers helper, merged the duplicated walkFn calls behind an if (ChainHandler) assignment, and unified error returns via var err + if/else. walk drops from 23 to under 8, walkHandlers scores 7 (at the limit). The inner block was split off as is; the excessive-dependencies case moved with it."
+size_note: "about 35 lines restructured in one function plus a new helper."
+still_reported:
+  - "walk: long-function (pre-existing; its excessive-dependencies and feature-envy cases also vanished)"
+  - "walkHandlers: excessive-dependencies (new, displaced from walk)"
+  - "walkHandlers: long-function (new)"

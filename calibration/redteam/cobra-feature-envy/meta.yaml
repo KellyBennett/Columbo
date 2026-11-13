@@ -1,0 +1,11 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: feature-envy
+symbol: github.com/spf13/cobra.defaultHelpFunc
+evaded: true
+touched:
+  - github.com/spf13/cobra.defaultHelpFunc
+technique: "Aliased the collaborator in an if-init (if cmd := c; cmd.Runnable() || ...) so 3 of the 5 accesses count against a different local, dropping c below the foreign-access minimum. This is the exact move the case guidance lists under avoid."
+size_note: "one line changed (two tokens renamed on the next line)."
+still_reported:
+  - long-function (pre-existing)

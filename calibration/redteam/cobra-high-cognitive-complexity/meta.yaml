@@ -1,0 +1,13 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: high-cognitive-complexity
+symbol: github.com/spf13/cobra/doc.GenReSTTreeCustom
+evaded: true
+touched:
+  - github.com/spf13/cobra/doc.GenReSTTreeCustom
+  - github.com/spf13/cobra/doc.documented
+technique: "Three score tricks, 10 -> 7: recurse through a local function variable (recurse := GenReSTTreeCustom) so the recursion increment is not counted; collapse the last two error checks into an err-chained if; move the || filter into a one-line predicate helper."
+size_note: "about 12 lines in one file; same control flow, same decisions."
+still_reported:
+  - long-function (pre-existing)
+  - data-clump (member of the GenYamlTreeCustom/GenMarkdownTreeCustom clump, pre-existing)

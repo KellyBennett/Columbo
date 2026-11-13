@@ -1,0 +1,11 @@
+module: github.com/go-chi/chi/v5
+version: v5.2.1
+smell: excessive-dependencies
+symbol: github.com/go-chi/chi/v5/middleware.SupressNotFound
+evaded: true
+touched:
+  - github.com/go-chi/chi/v5/middleware.SupressNotFound
+  - github.com/go-chi/chi/v5/middleware.routeMatches
+technique: "Extracted the two lines that fetch the route context and match the path into a helper routeMatches(r). That splits the 9 dependencies into 5 + 5, so both are at the limit and neither is reported. Arguably a mild naming improvement, but its aim is the count."
+size_note: "about 6 lines: two lines replaced by a call plus a 4-line helper."
+still_reported: []

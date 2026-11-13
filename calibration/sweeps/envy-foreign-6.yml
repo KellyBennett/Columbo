@@ -1,0 +1,3 @@
+version: 1
+thresholds:
+  feature-envy-foreign-accesses: 6

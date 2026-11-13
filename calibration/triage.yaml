@@ -1,0 +1,99 @@
+# Survivors the operator prediction cannot explain, triaged once.
+# Keyed by operator, site symbol, and dose. symbol "*" and dose 0 match every site or dose,
+# for a blind spot that is systemic rather than site-specific.
+# status: equivalent (the mutant did not really add the smell) or blind-spot (Columbo missed it).
+- operator: isolate-helper-calls
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Wrapping each helper call of a cosmetic parent in a bare block ends the cluster sequence,
+    because SPEC cluster formation treats an explicit nested block as a sequence break. The
+    design is unchanged and no rule reports it. Fixture: fixtures/cosmetic.
+- operator: decision-to-map-lookup
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    A map from the same variants to values repeats the variant knowledge at a second site, but
+    Columbo counts only switches and if-chains as decision sites. Fixture: fixtures/variants.
+- operator: route-through-facade
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    The scored dependency set excludes unexported same-package types by design, so one private
+    struct with forwarding methods hides any number of collaborators. SPEC only says not to
+    recommend a facade; nothing detects one. Fixture: fixtures/deps.
+- operator: prose-to-string-constant
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    docs/prose-comments.md tells agents not to move prose into unused strings, but no rule
+    enforces it. Fixture: fixtures/prose.
+- operator: launder-selection-through-role
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Passing each concrete construction through an identity helper returning the interface makes
+    every origin unknown, while the caller still picks every implementation. The SUC doc's avoid
+    list names this cosmetic change. Fixture: fixtures/selection.
+- operator: copy-fields-to-locals
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Feature Envy counts reads, not distinct fields, so hoisting reads into locals silences a
+    case whenever the envied value has fewer distinct fields than feature-envy-foreign-accesses.
+    Fixture: fixtures/envy.
+- operator: redteam-replay
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    13 of 14 frozen agent evasions silence their case without improving the design (see
+    calibration/redteam/*/meta.yaml technique). Three techniques silence any rule: a hand-written
+    "Code generated ... DO NOT EDIT." header hides a whole file; a function literal in a
+    package-level var is never a finding subject; a //nolint: prefix turns prose into a directive.
+- operator: pack-anonymous-struct
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    One anonymous struct parameter is one canonical type, so both data-clump and
+    long-parameter-list go quiet while every caller now spells the same struct type out.
+    Fixture: fixtures/clump.
+- operator: pack-anonymous-struct-lpl
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: Same as pack-anonymous-struct, measured against long-parameter-list.
+- operator: split-long-function
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.
+- operator: split-forwarding-helpers
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.
+- operator: split-forwarding-helpers-complexity
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.

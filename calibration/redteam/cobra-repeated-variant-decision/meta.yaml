@@ -1,0 +1,12 @@
+module: github.com/spf13/cobra
+version: v1.9.1
+smell: repeated-variant-decision
+symbol: github.com/spf13/cobra.Gt
+evaded: true
+touched:
+  - github.com/spf13/cobra.Gt
+technique: "Turned both tagged switch av.Kind() / bv.Kind() statements in Gt into tagless switches (switch k := av.Kind(); { case k == reflect.Array || ...; case k >= reflect.Int && k <= reflect.Int64: ... }). The variant decisions become boolean expressions, Gt and Eq drop out of the correlation, and the int case now relies on reflect.Kind iota ordering. The guidance lists replacing switches with equivalent if/else chains under avoid; a tagless switch is that same move."
+size_note: "6 case/switch lines rewritten in place; duplication between the two switches is untouched."
+still_reported:
+  - long-function (pre-existing)
+  - duplicate-code WARN (pre-existing)
