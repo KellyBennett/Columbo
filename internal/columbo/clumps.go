@@ -41,7 +41,9 @@ func (m typeMultiset) copy() typeMultiset {
 func (d *declaration) parameterTypes() typeMultiset {
 	m := typeMultiset{}
 	for _, p := range d.params {
-		m[canonicalType(p.typ, d.signature)]++
+		if t, ok := d.clumpElement(p); ok {
+			m[t]++
+		}
 	}
 	return m
 }
@@ -180,16 +182,16 @@ func (e *clumpEvidence) declarationReceipts(d *declaration, s typeMultiset) {
 	}
 }
 func (e *clumpEvidence) parameter(d *declaration, need typeMultiset, p parameter) {
-	t := d.parameterType(p)
-	if need[t] == 0 {
+	t, ok := d.clumpElement(p)
+	if !ok || need[t] == 0 {
 		return
 	}
 	need[t]--
 	e.parameterReceipt(d.parameterReceipt(p))
 }
 
-func (d *declaration) parameterType(p parameter) string {
-	return canonicalType(p.typ, d.signature)
+func (d *declaration) clumpElement(p parameter) (string, bool) {
+	return canonicalType(p.typ, d.signature), true
 }
 func (e *clumpEvidence) parameterReceipt(receipt Source) {
 	e.finding.Receipts = append(e.finding.Receipts, receipt)
