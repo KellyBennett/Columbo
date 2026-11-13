@@ -256,6 +256,50 @@ func contains(have, want map[string]int) bool {
 	return true
 }
 
+// clumpElement mirrors Columbo's clumpKey: a member joins a clump by loose name and type, every interface type fills one "interface" slot, and context, unnamed, and blank members never join.
+func clumpElement(name string, t types.Type) (string, bool) {
+	typ := clumpCanonical(t)
+	if name == "" || name == "_" || typ == "context.Context" {
+		return "", false
+	}
+	if _, param := types.Unalias(t).(*types.TypeParam); !param && types.IsInterface(t) {
+		typ = "interface"
+	}
+	return looseName(name) + " " + typ, true
+}
+
+func looseName(name string) string {
+	return strings.ToLower(trimIDSuffix(name))
+}
+
+// trimIDSuffix mirrors Columbo: only a camel-case boundary marks an ID suffix, so "avoid", "uuid" and "UUID" keep theirs.
+func trimIDSuffix(name string) string {
+	stem, found := strings.CutSuffix(name, "ID")
+	if !found {
+		stem, found = strings.CutSuffix(name, "Id")
+	}
+	if !found || stem == "" {
+		return name
+	}
+	if last := rune(stem[len(stem)-1]); unicode.IsLower(last) || unicode.IsDigit(last) {
+		return stem
+	}
+	return name
+}
+
+func clumpElements(f fn) []string {
+	var out []string
+	for _, q := range params(f) {
+		if q.name == nil {
+			continue
+		}
+		if el, ok := clumpElement(q.name.Name, q.v.Type()); ok {
+			out = append(out, el)
+		}
+	}
+	return out
+}
+
 func paramTypes(f fn) []string {
 	var out []string
 	for _, p := range params(f) {

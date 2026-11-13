@@ -32,7 +32,7 @@ func (o inlineParameterObject) Sites(c *harness.Corpus) []harness.Site {
 		if len(o.doses(c, p, st)) == 0 {
 			continue
 		}
-		if o.target == "data-clump" && support(p, st.pkgPath(), st.fieldTypes(), nil).count >= int(threshold(c, "data-clump-occurrences", 3)) {
+		if o.target == "data-clump" && support(p, st, nil).count >= int(threshold(c, "data-clump-occurrences", 3)) {
 			continue
 		}
 		out = append(out, st.site())
@@ -108,16 +108,16 @@ func (o inlineParameterObject) Apply(c *harness.Corpus, site harness.Site, dose 
 		touched = append(touched, es[0].f.symbol)
 	default:
 		occ := int(threshold(c, "data-clump-occurrences", 3))
-		sup := support(p, st.pkgPath(), st.fieldTypes(), es)
+		sup := support(p, st, es)
 		kill = sup.count >= occ
-		reason = fmt.Sprintf("%d declarations carry {%s} after expanding %d (occurrences >= %d)", sup.count, strings.Join(st.fieldTypes(), ","), dose, occ)
+		reason = fmt.Sprintf("%d declarations carry {%s} after expanding %d (occurrences >= %d)", sup.count, strings.Join(st.elements(), ", "), dose, occ)
 		touched = append(touched, sup.symbols...)
 		size := int(threshold(c, "data-clump-size", 3))
 		if inc, ok := incidentalClump(p, st, es, size, occ); ok {
 			touched = append(touched, inc.symbols...)
 			if !kill {
 				kill = true
-				reason = fmt.Sprintf("expanded parameters newly share {%s} with %d declarations (size >= %d, occurrences >= %d)", strings.Join(inc.types, ","), len(inc.symbols), size, occ)
+				reason = fmt.Sprintf("expanded parameters newly share {%s} with %d declarations (size >= %d, occurrences >= %d)", strings.Join(inc.types, ", "), len(inc.symbols), size, occ)
 			}
 		}
 	}
@@ -142,6 +142,17 @@ func (s paramStruct) pkgPath() string { return s.pkg.PkgPath }
 
 func (s paramStruct) site() harness.Site {
 	return harness.Site{Package: s.pkgPath(), Symbol: s.symbol, Offset: s.offset(s.spec.Pos()), File: s.rel}
+}
+
+// elements is the clump an expansion plants when every new parameter takes its field's default name.
+func (s paramStruct) elements() []string {
+	var out []string
+	for _, f := range s.fields {
+		if el, ok := clumpElement(clumpLowerFirst(f.Name()), f.Type()); ok {
+			out = append(out, el)
+		}
+	}
+	return out
 }
 
 func (s paramStruct) fieldTypes() []string {
@@ -214,6 +225,29 @@ type expansion struct {
 	// whole: the body uses the struct as a value, so it is rebuilt locally from the new parameters.
 	whole bool
 	reads []*ast.SelectorExpr
+}
+
+// elements is what this expansion's new parameters contribute to a clump; unnamed parameters contribute nothing.
+func (e expansion) elements(st paramStruct) []string {
+	if params(e.f)[0].name == nil {
+		return nil
+	}
+	var out []string
+	for j, f := range st.fields {
+		if el, ok := clumpElement(e.names[j], f.Type()); ok {
+			out = append(out, el)
+		}
+	}
+	return out
+}
+
+// replaced is the clump element of the struct parameter the expansion removes, if it had one.
+func (e expansion) replaced() (string, bool) {
+	q := params(e.f)[e.index]
+	if q.name == nil {
+		return "", false
+	}
+	return clumpElement(q.name.Name, q.v.Type())
 }
 
 func (e expansion) paramCount() int { return len(params(e.f)) - 1 + len(e.names) }
@@ -493,41 +527,103 @@ type supportSet struct {
 	symbols []string
 }
 
-// support counts as Columbo's Data Clump support does.
-func support(p *program, pkgPath string, clump []string, es []expansion) supportSet {
-	want := multiset(clump)
-	expanded := map[string]expansion{}
-	for _, e := range es {
-		expanded[e.f.symbol] = e
-	}
+// support counts as Columbo's Data Clump support does: every function and package-level struct whose members include the planted clump.
+func support(p *program, st paramStruct, es []expansion) supportSet {
+	want := multiset(st.elements())
 	var s supportSet
-	for _, f := range p.funcs() {
-		if f.pkg.PkgPath != pkgPath {
-			continue
-		}
-		ts := paramTypes(f)
-		if e, ok := expanded[f.symbol]; ok {
-			ts = append(append(append([]string{}, ts[:e.index]...), ts[e.index+1:]...), clump...)
-		}
-		if contains(multiset(ts), want) {
+	for _, site := range clumpSites(p, st, es) {
+		if len(want) > 0 && contains(site.now, want) {
 			s.count++
-			s.symbols = append(s.symbols, f.symbol)
-		}
-	}
-	for _, st := range paramStructs(p, 0) {
-		if st.pkgPath() == pkgPath && contains(multiset(st.fieldTypes()), want) {
-			s.count++
-			s.symbols = append(s.symbols, st.symbol)
+			s.symbols = append(s.symbols, site.symbol)
 		}
 	}
 	sort.Strings(s.symbols)
 	return s
 }
 
+func (e expansion) after(before map[string]int, st paramStruct) map[string]int {
+	now := map[string]int{}
+	for el, n := range before {
+		now[el] = n
+	}
+	if el, ok := e.replaced(); ok {
+		if now[el]--; now[el] <= 0 {
+			delete(now, el)
+		}
+	}
+	for _, el := range e.elements(st) {
+		now[el]++
+	}
+	return now
+}
+
+// clumpDecl is one Columbo clump site, a parameter list or a struct field list, before and after the expansion.
 type clumpDecl struct {
 	symbol     string
 	now, was   map[string]int
 	isExpanded bool
+}
+
+func clumpSites(p *program, st paramStruct, es []expansion) []clumpDecl {
+	expanded := map[string]expansion{}
+	for _, e := range es {
+		expanded[e.f.symbol] = e
+	}
+	var out []clumpDecl
+	for _, f := range p.funcs() {
+		if f.pkg.PkgPath != st.pkgPath() {
+			continue
+		}
+		els := multiset(clumpElements(f))
+		d := clumpDecl{symbol: f.symbol, was: els, now: els}
+		if e, ok := expanded[f.symbol]; ok {
+			d.now = e.after(els, st)
+			d.isExpanded = true
+		}
+		out = append(out, d)
+	}
+	for _, sd := range structSites(p, st.pkgPath()) {
+		out = append(out, sd)
+	}
+	return out
+}
+
+// structSites lists package-level struct types as clump sites, with their named, non-embedded fields as members.
+func structSites(p *program, pkgPath string) []clumpDecl {
+	var out []clumpDecl
+	for _, u := range p.units {
+		if u.pkg.PkgPath != pkgPath || strings.HasSuffix(u.rel, "_test.go") || generated(u.file) {
+			continue
+		}
+		for _, d := range u.file.Decls {
+			g, ok := d.(*ast.GenDecl)
+			if !ok || g.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range g.Specs {
+				ts := spec.(*ast.TypeSpec)
+				if _, ok := ts.Type.(*ast.StructType); !ok || ts.Assign.IsValid() {
+					continue
+				}
+				tn, ok := u.pkg.TypesInfo.Defs[ts.Name].(*types.TypeName)
+				if !ok {
+					continue
+				}
+				s := tn.Type().Underlying().(*types.Struct)
+				var els []string
+				for i := range s.NumFields() {
+					if f := s.Field(i); !f.Embedded() {
+						if el, ok := clumpElement(f.Name(), f.Type()); ok {
+							els = append(els, el)
+						}
+					}
+				}
+				m := multiset(els)
+				out = append(out, clumpDecl{symbol: pkgPath + "." + ts.Name.Name, was: m, now: m})
+			}
+		}
+	}
+	return out
 }
 
 type incidental struct {
@@ -535,26 +631,10 @@ type incidental struct {
 	symbols []string
 }
 
-// Columbo reports every closed frequent multiset, so a wide struct can complete a clump of common types with unrelated declarations.
+// Columbo reports minimal frequent patterns, so a wide struct can complete a clump of common members with unrelated sites.
 func incidentalClump(p *program, st paramStruct, es []expansion, size, occ int) (incidental, bool) {
-	expanded := map[string]expansion{}
-	for _, e := range es {
-		expanded[e.f.symbol] = e
-	}
 	var decls []clumpDecl
-	for _, f := range p.funcs() {
-		if f.pkg.PkgPath != st.pkgPath() {
-			continue
-		}
-		ts := paramTypes(f)
-		d := clumpDecl{symbol: f.symbol, was: multiset(ts), now: multiset(ts)}
-		if e, ok := expanded[f.symbol]; ok {
-			d.now[ts[e.index]]--
-			for _, t := range st.fieldTypes() {
-				d.now[t]++
-			}
-			d.isExpanded = true
-		}
+	for _, d := range clumpSites(p, st, es) {
 		if total(d.now) >= size {
 			decls = append(decls, d)
 		}
