@@ -18,6 +18,10 @@ func register(op harness.Operator) {
 
 func init() {
 	register(noop{})
+	register(reorderDecls{})
+	register(moveDeclToFile{})
+	register(renameLocal{})
+	register(renameDecl{})
 	register(inlineFunction{id: "inline-function", target: "long-function"})
 	register(inlineFunction{id: "inline-function-complexity", target: "high-cognitive-complexity"})
 	register(extractFunction{id: "extract-function", target: "long-function"})

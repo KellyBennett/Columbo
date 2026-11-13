@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -166,3 +167,18 @@ func TestSplitIsCosmeticButBlockIsolationEvades(t *testing.T) {
 		t.Fatalf("injects=%d evades=%d", injects, evades)
 	}
 }
+func TestNeutralOperatorsKeepOrPredictEveryCaseID(t *testing.T) {
+	ops := []string{"reorder-decls", "move-decl-to-file", "rename-local", "rename-decl"}
+	rows := runFixture(t, "neutral", ops...)
+	ran, remapped := map[string]int{}, map[string]int{}
+		ran[r.Operator]++
+		if r.Status != "equivalent" {
+			t.Errorf("%s at %s: %s: %s", r.Operator, r.Symbol, r.Status, r.Reason)
+		if strings.Contains(r.Reason, "re-identified as SPEC identity predicts") {
+			remapped[r.Operator]++
+	for _, op := range ops {
+		if ran[op] == 0 {
+			t.Errorf("%s found no site in the fixture", op)
+	for _, op := range []string{"reorder-decls", "move-decl-to-file", "rename-decl"} {
+		if remapped[op] == 0 {
+			t.Errorf("%s never moved a case ID, so the fixture does not exercise its mapping", op)

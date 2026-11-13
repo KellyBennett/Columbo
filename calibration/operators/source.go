@@ -36,20 +36,26 @@ type fn struct {
 func units(c *harness.Corpus) []unit {
 	var out []unit
 	for _, p := range c.Packages {
-		for i, f := range p.Syntax {
-			path := p.CompiledGoFiles[i]
-			rel, err := filepath.Rel(c.Root, path)
-			if err != nil || strings.HasPrefix(rel, "..") {
-				continue
-			}
-			src, err := os.ReadFile(path)
-			if err != nil || generated(f) {
-				continue
-			}
-			out = append(out, unit{pkg: p, file: f, rel: filepath.ToSlash(rel), path: path, src: src})
-		}
+		out = append(out, packageUnits(c.Root, p)...)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].rel < out[j].rel })
+	return out
+}
+
+func packageUnits(root string, p *packages.Package) []unit {
+	var out []unit
+	for i, f := range p.Syntax {
+		path := p.CompiledGoFiles[i]
+		rel, err := filepath.Rel(root, path)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		src, err := os.ReadFile(path)
+		if err != nil || generated(f) {
+			continue
+		}
+		out = append(out, unit{pkg: p, file: f, rel: filepath.ToSlash(rel), path: path, src: src})
+	}
 	return out
 }
 
