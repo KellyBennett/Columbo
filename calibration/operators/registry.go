@@ -31,6 +31,11 @@ func init() {
 	register(hoistFields{id: "copy-fields-to-locals", follows: "move-method-to-function"})
 	register(hoistFields{id: "hide-behind-getters", follows: "move-method-to-function", getters: true})
 	register(moveFunction{})
+	register(splitForwarding{id: "split-forwarding-helpers", follows: "inline-function", target: "long-function", catches: []string{"long-function", "cosmetic-extraction"}})
+	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}})
+	register(repeatVariantDecision{})
+	register(decisionToMapLookup{})
+	register(replaceConditionalWithPolymorphism{})
 }
 
 func All() []harness.Operator {
