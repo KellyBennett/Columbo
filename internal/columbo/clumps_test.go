@@ -43,8 +43,28 @@ func Label(ctx context.Context, key, value string) {}
 func TestClumpIgnoresCommonSignatures(t *testing.T) {
 	h := &testHarness{T: t}
 	c := h.one(h.investigate(h.fixture(contextClumpSource), clumpConfig()), "data-clump")
-	require.Equal(t, []string{"orgID string", "sectionID string", "studentIDs []string"}, h.clueValue(c, "clump-parameters"))
+	require.Equal(t, []string{"org string", "section string", "studentids []string"}, h.clueValue(c, "clump-parameters"))
 	require.Equal(t, []string{"fixture.Drop", "fixture.Enroll", "fixture.Notify"}, supportSymbols(c))
+}
+
+func TestClumpMatchesLooselySpelledNames(t *testing.T) {
+	h := &testHarness{T: t}
+	source := `package fixture
+func Enroll(orgID, sectionID, termID string) {}
+func Drop(orgId, sectionId, termId string) {}
+func Notify(org, section, term string) {}
+func Audit(OrgID int, section, term string) {}
+`
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.Equal(t, []string{"org string", "section string", "term string"}, h.clueValue(c, "clump-parameters"))
+	require.Equal(t, []string{"fixture.Drop", "fixture.Enroll", "fixture.Notify"}, supportSymbols(c))
+}
+
+func TestClumpKeepsBareIDName(t *testing.T) {
+	h := &testHarness{T: t}
+	source := "package fixture\nfunc A(id, name, kind string){}\nfunc B(ID, name, kind string){}\nfunc C(Id, name, kind string){}\n"
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.Equal(t, []string{"id string", "kind string", "name string"}, h.clueValue(c, "clump-parameters"))
 }
 
 func TestClumpMatchesNameAndType(t *testing.T) {

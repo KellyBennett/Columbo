@@ -1,6 +1,9 @@
 package columbo
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 type clumpMember struct {
 	key     string
@@ -33,7 +36,14 @@ func clumpKey(name, canonical string) (string, bool) {
 	if name == "" || name == "_" || canonical == "context.Context" {
 		return "", false
 	}
-	return name + " " + canonical, true
+	return looseName(name) + " " + canonical, true
+}
+func looseName(name string) string {
+	lower := strings.ToLower(name)
+	if trimmed := strings.TrimSuffix(lower, "id"); trimmed != "" {
+		return trimmed
+	}
+	return lower
 }
 func (s clumpSite) ref() DeclarationRef { return *s.receipt.Declaration }
 func (s clumpSite) before(other clumpSite) bool {
