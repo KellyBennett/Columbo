@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -374,4 +375,33 @@ func (t *testHarness) TestFeatureEnvyIgnoresWhetherAReceiverExists() {
 }
 func TestFeatureEnvyIgnoresWhetherAReceiverExists(t *testing.T) {
 	(&testHarness{T: t}).TestFeatureEnvyIgnoresWhetherAReceiverExists()
+}
+
+const envyOwnershipSource = `package fixture
+
+import "net/url"
+
+type Data struct{ A, B, C, D, E int }
+
+func Local(d Data) int { return d.A + d.B + d.C + d.D + d.E }
+func Foreign(u *url.URL) string { return u.Scheme + u.Host + u.Path + u.RawQuery + u.Fragment }
+func Both(d Data, u url.URL) string {
+	return u.Scheme + u.Host + u.Path + u.RawQuery + u.Fragment + string(rune(d.A+d.B+d.C+d.D+d.E))
+}
+`
+
+func (t *testHarness) TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives() {
+	config := quiet()
+	config.Severity["feature-envy"] = "fail"
+	leads := map[string][]string{}
+	for _, c := range t.investigate(t.fixture(envyOwnershipSource), config).Cases {
+		leads[c.Symbol] = c.Leads
+	}
+	has := func(symbol, lead string) bool { return slices.Contains(leads[symbol], lead) }
+	t.require(has("fixture.Local", localOwnerLead) && !has("fixture.Local", foreignOwnerLead), leads)
+	t.require(has("fixture.Foreign", foreignOwnerLead) && !has("fixture.Foreign", localOwnerLead), leads)
+	t.require(has("fixture.Both", localOwnerLead) && has("fixture.Both", foreignOwnerLead), leads)
+}
+func TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives(t *testing.T) {
+	(&testHarness{T: t}).TestFeatureEnvyLeadFollowsWhereTheEnviedTypeLives()
 }

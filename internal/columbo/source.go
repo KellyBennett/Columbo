@@ -606,7 +606,10 @@ func (p parameter) receipt(f *file, signature *types.Signature) Source {
 }
 
 func privateType(obj *types.TypeName, packagePath string) bool {
-	return obj != nil && !obj.Exported() && obj.Pkg() != nil && obj.Pkg().Path() == packagePath
+	return obj != nil && !obj.Exported() && declaredIn(obj, packagePath)
+}
+func declaredIn(obj *types.TypeName, packagePath string) bool {
+	return obj.Pkg() != nil && obj.Pkg().Path() == packagePath
 }
 func (t lexToken) within(start, end token.Pos) bool { return t.pos > start && t.pos < end }
 func (t lexToken) countsAsCode() bool {
