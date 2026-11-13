@@ -1,7 +1,10 @@
 package columbo
 
 import (
+	"go/ast"
 	"go/types"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -28,17 +31,51 @@ func newClumpSite(receipt Source, members []clumpMember) clumpSite {
 func (d *declaration) clumpSite() clumpSite {
 	members := []clumpMember{}
 	for _, p := range d.params {
-		if key, ok := clumpKey(p.obj.Name(), canonicalType(p.typ, d.signature)); ok {
-			members = append(members, clumpMember{key: key, primitive: primitive(p.typ), receipt: d.parameterReceipt(p)})
+		if member, ok := newClumpMember(p, d.signature, d.parameterReceipt(p)); ok {
+			members = append(members, member)
 		}
 	}
 	return newClumpSite(d.declReceipt(), members)
 }
-func clumpKey(name, canonical string) (string, bool) {
+func (s structDeclaration) clumpSite() clumpSite {
+	members := []clumpMember{}
+	index := 0
+	for _, field := range s.body.Fields.List {
+		members = append(members, s.fieldMembers(field, index)...)
+		index += max(1, len(field.Names))
+	}
+	return newClumpSite(s.declReceipt(), members)
+}
+func (s structDeclaration) fieldMembers(field *ast.Field, first int) []clumpMember {
+	members := []clumpMember{}
+	for offset, name := range field.Names {
+		p := s.fieldParameter(field, name, first+offset)
+		if member, ok := newClumpMember(p, nil, s.fieldReceipt(p)); ok {
+			members = append(members, member)
+		}
+	}
+	return members
+}
+func newClumpMember(p parameter, signature *types.Signature, receipt Source) (clumpMember, bool) {
+	key, ok := clumpKey(p.obj.Name(), p.typ, signature)
+	return clumpMember{key: key, primitive: primitive(p.typ), receipt: receipt}, ok
+}
+func clumpKey(name string, t types.Type, signature *types.Signature) (string, bool) {
+	canonical := canonicalType(t, signature)
 	if name == "" || name == "_" || canonical == "context.Context" {
 		return "", false
 	}
+	if interfaceType(t) {
+		canonical = "interface"
+	}
 	return looseName(name) + " " + canonical, true
+}
+func interfaceType(t types.Type) bool {
+	t = types.Unalias(t)
+	if _, parameter := t.(*types.TypeParam); parameter {
+		return false
+	}
+	return types.IsInterface(t)
 }
 func looseName(name string) string {
 	lower := strings.ToLower(name)
@@ -47,20 +84,20 @@ func looseName(name string) string {
 	}
 	return lower
 }
+
+var primitiveContainers = map[reflect.Type]bool{
+	reflect.TypeOf((*types.Pointer)(nil)): true,
+	reflect.TypeOf((*types.Slice)(nil)):   true,
+	reflect.TypeOf((*types.Array)(nil)):   true,
+	reflect.TypeOf((*types.Map)(nil)):     true,
+}
+
 func primitive(t types.Type) bool {
-	switch t := types.Unalias(t).(type) {
-	case *types.Basic:
+	t = types.Unalias(t)
+	if _, basic := t.(*types.Basic); basic {
 		return true
-	case *types.Pointer:
-		return primitive(t.Elem())
-	case *types.Slice:
-		return primitive(t.Elem())
-	case *types.Array:
-		return primitive(t.Elem())
-	case *types.Map:
-		return primitive(t.Key()) && primitive(t.Elem())
 	}
-	return false
+	return primitiveContainers[reflect.TypeOf(t)] && !slices.ContainsFunc(typeComponents(t), func(c types.Type) bool { return !primitive(c) })
 }
 func (s clumpSite) matched(pattern parameterMultiset) []clumpMember {
 	need := pattern.copy()
@@ -73,7 +110,6 @@ func (s clumpSite) matched(pattern parameterMultiset) []clumpMember {
 	}
 	return out
 }
-func (s clumpSite) ref() DeclarationRef { return *s.receipt.Declaration }
 func (s clumpSite) before(other clumpSite) bool {
 	if s.receipt.File != other.receipt.File {
 		return s.receipt.File < other.receipt.File
@@ -81,11 +117,21 @@ func (s clumpSite) before(other clumpSite) bool {
 	return s.receipt.StartOffset < other.receipt.StartOffset
 }
 
-func (a *engine) packageClumpSites() map[string][]clumpSite {
-	out := map[string][]clumpSite{}
+type clumpSitesByPackage map[string][]clumpSite
+
+func (p clumpSitesByPackage) add(f *file, site clumpSite) {
+	if f.included {
+		p[f.packagePath()] = append(p[f.packagePath()], site)
+	}
+}
+func (a *engine) packageClumpSites() clumpSitesByPackage {
+	out := clumpSitesByPackage{}
 	for _, d := range a.declarations {
-		if d.file.included {
-			out[d.file.packagePath()] = append(out[d.file.packagePath()], d.clumpSite())
+		out.add(d.file, d.clumpSite())
+	}
+	for _, f := range a.files {
+		for _, s := range f.structDeclarations() {
+			out.add(f, s.clumpSite())
 		}
 	}
 	for _, sites := range out {

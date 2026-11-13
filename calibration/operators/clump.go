@@ -514,6 +514,12 @@ func support(p *program, pkgPath string, clump []string, es []expansion) support
 			s.symbols = append(s.symbols, f.symbol)
 		}
 	}
+	for _, st := range paramStructs(p, 0) {
+		if st.pkgPath() == pkgPath && contains(multiset(st.fieldTypes()), want) {
+			s.count++
+			s.symbols = append(s.symbols, st.symbol)
+		}
+	}
 	sort.Strings(s.symbols)
 	return s
 }

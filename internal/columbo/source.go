@@ -689,7 +689,7 @@ func (a *engine) collectDeclarationEvidence() {
 	}
 	selection.addRoles(a.report.Roles)
 	selection.addAdvisories(a.report)
-	a.report.Declarations = append(selection.declarations(a.declarations), selection.packageClauses(a.files)...)
+	a.report.Declarations = append(append(selection.declarations(a.declarations), selection.packageClauses(a.files)...), selection.structDeclarations(a.files)...)
 }
 func (selection evidenceSelection) addCase(c Case) {
 	for _, support := range c.SupportingDeclarations {
