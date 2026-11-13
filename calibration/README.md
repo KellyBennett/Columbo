@@ -55,6 +55,30 @@ drift).
 | neutral | | | `equivalent`: no change; `id-drift`: a case ID changed unexplained |
 | cure | target removed, nothing added | target remains | `conflict`: target removed, another smell added |
 
+## Chains
+
+A chain applies several operators in a row, rereading the code after each step, and checks
+one of two invariants against the unmutated code. A chain of neutral operators must not
+change any case ID beyond what the composed renames and moves predict. A chain containing an
+inject predicted to fire must still be noticed, by the same rule the pairwise scorers use.
+Cure operators are left out, since a cure is meant to clear a smell. Any other chain, such as
+evades with no inject predicted to fire, has no invariant and is skipped.
+
+`FuzzChains` in `operators/chains_test.go` picks a fixture with its first byte and up to four
+steps with the rest. A violation is shrunk one step at a time to a 1-minimal chain. A shrunk
+chain that matches a file in `chains/`, or a two-step plant-and-hide pair whose hide
+`triage.yaml` lists as a blind spot, is known and passes. Anything else fails with the JSON to
+save. Each input copies the module and runs Columbo, so expect about one input a second:
+
+```sh
+TMPDIR=$(cd $TMPDIR && pwd -P)/ go test -run '^$' -fuzz FuzzChains -fuzztime 10m ./operators/
+```
+
+Go saves a failing input under `operators/testdata/fuzz`, which `.gitignore` excludes because
+the repository's database-boundary check rejects new `testdata` directories. Save the printed
+chain under `chains/` instead. `TestSavedChainsStillViolate` replays every saved chain and fails once
+Columbo notices one, so a closed blind spot is retired on purpose.
+
 ## Decision trail
 
 `decisions.tsv` logs each decision with its evidence, one row per decision.
