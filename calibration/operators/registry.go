@@ -26,6 +26,11 @@ func init() {
 	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}, class: harness.Evade})
 	register(splitForwarding{id: "split-long-function", target: "cosmetic-extraction", catches: []string{"cosmetic-extraction"}, class: harness.Inject})
 	register(isolateHelperCalls{id: "isolate-helper-calls", follows: "split-long-function"})
+	register(moveMethod{id: "move-method-to-function"})
+	register(moveMethod{id: "move-method-to-collaborator", collaborator: true})
+	register(hoistFields{id: "copy-fields-to-locals", follows: "move-method-to-function"})
+	register(hoistFields{id: "hide-behind-getters", follows: "move-method-to-function", getters: true})
+	register(moveFunction{})
 }
 
 func All() []harness.Operator {
