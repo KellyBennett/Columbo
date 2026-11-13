@@ -100,7 +100,7 @@ Each of these survived every site it was tried on, and each is a shape the case'
 
 | Evade | Survived | Proposed detection |
 |---|---|---|
-| Bare `{ }` block around each helper call | 18 of 20 cosmetic splits | Treat a bare block statement as transparent when forming clusters. Implemented on `fix/cosmetic-bare-blocks`: 0 of 9 survive, no new cure conflicts, no new natural cases on Columbo or cobra |
+| Bare `{ }` block around each helper call | 18 of 20 cosmetic splits | Treat a bare block statement as transparent when forming clusters. Implemented in PR #61: 0 of 9 survive, no new cure conflicts, no new natural cases on Columbo or cobra |
 | One anonymous struct parameter instead of a clump | 29 data-clump, 31 long-parameter-list | Count an anonymous struct parameter's fields as parameters for both rules |
 | Private facade struct holding the collaborators | 125 of 125 | Score the dependencies of a same-package unexported type's fields when the function only reaches them through it |
 | Map from the variants instead of a second switch | 13 of 13 | Count a map literal keyed by a known variant set as a decision site |
