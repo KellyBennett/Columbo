@@ -54,7 +54,7 @@ func (o splitByCollaborators) Apply(c *harness.Corpus, site harness.Site, _ int)
 		return harness.Applied{}, err
 	}
 	qual := qualifier(f.unit)
-	name := freeName(f, lowerFirst(f.decl.Name.Name)+"Part")
+	name := collabFreeName(f, collabLowerFirst(f.decl.Name.Name)+"Part")
 	recv, call := "", name
 	if f.decl.Recv != nil && usesReceiver(f, s) {
 		recv = "(" + f.text(f.decl.Recv.List[0]) + ") "

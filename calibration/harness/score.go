@@ -98,14 +98,20 @@ func scoreInject(o *Outcome, exp Expectation, _, _ []Finding) {
 	o.Status, o.Reason = Survived, exp.Reason
 }
 
-// scoreEvade asks whether Columbo still reports a caught smell on a touched declaration
-// after the evade, whether that case is new or survived from the baseline.
+// scoreEvade asks whether Columbo still reports a caught smell on a touched declaration.
+// An evade of an injected smell looks only at what the mutant added, because baseline
+// cases can share a symbol (prose-comment anchors every file on one package clause). An
+// evade of a baseline case looks at everything reported after it.
 func scoreEvade(o *Outcome, exp Expectation, _, after []Finding) {
 	catches := exp.Catches
 	if len(catches) == 0 {
 		catches = []string{o.Target}
 	}
-	if h := hits(after, catches, exp.Touched); len(h) > 0 {
+	seen := o.Added
+	if exp.FromBaseline {
+		seen = after
+	}
+	if h := hits(seen, catches, exp.Touched); len(h) > 0 {
 		o.Status, o.Reason = Killed, "still reported as "+h[0].Smell+" "+h[0].CaseID
 		return
 	}

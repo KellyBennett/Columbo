@@ -112,7 +112,7 @@ func (o duplicateBlock) Apply(c *harness.Corpus, site harness.Site, _ int) (harn
 	if !ok {
 		return harness.Applied{}, errors.New("site vanished")
 	}
-	name := freeName(f, lowerFirst(f.decl.Name.Name)+"Dup")
+	name := collabFreeName(f, collabLowerFirst(f.decl.Name.Name)+"Dup")
 	start, end := f.offset(f.decl.Pos()), f.offset(f.decl.End())
 	nameAt := f.offset(f.decl.Name.Pos()) - start
 	text := string(f.src[start:end])
@@ -218,7 +218,7 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 		return true
 	})
 	renamed := map[types.Object]string{}
-	guards := typeSwitchSymbols(f)
+	guards := dupTypeSwitchSymbols(f)
 	var ss []splice
 	ast.Inspect(f.decl, func(n ast.Node) bool {
 		switch n := n.(type) {
@@ -237,7 +237,7 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 				return true
 			}
 			if _, ok := renamed[obj]; !ok {
-				renamed[obj] = freeName(f, obj.Name()+"Alt")
+				renamed[obj] = collabFreeName(f, obj.Name()+"Alt")
 			}
 			ss = append(ss, splice{f.offset(n.Pos()), f.offset(n.End()), renamed[obj]})
 		case *ast.BasicLit:
@@ -261,10 +261,10 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 	}, nil
 }
 
-// typeSwitchSymbols maps each `switch x := v.(type)` symbol, which has no object of its own,
+// dupTypeSwitchSymbols maps each `switch x := v.(type)` symbol, which has no object of its own,
 // to one of the per-clause objects it declares, and maps every per-clause object to that
 // same representative, so the symbol and its uses get one new name.
-func typeSwitchSymbols(f fn) map[*ast.Ident]types.Object {
+func dupTypeSwitchSymbols(f fn) map[*ast.Ident]types.Object {
 	out := map[*ast.Ident]types.Object{}
 	ast.Inspect(f.decl, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSwitchStmt)

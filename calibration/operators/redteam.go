@@ -92,10 +92,11 @@ func (o redTeam) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.App
 	return harness.Applied{
 		Edit: edit,
 		Expectation: harness.Expectation{
-			Touched:  append([]string{e.Symbol}, e.Touched...),
-			Catches:  []string{e.Smell, "cosmetic-extraction"},
-			AnyAdded: true,
-			Target:   e.Smell,
+			Touched:      append([]string{e.Symbol}, e.Touched...),
+			Catches:      []string{e.Smell, "cosmetic-extraction"},
+			AnyAdded:     true,
+			FromBaseline: true,
+			Target:       e.Smell,
 		},
 	}, nil
 }

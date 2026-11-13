@@ -242,8 +242,8 @@ func (o routeThroughFacade) Apply(c *harness.Corpus, site harness.Site, _ int) (
 	if len(added) == 0 {
 		return harness.Applied{}, errors.New("no added collaborators")
 	}
-	facade := freeName(f, lowerFirst(f.decl.Name.Name)+"Collaborators")
-	local := freeName(f, "calFacade")
+	facade := collabFreeName(f, collabLowerFirst(f.decl.Name.Name)+"Collaborators")
+	local := collabFreeName(f, "calFacade")
 	var fields, methods strings.Builder
 	var ss []splice
 	for i, a := range added {
@@ -268,15 +268,15 @@ func (o routeThroughFacade) Apply(c *harness.Corpus, site harness.Site, _ int) (
 	}, nil
 }
 
-func lowerFirst(s string) string {
+func collabLowerFirst(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToLower(r[0])
 	return string(r)
 }
 
-// freeName returns base, or base with the smallest numeric suffix, that no package-level
+// collabFreeName returns base, or base with the smallest numeric suffix, that no package-level
 // object and no identifier in the function's file already uses.
-func freeName(f fn, base string) string {
+func collabFreeName(f fn, base string) string {
 	used := map[string]bool{}
 	ast.Inspect(f.file, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {

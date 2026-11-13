@@ -211,7 +211,7 @@ func (o proseToStringConstant) Apply(c *harness.Corpus, site harness.Site, _ int
 	var ss []splice
 	taken := map[string]bool{}
 	for _, pd := range docs {
-		name := freeUnitName(u, lowerFirst(declName(pd.decl))+"Doc", taken)
+		name := freeUnitName(u, collabLowerFirst(declName(pd.decl))+"Doc", taken)
 		ss = append(ss,
 			splice{u.offset(pd.doc.Pos()), u.offset(pd.decl.Pos()), ""},
 			splice{u.offset(pd.decl.End()), u.offset(pd.decl.End()), fmt.Sprintf("\n\nconst %s = %s", name, strconv.Quote(strings.TrimSpace(pd.doc.Text())))})

@@ -51,6 +51,8 @@ type Expectation struct {
 	Renames map[string]string
 	// Moves maps an original declaration symbol to its new module-relative file (neutral only).
 	Moves map[string]string
+	// FromBaseline marks an evade of a case already in the baseline, such as a red-team replay.
+	FromBaseline bool
 	// AnyAdded makes any smell newly added on a touched symbol count as noticing an evade.
 	AnyAdded bool
 	// Target overrides the operator's target for one mutant, for operators that replay many smells.

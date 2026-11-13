@@ -205,7 +205,7 @@ func (s *variantSite) ifChain(first *ast.IfStmt) bool {
 		if s.fn.pkg.TypesInfo.Types[constant].Value == nil {
 			disc, constant = constant, disc
 		}
-		r, p, ok := valuePath(s.fn.pkg.TypesInfo, disc)
+		r, p, ok := variantValuePath(s.fn.pkg.TypesInfo, disc)
 		named := valueDomain(s.fn.pkg.TypesInfo.TypeOf(disc))
 		if !ok || named == nil {
 			return false
@@ -227,21 +227,21 @@ func (s *variantSite) ifChain(first *ast.IfStmt) bool {
 	return true
 }
 
-// valuePath resolves a variable optionally followed by field selections, which is the
+// variantValuePath resolves a variable optionally followed by field selections, which is the
 // discriminant shape Columbo accepts in an if-chain.
-func valuePath(info *types.Info, e ast.Expr) (types.Object, string, bool) {
+func variantValuePath(info *types.Info, e ast.Expr) (types.Object, string, bool) {
 	switch e := ast.Unparen(e).(type) {
 	case *ast.Ident:
 		v, ok := info.ObjectOf(e).(*types.Var)
 		return v, "", ok
 	case *ast.StarExpr:
-		return valuePath(info, e.X)
+		return variantValuePath(info, e.X)
 	case *ast.SelectorExpr:
 		sel := info.Selections[e]
 		if sel == nil || sel.Kind() != types.FieldVal {
 			return nil, "", false
 		}
-		r, p, ok := valuePath(info, e.X)
+		r, p, ok := variantValuePath(info, e.X)
 		return r, p + "." + e.Sel.Name, ok
 	}
 	return nil, "", false
