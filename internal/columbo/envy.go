@@ -76,7 +76,7 @@ type accessCollection struct {
 }
 
 func (a *engine) envy(d *declaration) error {
-	if !d.hasReceiver() || !d.hasBody() {
+	if !d.hasBody() {
 		return nil
 	}
 	c, err := d.accesses().caseFor(a)

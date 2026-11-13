@@ -350,3 +350,28 @@ func (t *testHarness) TestFeatureEnvyStableAccessPaths() {
 func TestFeatureEnvyStableAccessPaths(t *testing.T) {
 	(&testHarness{T: t}).TestFeatureEnvyStableAccessPaths()
 }
+
+const receiverlessEnvySource = `package fixture
+
+type Data struct{ A, B, C, D, E int }
+type Calculator struct{}
+
+func Free(d Data) int { return d.A + d.B + d.C + d.D + d.E }
+func (Calculator) Method(d Data) int { return d.A + d.B + d.C + d.D + d.E }
+`
+
+func (t *testHarness) TestFeatureEnvyIgnoresWhetherAReceiverExists() {
+	config := quiet()
+	config.Severity["feature-envy"] = "fail"
+	r := t.investigate(t.fixture(receiverlessEnvySource), config)
+	symbols := map[string]bool{}
+	for _, c := range r.Cases {
+		t.require(reflect.DeepEqual(t.foreignAccessCounts(c), []int{5}), c)
+		t.require(t.clueValue(c, "own-accesses") == 0, c)
+		symbols[c.Symbol] = true
+	}
+	t.require(len(r.Cases) == 2 && symbols["fixture.Free"] && symbols["fixture.(Calculator).Method"], r.Cases)
+}
+func TestFeatureEnvyIgnoresWhetherAReceiverExists(t *testing.T) {
+	(&testHarness{T: t}).TestFeatureEnvyIgnoresWhetherAReceiverExists()
+}
