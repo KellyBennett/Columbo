@@ -269,11 +269,11 @@ func clumpElement(name string, t types.Type) (string, bool) {
 }
 
 func looseName(name string) string {
-	return strings.ToLower(trimIDSuffix(name))
+	return strings.ToLower(trimCamelCaseIDSuffix(name))
 }
 
-// trimIDSuffix mirrors Columbo: only a camel-case boundary marks an ID suffix, so "avoid", "uuid" and "UUID" keep theirs.
-func trimIDSuffix(name string) string {
+// trimCamelCaseIDSuffix mirrors Columbo: only a camel-case boundary marks an ID suffix, so "avoid", "uuid" and "UUID" keep theirs.
+func trimCamelCaseIDSuffix(name string) string {
 	stem, found := strings.CutSuffix(name, "ID")
 	if !found {
 		stem, found = strings.CutSuffix(name, "Id")
