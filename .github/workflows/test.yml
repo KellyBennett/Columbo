@@ -1,6 +1,7 @@
 name: Test
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -121,6 +122,7 @@ jobs:
         working-directory: calibration
         run: go test ./...
       - name: Calibrate Columbo's own module
+        if: github.event_name == 'push'
         run: |
           go build -o "$RUNNER_TEMP/columbo" ./cmd/columbo
           (cd calibration && go build -o "$RUNNER_TEMP/calibrate" ./cmd/calibrate)
@@ -128,12 +130,13 @@ jobs:
             --columbo "$RUNNER_TEMP/columbo" --db "$RUNNER_TEMP/calibration.sqlite" --operators all \
             --validity build --max-sites 8 --workers 4
       - name: Report, warning on untriaged survivors
+        if: github.event_name == 'push'
         run: |
           "$RUNNER_TEMP/calibrate" report --db "$RUNNER_TEMP/calibration.sqlite" --triage calibration/triage.yaml > "$RUNNER_TEMP/calibration-report.md" 2> "$RUNNER_TEMP/calibration-warnings.txt"
           cat "$RUNNER_TEMP/calibration-report.md" >> "$GITHUB_STEP_SUMMARY"
           if [ -s "$RUNNER_TEMP/calibration-warnings.txt" ]; then echo "::warning::$(cat "$RUNNER_TEMP/calibration-warnings.txt")"; fi
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event_name == 'push'
         with:
           name: columbo-calibration
           path: |
