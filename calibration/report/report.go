@@ -184,7 +184,7 @@ WHERE status = 'id-drift' ORDER BY operator, site_symbol`,
 		title: "Triaged survivors",
 		query: `WITH ` + latestRuns + `
 SELECT m.operator, m.site_symbol, m.dose, t.status, t.reason FROM cur m
-JOIN temp.triage t ON t.operator = m.operator AND t.symbol = m.site_symbol AND t.dose = m.dose
+JOIN temp.triage t ON t.operator = m.operator AND (t.symbol = '*' OR t.symbol = m.site_symbol) AND (t.dose = 0 OR t.dose = m.dose)
 WHERE m.status = 'survived' ORDER BY t.status, m.operator`,
 	},
 	{
@@ -193,7 +193,7 @@ WHERE m.status = 'survived' ORDER BY t.status, m.operator`,
 		query: `WITH ` + latestRuns + `
 SELECT m.operator, m.site_symbol, m.dose, m.reason FROM cur m
 WHERE m.status = 'survived'
- AND NOT EXISTS (SELECT 1 FROM temp.triage t WHERE t.operator = m.operator AND t.symbol = m.site_symbol AND t.dose = m.dose)
+ AND NOT EXISTS (SELECT 1 FROM temp.triage t WHERE t.operator = m.operator AND (t.symbol = '*' OR t.symbol = m.site_symbol) AND (t.dose = 0 OR t.dose = m.dose))
 ORDER BY m.operator, m.site_symbol, m.dose`,
 	},
 }

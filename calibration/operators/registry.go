@@ -22,8 +22,10 @@ func init() {
 	register(inlineFunction{id: "inline-function-complexity", target: "high-cognitive-complexity"})
 	register(extractFunction{id: "extract-function", target: "long-function"})
 	register(extractFunction{id: "extract-function-complexity", target: "high-cognitive-complexity"})
-	register(splitForwarding{id: "split-forwarding-helpers", follows: "inline-function", target: "long-function", catches: []string{"long-function", "cosmetic-extraction"}})
-	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}})
+	register(splitForwarding{id: "split-forwarding-helpers", follows: "inline-function", target: "long-function", catches: []string{"long-function", "cosmetic-extraction"}, class: harness.Evade})
+	register(splitForwarding{id: "split-forwarding-helpers-complexity", follows: "inline-function-complexity", target: "high-cognitive-complexity", catches: []string{"high-cognitive-complexity", "cosmetic-extraction"}, class: harness.Evade})
+	register(splitForwarding{id: "split-long-function", target: "cosmetic-extraction", catches: []string{"cosmetic-extraction"}, class: harness.Inject})
+	register(isolateHelperCalls{id: "isolate-helper-calls", follows: "split-long-function"})
 }
 
 func All() []harness.Operator {

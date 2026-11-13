@@ -81,7 +81,7 @@ func (r *Runner) Run() error {
 	var jobs []job
 	evaders := map[string][]Operator{}
 	for _, op := range r.Ops {
-		if ev, ok := op.(Evader); ok {
+		if ev, ok := op.(Evader); ok && op.Class() == Evade {
 			evaders[ev.Follows()] = append(evaders[ev.Follows()], op)
 			continue
 		}

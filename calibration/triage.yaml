@@ -1,3 +1,12 @@
-# Survivors that the operator prediction cannot explain, triaged once.
-# status: equivalent (the mutant did not really add the smell) or blind-spot (Columbo missed a real smell).
-[]
+# Survivors the operator prediction cannot explain, triaged once.
+# Keyed by operator, site symbol, and dose. symbol "*" and dose 0 match every site or dose,
+# for a blind spot that is systemic rather than site-specific.
+# status: equivalent (the mutant did not really add the smell) or blind-spot (Columbo missed it).
+- operator: isolate-helper-calls
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Wrapping each helper call of a cosmetic parent in a bare block ends the cluster sequence,
+    because SPEC cluster formation treats an explicit nested block as a sequence break. The
+    design is unchanged and no rule reports it. Fixture: fixtures/cosmetic.

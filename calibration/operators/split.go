@@ -18,16 +18,20 @@ import (
 type splitForwarding struct {
 	id, follows, target string
 	catches             []string
+	class               harness.Class
 }
 
 func (o splitForwarding) ID() string           { return o.id }
-func (o splitForwarding) Class() harness.Class { return harness.Evade }
+func (o splitForwarding) Class() harness.Class { return o.class }
 func (o splitForwarding) Target() string       { return o.target }
 func (o splitForwarding) Follows() string      { return o.follows }
 
 func (o splitForwarding) Sites(c *harness.Corpus) []harness.Site {
 	var out []harness.Site
 	for _, f := range funcs(c) {
+		if o.class == harness.Inject && (!f.baselineHas(c, "long-function", f.symbol) || f.baselineHas(c, o.target, f.symbol)) {
+			continue
+		}
 		if len(o.Doses(c, f.site())) > 0 {
 			out = append(out, f.site())
 		}
