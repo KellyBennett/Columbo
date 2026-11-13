@@ -38,6 +38,19 @@ func Diff(before, after []Finding) (added, removed []Finding) {
 	return added, removed
 }
 
+// renamed carries findings on a renamed declaration over to its new symbol, so a smell
+// that moves with its declaration is neither an add nor a remove.
+func renamed(fs []Finding, renames map[string]string) []Finding {
+	out := make([]Finding, len(fs))
+	for i, f := range fs {
+		if to, ok := renames[f.Symbol]; ok {
+			f.Symbol = to
+		}
+		out[i] = f
+	}
+	return out
+}
+
 type scorer func(o *Outcome, exp Expectation, before, after []Finding)
 
 var scorers = map[Class]scorer{
@@ -48,7 +61,14 @@ var scorers = map[Class]scorer{
 }
 
 func Score(o *Outcome, exp Expectation, before, after []Finding) {
-	o.Added, o.Removed = Diff(before, after)
+	o.Added, o.Removed = Diff(renamed(before, exp.Renames), after)
+	symbols := map[string]string{}
+	for _, f := range before {
+		symbols[f.CaseID] = f.Symbol
+	}
+	for i := range o.Removed {
+		o.Removed[i].Symbol = symbols[o.Removed[i].CaseID]
+	}
 	o.Predict = exp.Prediction
 	if exp.Target != "" {
 		o.Target = exp.Target
