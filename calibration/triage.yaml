@@ -70,3 +70,30 @@
   dose: 0
   status: blind-spot
   reason: Same as pack-anonymous-struct, measured against long-parameter-list.
+- operator: split-long-function
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.
+- operator: split-forwarding-helpers
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.
+- operator: split-forwarding-helpers-complexity
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    Helpers that forward the parent's parameters unchanged but share fewer than 75% of their
+    dependencies fall under cosmetic-dependency-overlap (probe: cobra writePreamble, 2 of 3
+    shared, 0.67). At 0.5, splits of real long functions caught rise from 20 to 49 of 100 with
+    one new natural case; see docs/calibration-tuning-proposals.md proposal 4 and PR #60.
