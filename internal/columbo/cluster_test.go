@@ -20,6 +20,10 @@ var clusterBoundaryCases = []clusterBoundaryCase{
 	{"defer-boundary", "defer one(a,b);two(a,b)", false},
 	{"literal-cluster-exclusion", "_ = func(){one(a,b);two(a,b)}", false},
 	{"builtin-exception", "one(a,b);println(a);two(a,b)", true},
+	{"bare-blocks-transparent", "{one(a,b)};{two(a,b)}", true},
+	{"nested-bare-blocks", "{{one(a,b)}};two(a,b)", true},
+	{"control-inside-bare-block", "one(a,b);{if a>0 {}};two(a,b)", false},
+	{"single-helper-in-block-only", "{one(a,b)}", false},
 }
 
 func (t *testHarness) checkClusterBoundary(c clusterBoundaryCase) {
