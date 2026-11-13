@@ -25,7 +25,7 @@ func (o isolateHelperCalls) Doses(*harness.Corpus, harness.Site) []int { return 
 func (o isolateHelperCalls) Sites(c *harness.Corpus) []harness.Site {
 	var out []harness.Site
 	for _, f := range funcs(c) {
-		if f.decl.Body != nil && len(f.decl.Body.List) >= 2 {
+		if f.decl.Body != nil && helperCallStatements(c, f) >= 2 {
 			out = append(out, f.site())
 		}
 	}
@@ -106,4 +106,25 @@ func helperTouched(c *harness.Corpus, f fn) []string {
 		return true
 	})
 	return touched
+}
+
+// helperCallStatements counts top-level statements that call a same-package function, so the
+// evade targets the cosmetic parent and not the helpers it called.
+func helperCallStatements(c *harness.Corpus, f fn) int {
+	n := 0
+	for _, s := range f.decl.Body.List {
+		found := false
+		ast.Inspect(s, func(x ast.Node) bool {
+			if call, ok := x.(*ast.CallExpr); ok && !found {
+				if _, ok := resolveCallee(c, f, call); ok {
+					found = true
+				}
+			}
+			return !found
+		})
+		if found {
+			n++
+		}
+	}
+	return n
 }

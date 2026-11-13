@@ -49,7 +49,7 @@ without setting off another rule.
 | excessive-dependencies | 125 of 125 | Always: a private facade struct (125 of 125) | 17 of 18 | Noisy and trivially evaded |
 | data-clump | 29 of 29 | Always: one anonymous struct parameter (29 of 29) | 1 of 5 | Its own cure trips Feature Envy |
 | long-parameter-list | 31 of 31 | Always: anonymous struct (31 of 31) | none measured | Trivially evaded |
-| cosmetic-extraction | 20 of 109 splits | Always: a bare block per call (34 of 36) | n/a | Misses most mechanical splits |
+| cosmetic-extraction | 20 of 109 splits | Almost always: a bare block per call (18 of 20) | n/a | Misses most mechanical splits |
 | duplicate-code (WARN) | 49 of 49 | Never: renaming is still caught (48 of 48) | no mechanical cure | Good; unstable IDs under reordering |
 | prose-comment | 26 of 26 | Always: string constant, `//nolint:` prefix, generated header | 78 of 78 | Trivially evaded |
 | repeated-variant-decision | 11 of 11 | Always: a map lookup (13 of 13) | no mechanical cure | Trivially evaded |
@@ -100,7 +100,7 @@ Each of these survived every site it was tried on, and each is a shape the case'
 
 | Evade | Survived | Proposed detection |
 |---|---|---|
-| Bare `{ }` block around each helper call | 34 of 36 cosmetic splits | Treat an explicit block with no control flow as transparent when forming clusters (SPEC currently says it ends the sequence) |
+| Bare `{ }` block around each helper call | 18 of 20 cosmetic splits | Treat a bare block statement as transparent when forming clusters. Implemented on `fix/cosmetic-bare-blocks`: 0 of 9 survive, no new cure conflicts, no new natural cases on Columbo or cobra |
 | One anonymous struct parameter instead of a clump | 29 data-clump, 31 long-parameter-list | Count an anonymous struct parameter's fields as parameters for both rules |
 | Private facade struct holding the collaborators | 125 of 125 | Score the dependencies of a same-package unexported type's fields when the function only reaches them through it |
 | Map from the variants instead of a second switch | 13 of 13 | Count a map literal keyed by a known variant set as a decision site |
