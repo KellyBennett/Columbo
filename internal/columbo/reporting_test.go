@@ -48,6 +48,9 @@ func (t *testHarness) allSmellsReport() Report {
 	config := Defaults()
 	config.History = false
 	config.Staged = false
+	config.Counts["dependencies"] = 5
+	config.Counts["feature-envy-foreign-accesses"] = 5
+	config.Ratios["cosmetic-dependency-overlap"] = .75
 	return t.investigate(dir, config)
 }
 

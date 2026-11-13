@@ -35,14 +35,14 @@ func Complex(a, b bool) {
 		}
 	}
 }
-func Dependencies(b bytes.Buffer, r strings.Reader, t time.Time, u url.URL, d json.Decoder, re regexp.Regexp) {
+func Dependencies(b bytes.Buffer, r strings.Reader, t time.Time, u url.URL, d json.Decoder, re regexp.Regexp, sb strings.Builder, du time.Duration) {
 }
 
 type Own struct{ N int }
 type Foreign struct{ N int }
 
 func (o Own) Envy(f Foreign) int {
-	return f.N + f.N + f.N + f.N + f.N
+	return f.N + f.N + f.N + f.N + f.N + f.N
 }
 func ClumpA(a int, b string, c bool) {}
 func ClumpB(a int, b string, c bool) {}

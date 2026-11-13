@@ -31,7 +31,7 @@ func (c Config) clone() Config {
 }
 
 func Defaults() Config {
-	c := Config{map[string]string{}, map[string]int64{"function-lines": 10, "parameters": 4, "cognitive-complexity": 7, "dependencies": 5, "private-type-files": 3, "feature-envy-foreign-accesses": 5, "data-clump-size": 3, "data-clump-occurrences": 3, "cosmetic-min-helpers": 2, "duplicate-tokens": 50, "repeated-variant-sites": 2, "repeated-variant-variants": 2, "selection-use-implementations": 2}, map[string]float64{"feature-envy-ratio": 2, "cosmetic-dependency-overlap": .75, "cosmetic-parameter-overlap": .75}, true, true, 500, []string{"**/*_generated.go", "**/vendor/**"}}
+	c := Config{map[string]string{}, map[string]int64{"function-lines": 10, "parameters": 4, "cognitive-complexity": 7, "dependencies": 7, "private-type-files": 3, "feature-envy-foreign-accesses": 6, "data-clump-size": 3, "data-clump-occurrences": 3, "cosmetic-min-helpers": 2, "duplicate-tokens": 50, "repeated-variant-sites": 2, "repeated-variant-variants": 2, "selection-use-implementations": 2}, map[string]float64{"feature-envy-ratio": 2, "cosmetic-dependency-overlap": .5, "cosmetic-parameter-overlap": .75}, true, true, 500, []string{"**/*_generated.go", "**/vendor/**"}}
 	for _, s := range smells {
 		c.Severity[s] = "fail"
 	}
