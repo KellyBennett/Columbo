@@ -73,7 +73,7 @@ func (r *Runner) Prepare() error {
 	if err != nil {
 		return err
 	}
-	r.corpus = &Corpus{Root: base, Module: r.Info.Module, Packages: pkgs, Baseline: snap}
+	r.corpus = &Corpus{Root: base, Module: r.Info.Module, Version: r.Info.Version, Packages: pkgs, Baseline: snap}
 	r.Info.Columbo = snap.Version + "+sha256:" + fileHash(r.Env.Columbo)
 	r.Info.ConfigHash = configHash(base)
 	r.run, err = r.Store.BeginRun(r.Info, snap.Findings)
@@ -120,7 +120,7 @@ func (r *Runner) reload(res *result) (*Corpus, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Corpus{Root: res.dir, Module: r.corpus.Module, Packages: pkgs, Baseline: r.corpus.Baseline}, nil
+	return &Corpus{Root: res.dir, Module: r.corpus.Module, Version: r.corpus.Version, Packages: pkgs, Baseline: r.corpus.Baseline}, nil
 }
 
 func (r *Runner) plan(op Operator, c *Corpus, parent *result) []job {

@@ -51,6 +51,10 @@ type Expectation struct {
 	Renames map[string]string
 	// Moves maps an original declaration symbol to its new module-relative file (neutral only).
 	Moves map[string]string
+	// AnyAdded makes any smell newly added on a touched symbol count as noticing an evade.
+	AnyAdded bool
+	// Target overrides the operator's target for one mutant, for operators that replay many smells.
+	Target string
 	Prediction
 }
 
@@ -62,6 +66,7 @@ type Applied struct {
 type Corpus struct {
 	Root     string
 	Module   string
+	Version  string
 	Packages []*packages.Package
 	Baseline Snapshot
 }

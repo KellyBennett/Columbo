@@ -57,6 +57,7 @@ func runCmd(args []string) error {
 	validity := fs.String("validity", "test", "test or build")
 	workers := fs.Int("workers", 4, "parallel mutants")
 	maxSites := fs.Int("max-sites", 0, "deterministic per-operator site cap; 0 means all")
+	redteam := fs.String("redteam", "", "directory of frozen red-team evasions to replay as redteam-replay")
 	config := fs.String("config", "", "columbo configuration written into every copy as .columbo.yml")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -72,6 +73,13 @@ func runCmd(args []string) error {
 	selected, err := selectOperators(*ops)
 	if err != nil {
 		return err
+	}
+	if *redteam != "" {
+		rt, err := operators.RedTeam(*redteam)
+		if err != nil {
+			return err
+		}
+		selected = append(selected, rt)
 	}
 	var configBytes []byte
 	if *config != "" {

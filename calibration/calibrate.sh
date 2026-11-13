@@ -16,13 +16,13 @@ trap 'rm -rf "$bin"' EXIT
 (cd "$here" && go build -o "$bin/calibrate" ./cmd/calibrate)
 version="$(git -C "$root" rev-parse --short HEAD)"
 "$bin/calibrate" run --corpus "$root" --module github.com/KellyBennett/Columbo --version "$version" \
-  --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}" ${config[@]+"${config[@]}"}
+  --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}" ${config[@]+"${config[@]}"} ${REDTEAM:+--redteam "$here/redteam"}
 probe="$(mktemp -d)"
 (cd "$probe" && go mod init calibration.probe >/dev/null 2>&1)
 grep -v '^#' "$here/corpus.txt" | while read -r module modversion _license; do
   [ -n "$module" ] || continue
   dir="$(cd "$probe" && go mod download -json "$module@$modversion" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Dir"])')"
   "$bin/calibrate" run --corpus "$dir" --module "$module" --version "$modversion" \
-    --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}" ${config[@]+"${config[@]}"}
+    --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}" ${config[@]+"${config[@]}"} ${REDTEAM:+--redteam "$here/redteam"}
 done
 rm -rf "$probe"

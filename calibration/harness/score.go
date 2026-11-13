@@ -50,6 +50,9 @@ var scorers = map[Class]scorer{
 func Score(o *Outcome, exp Expectation, before, after []Finding) {
 	o.Added, o.Removed = Diff(before, after)
 	o.Predict = exp.Prediction
+	if exp.Target != "" {
+		o.Target = exp.Target
+	}
 	scorers[o.Class](o, exp, before, after)
 }
 
@@ -75,13 +78,19 @@ func scoreInject(o *Outcome, exp Expectation, _, _ []Finding) {
 	o.Status, o.Reason = Survived, exp.Reason
 }
 
-func scoreEvade(o *Outcome, exp Expectation, _, _ []Finding) {
+// scoreEvade asks whether Columbo still reports a caught smell on a touched declaration
+// after the evade, whether that case is new or survived from the baseline.
+func scoreEvade(o *Outcome, exp Expectation, _, after []Finding) {
 	catches := exp.Catches
 	if len(catches) == 0 {
 		catches = []string{o.Target}
 	}
-	if h := hits(o.Added, catches, exp.Touched); len(h) > 0 {
+	if h := hits(after, catches, exp.Touched); len(h) > 0 {
 		o.Status, o.Reason = Killed, "still reported as "+h[0].Smell+" "+h[0].CaseID
+		return
+	}
+	if h := hits(o.Added, nil, exp.Touched); exp.AnyAdded && len(h) > 0 {
+		o.Status, o.Reason = Killed, "evade set off "+h[0].Smell+" "+h[0].CaseID
 		return
 	}
 	o.Status, o.Reason = Survived, "evade silenced "+o.Target
