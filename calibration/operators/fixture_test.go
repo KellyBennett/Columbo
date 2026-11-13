@@ -144,8 +144,7 @@ func TestExtractFunctionCuresLongFunction(t *testing.T) {
 	}
 }
 
-// The block-isolation survivor is a known blind spot (triage.yaml); when this fails, remove the triage entry.
-func TestSplitIsCosmeticButBlockIsolationEvades(t *testing.T) {
+func TestSplitIsCosmeticAndBlockIsolationIsCaught(t *testing.T) {
 	rows := runFixture(t, "cosmetic", "split-long-function", "isolate-helper-calls")
 	var injects, evades int
 	for _, r := range rows {
@@ -157,8 +156,8 @@ func TestSplitIsCosmeticButBlockIsolationEvades(t *testing.T) {
 			}
 		case "evade":
 			evades++
-			if r.Status != "survived" {
-				t.Errorf("block isolation is now %s; remove the blind-spot triage entry", r.Status)
+			if r.Status != "killed" {
+				t.Errorf("block isolation %s: wrapping helper calls in bare blocks hides the split again (%s)", r.Status, r.Reason)
 			}
 		}
 	}
