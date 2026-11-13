@@ -55,7 +55,7 @@ func (o clumpEvade) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.
 	if !ok {
 		return harness.Applied{}, errors.New("site vanished")
 	}
-	touched := append([]string{st.symbol}, support(p, st.pkgPath(), st.fieldTypes(), nil).symbols...)
+	touched := append([]string{st.symbol}, support(p, st, nil).symbols...)
 	r := newRewrite()
 	changed := 0
 	var calls []clumpCallSite
