@@ -106,6 +106,14 @@ type Finding struct {
 	File    string
 	CaseID  string
 	Verdict string
+	Support []Decl
+}
+
+// Decl is one declaration a case names in case_declarations, primary or evidence.
+type Decl struct {
+	File   string
+	Symbol string
+	Offset int
 }
 
 type Outcome struct {

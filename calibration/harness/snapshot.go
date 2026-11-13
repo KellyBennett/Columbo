@@ -45,6 +45,9 @@ func ReadSnapshot(path string) (Snapshot, error) {
 	if err := rows.Err(); err != nil {
 		return Snapshot{}, err
 	}
+	if err := readSupport(db, s.Findings); err != nil {
+		return Snapshot{}, err
+	}
 	for _, table := range []string{"source_config_counts", "source_config_ratios"} {
 		if err := readThresholds(db, table, s.Thresholds); err != nil {
 			return Snapshot{}, err
@@ -74,6 +77,31 @@ func readDependencies(db *sql.DB, into map[string][]string) error {
 			return err
 		}
 		into[symbol] = append(into[symbol], identity)
+	}
+	return rows.Err()
+}
+
+func readSupport(db *sql.DB, fs []Finding) error {
+	byID := map[string]*Finding{}
+	for i := range fs {
+		byID[fs[i].CaseID] = &fs[i]
+	}
+	rows, err := db.Query(`SELECT DISTINCT cd.case_id, f.path, d.symbol, d.start_offset
+		FROM case_declarations cd JOIN declarations d ON d.id = cd.declaration_id JOIN files f ON f.id = d.file_id
+		ORDER BY cd.case_id, f.path, d.start_offset, d.symbol`)
+	if err != nil {
+		return fmt.Errorf("read case_declarations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var d Decl
+		if err := rows.Scan(&id, &d.File, &d.Symbol, &d.Offset); err != nil {
+			return err
+		}
+		if f := byID[id]; f != nil {
+			f.Support = append(f.Support, d)
+		}
 	}
 	return rows.Err()
 }

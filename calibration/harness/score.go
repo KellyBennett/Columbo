@@ -1,6 +1,8 @@
 package harness
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strings"
@@ -161,42 +163,180 @@ func scoreCure(o *Outcome, exp Expectation, _, _ []Finding) {
 
 func containsSymbol(touched []string, s string) bool { return slices.Contains(touched, s) }
 
-// scoreNeutral compares case IDs. A case whose primary declaration was renamed or moved
-// must reappear under its new symbol; every other case must keep its exact ID.
-func scoreNeutral(o *Outcome, exp Expectation, before, after []Finding) {
-	ids := map[string]bool{}
-	bySymbol := map[findingKey]int{}
-	for _, f := range after {
-		ids[f.CaseID] = true
-		bySymbol[findingKey{f.Smell, f.Symbol}]++
+// idShape says which canonical identity fields (SPEC "Case identity and ordering") a smell
+// fills from its primary declaration. Keyed smells add a secondary key the snapshot does not
+// store; anchored smells take their primary from the earliest supporting declaration.
+type idShape struct{ file, symbol, keyed, anchored bool }
+
+var declaredShape = idShape{file: true, symbol: true}
+
+var idShapes = map[string]idShape{
+	"data-clump":                {file: true, symbol: true, keyed: true, anchored: true},
+	"duplicate-code":            {file: true, symbol: true, keyed: true, anchored: true},
+	"selection-use-coupling":    {symbol: true, keyed: true},
+	"repeated-variant-decision": {keyed: true},
+}
+
+func shapeOf(smell string) idShape {
+	if s, ok := idShapes[smell]; ok {
+		return s
 	}
-	var drift []string
-	for _, f := range before {
-		renamed, isRenamed := exp.Renames[f.Symbol]
-		_, isMoved := exp.Moves[f.Symbol]
-		switch {
-		case ids[f.CaseID]:
-		case isRenamed || isMoved:
-			target := f.Symbol
-			if isRenamed {
-				target = renamed
-			}
-			k := findingKey{f.Smell, target}
-			if bySymbol[k] == 0 {
-				drift = append(drift, fmt.Sprintf("%s %s did not reappear as %s", f.Smell, f.CaseID, shortSymbol(target)))
-			}
-		default:
-			drift = append(drift, fmt.Sprintf("%s %s on %s changed ID", f.Smell, f.CaseID, shortSymbol(f.Symbol)))
+	return declaredShape
+}
+
+// relocate maps an original declaration to where the mutant declares it.
+func (exp Expectation) relocate(d Decl) Decl {
+	if file, ok := exp.Moves[d.Symbol]; ok {
+		d.File = file
+	}
+	if symbol, ok := exp.Renames[d.Symbol]; ok {
+		d.Symbol = symbol
+	}
+	return d
+}
+
+// caseID mirrors Columbo's identity function: C- plus 10 hex of SHA-256 over the
+// percent-escaped, pipe-joined fields.
+func caseID(smell, file, symbol, key string) string {
+	esc := strings.NewReplacer("%", "%25", "|", "%7C", "\r", "%0D", "\n", "%0A")
+	h := sha256.Sum256([]byte(strings.Join([]string{esc.Replace(smell), esc.Replace(file), esc.Replace(symbol), esc.Replace(key)}, "|")))
+	return "C-" + hex.EncodeToString(h[:])[:10]
+}
+
+type neutralMatch struct {
+	exp     Expectation
+	after   []Finding
+	claimed []bool
+}
+
+func (m *neutralMatch) claim(pred func(Finding) bool) bool {
+	for i, a := range m.after {
+		if !m.claimed[i] && pred(a) {
+			m.claimed[i] = true
+			return true
 		}
 	}
-	if len(before) != len(after) {
-		drift = append(drift, fmt.Sprintf("case count %d -> %d", len(before), len(after)))
+	return false
+}
+
+// match claims the mutant case that b predictably became, or says why none qualifies.
+func (m *neutralMatch) match(b Finding) string {
+	shape := shapeOf(b.Smell)
+	if shape.anchored {
+		return m.matchAnchored(b)
+	}
+	moved := m.exp.relocate(Decl{File: b.File, Symbol: b.Symbol})
+	file, symbol, nextFile, nextSymbol := "", "", "", ""
+	if shape.file {
+		file, nextFile = b.File, moved.File
+	}
+	if shape.symbol {
+		symbol, nextSymbol = b.Symbol, moved.Symbol
+	}
+	switch {
+	case file == nextFile && symbol == nextSymbol:
+		if m.claim(func(a Finding) bool { return a.CaseID == b.CaseID }) {
+			return ""
+		}
+		return fmt.Sprintf("%s %s on %s changed ID", b.Smell, b.CaseID, shortSymbol(b.Symbol))
+	case !shape.keyed:
+		want := caseID(b.Smell, nextFile, nextSymbol, "")
+		if m.claim(func(a Finding) bool { return a.CaseID == want }) {
+			return ""
+		}
+		return fmt.Sprintf("%s %s did not reappear as %s on %s", b.Smell, b.CaseID, want, shortSymbol(nextSymbol))
+	default:
+		if m.claim(func(a Finding) bool { return a.Smell == b.Smell && a.Symbol == moved.Symbol && a.File == moved.File }) {
+			return ""
+		}
+		return fmt.Sprintf("%s %s did not reappear on %s", b.Smell, b.CaseID, shortSymbol(moved.Symbol))
+	}
+}
+
+// matchAnchored finds the case with the same supporting declarations after relocation. Its
+// anchor must be the earliest of them, and an unmoved anchor must keep the exact ID because
+// the secondary key is unchanged by a neutral edit.
+func (m *neutralMatch) matchAnchored(b Finding) string {
+	want := make([]Decl, len(b.Support))
+	for i, d := range b.Support {
+		want[i] = m.exp.relocate(d)
+	}
+	var why string
+	found := m.claim(func(a Finding) bool {
+		if a.Smell != b.Smell || !sameDecls(a.Support, want) {
+			return false
+		}
+		first := earliest(a.Support)
+		switch {
+		case a.File != first.File || a.Symbol != first.Symbol:
+			why = fmt.Sprintf("%s %s anchored at %s, not its earliest supporting declaration %s", a.Smell, a.CaseID, shortSymbol(a.Symbol), shortSymbol(first.Symbol))
+		case a.File == b.File && a.Symbol == b.Symbol && a.CaseID != b.CaseID:
+			why = fmt.Sprintf("%s %s kept anchor %s but became %s", b.Smell, b.CaseID, shortSymbol(b.Symbol), a.CaseID)
+		}
+		return true
+	})
+	if !found {
+		return fmt.Sprintf("%s %s on %s did not reappear with the same supporting declarations", b.Smell, b.CaseID, shortSymbol(b.Symbol))
+	}
+	return why
+}
+
+func sameDecls(got, want []Decl) bool {
+	key := func(ds []Decl) []string {
+		out := make([]string, len(ds))
+		for i, d := range ds {
+			out[i] = d.File + "|" + d.Symbol
+		}
+		slices.Sort(out)
+		return slices.Compact(out)
+	}
+	return slices.Equal(key(got), key(want))
+}
+
+func earliest(ds []Decl) Decl {
+	return slices.MinFunc(ds, func(x, y Decl) int {
+		if c := strings.Compare(x.File, y.File); c != 0 {
+			return c
+		}
+		return x.Offset - y.Offset
+	})
+}
+
+// scoreNeutral requires a one-to-one pairing of baseline and mutant cases in which every
+// changed case ID is explained by SPEC identity rules applied to the operator's renames and
+// moves. Anything else is id-drift.
+func scoreNeutral(o *Outcome, exp Expectation, before, after []Finding) {
+	m := &neutralMatch{exp: exp, after: after, claimed: make([]bool, len(after))}
+	var drift []string
+	for _, b := range before {
+		if why := m.match(b); why != "" {
+			drift = append(drift, why)
+		}
+	}
+	for i, a := range after {
+		if !m.claimed[i] {
+			drift = append(drift, fmt.Sprintf("unexplained %s %s on %s", a.Smell, a.CaseID, shortSymbol(a.Symbol)))
+		}
 	}
 	if len(drift) > 0 {
 		o.Status, o.Reason = IDDrift, strings.Join(drift, "; ")
 		return
 	}
-	o.Status, o.Reason = Equivalent, "no case added, removed, or re-identified"
+	kept := map[string]bool{}
+	for _, a := range after {
+		kept[a.CaseID] = true
+	}
+	remapped := 0
+	for _, b := range before {
+		if !kept[b.CaseID] {
+			remapped++
+		}
+	}
+	if remapped == 0 {
+		o.Status, o.Reason = Equivalent, "no case added, removed, or re-identified"
+		return
+	}
+	o.Status, o.Reason = Equivalent, fmt.Sprintf("%d case IDs re-identified as SPEC identity predicts", remapped)
 }
 
 func shortSymbol(s string) string {
