@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type clumpMember struct {
@@ -78,11 +79,22 @@ func interfaceType(t types.Type) bool {
 	return types.IsInterface(t)
 }
 func looseName(name string) string {
-	lower := strings.ToLower(name)
-	if trimmed := strings.TrimSuffix(lower, "id"); trimmed != "" {
-		return trimmed
+	return strings.ToLower(trimIDSuffix(name))
+}
+
+// Only a camel-case word boundary marks an ID suffix; "avoid", "uuid" and "UUID" keep theirs.
+func trimIDSuffix(name string) string {
+	stem, found := strings.CutSuffix(name, "ID")
+	if !found {
+		stem, found = strings.CutSuffix(name, "Id")
 	}
-	return lower
+	if !found || stem == "" {
+		return name
+	}
+	if last := stem[len(stem)-1]; unicode.IsLower(rune(last)) || unicode.IsDigit(rune(last)) {
+		return stem
+	}
+	return name
 }
 
 var primitiveContainers = map[reflect.Type]bool{

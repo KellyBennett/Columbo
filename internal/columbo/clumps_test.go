@@ -67,6 +67,13 @@ func TestClumpKeepsBareIDName(t *testing.T) {
 	require.Equal(t, []string{"id string", "kind string", "name string"}, h.clueValue(c, "clump-parameters"))
 }
 
+func TestClumpTrimsOnlyACamelCaseIDSuffix(t *testing.T) {
+	h := &testHarness{T: t}
+	source := "package fixture\nfunc A(avoid, valid, uuid, userUUID string){}\nfunc B(avoid, valid, uuid, userUUID string){}\nfunc C(avoid, valid, uuid, userUUID string){}\n"
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.Equal(t, []string{"avoid string", "useruuid string", "uuid string", "valid string"}, h.clueValue(c, "clump-parameters"))
+}
+
 func TestClumpMatchesNameAndType(t *testing.T) {
 	h := &testHarness{T: t}
 	source := "package fixture\nfunc A(a,b,c int){}\nfunc B(x,y,z int){}\nfunc C(p,q,r int){}\nfunc D(a,b,c string){}\nfunc E(a,b,c bool){}\n"
