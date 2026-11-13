@@ -191,9 +191,9 @@ func (cl *clumpPlan) nameFields() {
 			name = fmt.Sprintf("v%d", k)
 		}
 		if cl.exported {
-			name = upperFirst(name)
+			name = clumpUpperFirst(name)
 		}
-		cl.fields[k].name = fresh(name, used)
+		cl.fields[k].name = clumpFresh(name, used)
 	}
 }
 
@@ -210,7 +210,7 @@ func (cl *clumpPlan) realign() {
 			}
 			for j, q := range ps {
 				_, mapped := m.fieldOf[j]
-				if !mapped && q.named() && q.name.Name == want && canonical(q.v.Type()) == canonical(ps[idx].v.Type()) {
+				if !mapped && q.named() && q.name.Name == want && clumpCanonical(q.v.Type()) == clumpCanonical(ps[idx].v.Type()) {
 					delete(m.fieldOf, idx)
 					m.fieldOf[j] = k
 					break
@@ -228,11 +228,11 @@ func (cl *clumpPlan) realign() {
 func (cl *clumpPlan) nameStruct() {
 	var b strings.Builder
 	for _, f := range cl.fields {
-		b.WriteString(upperFirst(f.name))
+		b.WriteString(clumpUpperFirst(f.name))
 	}
 	base := b.String()
 	if !cl.exported {
-		base = lowerFirst(base)
+		base = clumpLowerFirst(base)
 	}
 	scope := cl.members[0].f.pkg.Types.Scope()
 	cl.name = base
@@ -242,11 +242,11 @@ func (cl *clumpPlan) nameStruct() {
 	for i := range cl.members {
 		used := usedNames(cl.members[i].f.decl)
 		used[cl.name] = true
-		pname := lowerFirst(cl.name)
+		pname := clumpLowerFirst(cl.name)
 		if pname == cl.name {
 			pname = "p"
 		}
-		cl.members[i].param = fresh(pname, used)
+		cl.members[i].param = clumpFresh(pname, used)
 	}
 }
 
@@ -264,7 +264,7 @@ func (cl clumpPlan) apply(p *program) (harness.Edit, error) {
 		at = anchor.offset(anchor.decl.Doc.Pos())
 	}
 	r.add(anchor.unit, at, at, decl.String())
-	var calls []callSite
+	var calls []clumpCallSite
 	byKey := map[string]clumpMember{}
 	for _, m := range cl.members {
 		f := m.f
@@ -315,7 +315,7 @@ func (cl clumpPlan) apply(p *program) (harness.Edit, error) {
 // callArgs packs the moved arguments into one keyed literal at the first moved position.
 // Keys follow argument order, so evaluation order is unchanged unless an unmoved argument
 // sits between moved ones, which then must be free of effects.
-func (cl clumpPlan) callArgs(r *rewrite, cs callSite, m clumpMember) ([]string, error) {
+func (cl clumpPlan) callArgs(r *rewrite, cs clumpCallSite, m clumpMember) ([]string, error) {
 	qual, ok := qualifierFor(cs.unit, m.f.pkg.PkgPath)
 	if !ok || (qual != "" && !cl.exported) {
 		return nil, errors.New("call site cannot name the parameter object")
@@ -349,7 +349,7 @@ func (cl clumpPlan) callArgs(r *rewrite, cs callSite, m clumpMember) ([]string, 
 
 // forwarded reports the enclosing member's own parameter object when a call inside that
 // member passes exactly its moved parameters, each into the same field.
-func (cl clumpPlan) forwarded(cs callSite, m clumpMember) (string, bool) {
+func (cl clumpPlan) forwarded(cs clumpCallSite, m clumpMember) (string, bool) {
 	for _, outer := range cl.members {
 		if outer.f.rel != cs.rel || cs.call.Pos() < outer.f.decl.Pos() || cs.call.End() > outer.f.decl.End() {
 			continue

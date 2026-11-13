@@ -57,3 +57,16 @@
     calibration/redteam/*/meta.yaml technique). Three techniques silence any rule: a hand-written
     "Code generated ... DO NOT EDIT." header hides a whole file; a function literal in a
     package-level var is never a finding subject; a //nolint: prefix turns prose into a directive.
+- operator: pack-anonymous-struct
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: >-
+    One anonymous struct parameter is one canonical type, so both data-clump and
+    long-parameter-list go quiet while every caller now spells the same struct type out.
+    Fixture: fixtures/clump.
+- operator: pack-anonymous-struct-lpl
+  symbol: "*"
+  dose: 0
+  status: blind-spot
+  reason: Same as pack-anonymous-struct, measured against long-parameter-list.

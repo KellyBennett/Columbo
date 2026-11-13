@@ -153,7 +153,7 @@ func (s paramStruct) site() harness.Site {
 func (s paramStruct) fieldTypes() []string {
 	out := make([]string, len(s.fields))
 	for i, f := range s.fields {
-		out[i] = canonical(f.Type())
+		out[i] = clumpCanonical(f.Type())
 	}
 	return out
 }
@@ -244,10 +244,10 @@ func plan(p *program, st paramStruct, f fn) (expansion, error) {
 		return expansion{}, err
 	}
 	e := expansion{f: f, index: -1}
-	want := canonical(st.tn.Type())
+	want := clumpCanonical(st.tn.Type())
 	sig := f.obj.Type().(*types.Signature)
 	for i, q := range params(f) {
-		t := canonical(q.v.Type())
+		t := clumpCanonical(q.v.Type())
 		if t != want && t != "*"+want {
 			continue
 		}
@@ -271,7 +271,7 @@ func plan(p *program, st paramStruct, f fn) (expansion, error) {
 		delete(used, q.name.Name)
 	}
 	for _, fld := range st.fields {
-		e.names = append(e.names, fresh(lowerFirst(fld.Name()), used))
+		e.names = append(e.names, clumpFresh(clumpLowerFirst(fld.Name()), used))
 	}
 	for _, cs := range p.calls[funcKey(f.obj)] {
 		if _, err := fieldArgs(cs, cs.call.Args[e.index], st, func(n ast.Node) string { return cs.text(n) }); err != nil {
@@ -373,7 +373,7 @@ func writeRoots(f fn) map[*ast.SelectorExpr]bool {
 
 // fieldArgs spells one argument per field for a struct argument: x.f for a side-effect-free
 // x, or the literal's own element for T{...} and &T{...}.
-func fieldArgs(cs callSite, arg ast.Expr, st paramStruct, text func(ast.Node) string) ([]string, error) {
+func fieldArgs(cs clumpCallSite, arg ast.Expr, st paramStruct, text func(ast.Node) string) ([]string, error) {
 	e := ast.Unparen(arg)
 	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
 		e = ast.Unparen(u.X)
@@ -397,7 +397,7 @@ func fieldArgs(cs callSite, arg ast.Expr, st paramStruct, text func(ast.Node) st
 	return out, nil
 }
 
-func literalFields(cs callSite, lit *ast.CompositeLit, st paramStruct, text func(ast.Node) string) ([]string, error) {
+func literalFields(cs clumpCallSite, lit *ast.CompositeLit, st paramStruct, text func(ast.Node) string) ([]string, error) {
 	out := make([]string, len(st.fields))
 	byName := map[string]int{}
 	for i, f := range st.fields {
@@ -428,7 +428,7 @@ func literalFields(cs callSite, lit *ast.CompositeLit, st paramStruct, text func
 
 func expand(p *program, st paramStruct, es []expansion) (harness.Edit, error) {
 	r := newRewrite()
-	var calls []callSite
+	var calls []clumpCallSite
 	byKey := map[string]expansion{}
 	for _, e := range es {
 		f := e.f

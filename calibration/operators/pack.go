@@ -20,7 +20,7 @@ type clumpEvade struct {
 }
 
 // argMap respells one call's argument texts for a rewritten signature.
-type argMap func(cs callSite, args []string) []string
+type argMap func(cs clumpCallSite, args []string) []string
 
 func packAnonymousStruct(id, follows, target string) clumpEvade {
 	return clumpEvade{id: id, follows: follows, target: target, catches: []string{"data-clump", "long-parameter-list"}, rewrite: packRun}
@@ -62,7 +62,7 @@ func (o clumpEvade) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.
 	touched := append([]string{st.symbol}, support(p, st.pkgPath(), st.fieldTypes(), nil).symbols...)
 	r := newRewrite()
 	changed := 0
-	var calls []callSite
+	var calls []clumpCallSite
 	maps := map[string]argMap{}
 	for _, run := range paramRuns(p, st) {
 		m, err := o.rewrite(r, p, run)
@@ -123,7 +123,7 @@ func paramRuns(p *program, st paramStruct) []paramRun {
 	return out
 }
 
-func (run paramRun) params() []param { return params(run.f)[run.start : run.start+run.n] }
+func (run paramRun) params() []clumpParam { return params(run.f)[run.start : run.start+run.n] }
 
 // packRun replaces the run with one anonymous struct parameter. Anonymous struct types
 // with unexported field names differ across packages, so every caller must share the
@@ -135,7 +135,7 @@ func packRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 			return nil, errors.New("caller outside the package")
 		}
 	}
-	name := fresh("p", usedNames(f.decl))
+	name := clumpFresh("p", usedNames(f.decl))
 	qp := run.params()
 	vars := map[*types.Var]string{}
 	anon := func(u unit) string {
@@ -168,7 +168,7 @@ func packRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 		}
 	}
 	replaceParams(r, f, list)
-	return func(cs callSite, args []string) []string {
+	return func(cs clumpCallSite, args []string) []string {
 		packed := anon(cs.unit) + "{" + strings.Join(args[run.start:run.start+run.n], ", ") + "}"
 		return append(append(append([]string{}, args[:run.start]...), packed), args[run.start+run.n:]...)
 	}, nil
@@ -194,7 +194,7 @@ func reverseRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 		list = append(list, paramText(f, q, false))
 	}
 	replaceParams(r, f, list)
-	return func(_ callSite, args []string) []string {
+	return func(_ clumpCallSite, args []string) []string {
 		out := append([]string{}, args...)
 		slices.Reverse(out[run.start : run.start+run.n])
 		return out

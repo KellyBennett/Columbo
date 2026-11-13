@@ -23,12 +23,12 @@ import (
 // by types.Func.FullName, which is stable across a package and its test variant.
 type program struct {
 	units      []unit
-	calls      map[string][]callSite
+	calls      map[string][]clumpCallSite
 	values     map[string]int
 	ifaceNames map[string]bool
 }
 
-type callSite struct {
+type clumpCallSite struct {
 	unit
 	call *ast.CallExpr
 }
@@ -66,7 +66,7 @@ func loadProgram(root string) (*program, error) {
 	// A test variant ("p [p.test]") type-checks the package's own files together with its
 	// internal tests, so prefer it over the plain package for files both contain.
 	sort.SliceStable(pkgs, func(i, j int) bool { return strings.Contains(pkgs[i].ID, " [") && !strings.Contains(pkgs[j].ID, " [") })
-	p := &program{calls: map[string][]callSite{}, values: map[string]int{}, ifaceNames: map[string]bool{}}
+	p := &program{calls: map[string][]clumpCallSite{}, values: map[string]int{}, ifaceNames: map[string]bool{}}
 	seen := map[string]bool{}
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 || strings.HasSuffix(pkg.ID, ".test") {
@@ -104,7 +104,7 @@ func (p *program) index(u unit) {
 			if obj, ok := u.pkg.TypesInfo.Uses[id].(*types.Func); ok {
 				called[id] = true
 				k := funcKey(obj)
-				p.calls[k] = append(p.calls[k], callSite{u, call})
+				p.calls[k] = append(p.calls[k], clumpCallSite{u, call})
 			}
 		}
 		return true
@@ -199,34 +199,34 @@ func (p *program) rewritable(f fn) error {
 
 // params expands a declaration's parameter list into one entry per declared name, as
 // Columbo's Parameters metric counts them; an unnamed field counts once.
-type param struct {
+type clumpParam struct {
 	field *ast.Field
 	name  *ast.Ident
 	v     *types.Var
 }
 
-func params(f fn) []param {
+func params(f fn) []clumpParam {
 	sig := f.obj.Type().(*types.Signature)
-	var out []param
+	var out []clumpParam
 	i := 0
 	for _, fld := range f.decl.Type.Params.List {
 		if len(fld.Names) == 0 {
-			out = append(out, param{field: fld, v: sig.Params().At(i)})
+			out = append(out, clumpParam{field: fld, v: sig.Params().At(i)})
 			i++
 			continue
 		}
 		for _, n := range fld.Names {
-			out = append(out, param{field: fld, name: n, v: sig.Params().At(i)})
+			out = append(out, clumpParam{field: fld, name: n, v: sig.Params().At(i)})
 			i++
 		}
 	}
 	return out
 }
 
-func (p param) named() bool { return p.name != nil && p.name.Name != "_" }
+func (p clumpParam) named() bool { return p.name != nil && p.name.Name != "_" }
 
 // paramText prints one parameter, keeping the declaration's own spelling of its type.
-func paramText(f fn, p param, unnamed bool) string {
+func paramText(f fn, p clumpParam, unnamed bool) string {
 	typ := f.text(p.field.Type)
 	if unnamed || p.name == nil {
 		return typ
@@ -236,9 +236,9 @@ func paramText(f fn, p param, unnamed bool) string {
 
 var byteRune = regexp.MustCompile(`\b(byte|rune)\b`)
 
-// canonical approximates Columbo's canonical type string closely enough to compare
+// clumpCanonical approximates Columbo's clumpCanonical type string closely enough to compare
 // parameter types within one package.
-func canonical(t types.Type) string {
+func clumpCanonical(t types.Type) string {
 	s := types.TypeString(types.Unalias(t), nil)
 	return byteRune.ReplaceAllStringFunc(s, func(m string) string {
 		if m == "byte" {
@@ -268,12 +268,12 @@ func contains(have, want map[string]int) bool {
 func paramTypes(f fn) []string {
 	var out []string
 	for _, p := range params(f) {
-		out = append(out, canonical(p.v.Type()))
+		out = append(out, clumpCanonical(p.v.Type()))
 	}
 	return out
 }
 
-// usedNames collects every identifier spelled inside a declaration, so a fresh name
+// usedNames collects every identifier spelled inside a declaration, so a clumpFresh name
 // cannot capture or shadow anything the declaration refers to.
 func usedNames(n ast.Node) map[string]bool {
 	used := map[string]bool{}
@@ -286,7 +286,7 @@ func usedNames(n ast.Node) map[string]bool {
 	return used
 }
 
-func fresh(base string, used map[string]bool) string {
+func clumpFresh(base string, used map[string]bool) string {
 	name := base
 	for n := 2; used[name] || token.IsKeyword(name) || types.Universe.Lookup(name) != nil; n++ {
 		name = fmt.Sprintf("%s%d", base, n)
@@ -295,13 +295,13 @@ func fresh(base string, used map[string]bool) string {
 	return name
 }
 
-func lowerFirst(s string) string {
+func clumpLowerFirst(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToLower(r[0])
 	return string(r)
 }
 
-func upperFirst(s string) string {
+func clumpUpperFirst(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToUpper(r[0])
 	return string(r)
@@ -380,11 +380,11 @@ func replaceParams(r *rewrite, f fn, list []string) {
 }
 
 // replaceArgs splices new argument texts for a call, rendering nested rewrites first.
-func replaceArgs(r *rewrite, cs callSite, args []string) {
+func replaceArgs(r *rewrite, cs clumpCallSite, args []string) {
 	r.add(cs.unit, cs.offset(cs.call.Lparen)+1, cs.offset(cs.call.Rparen), strings.Join(args, ", "))
 }
 
-func argTexts(r *rewrite, cs callSite) []string {
+func argTexts(r *rewrite, cs clumpCallSite) []string {
 	out := make([]string, len(cs.call.Args))
 	for i, a := range cs.call.Args {
 		out[i] = r.nodeText(cs.unit, a)
@@ -394,7 +394,7 @@ func argTexts(r *rewrite, cs callSite) []string {
 
 // sortCallsInnermostFirst orders call sites so a call nested in another's arguments is
 // rewritten first and its text travels inside the outer rewrite.
-func sortCallsInnermostFirst(cs []callSite) {
+func sortCallsInnermostFirst(cs []clumpCallSite) {
 	sort.SliceStable(cs, func(i, j int) bool {
 		return cs[i].call.End()-cs[i].call.Pos() < cs[j].call.End()-cs[j].call.Pos()
 	})

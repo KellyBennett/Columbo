@@ -59,6 +59,8 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if err := readDuplicateFragments(db, s.DuplicateFragments); err != nil {
+		return Snapshot{}, err
+	}
 	if s.Parameters, err = readParameterReceipts(db); err != nil {
 		return Snapshot{}, err
 	}
