@@ -76,7 +76,7 @@ func inspectionTypeKey(t types.Type) string {
 	return n.Origin().Obj().Pkg().Path() + "." + n.Origin().Obj().Name()
 }
 func (d *declaration) inspectionDeclaration() inspectionDeclaration {
-	out := inspectionDeclaration{inspectionSpan: d.file.inspectionSpan(d.fn), Symbol: d.symbol, Kind: "function", Calls: []inspectionCall{}}
+	out := inspectionDeclaration{inspectionSpan: d.file.inspectionSpan(d.syntax), Symbol: d.symbol, Kind: "function", Calls: []inspectionCall{}}
 	if d.hasReceiver() {
 		out.Kind = "method"
 		out.ReceiverKey = inspectionTypeKey(d.signature.Recv().Type())

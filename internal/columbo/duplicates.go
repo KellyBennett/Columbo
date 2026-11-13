@@ -86,7 +86,7 @@ func (index *duplicateIndex) source(fragment []*syntax.Node) (Source, bool) {
 
 func (index *duplicateIndex) owner(f *file, start, end int) *declaration {
 	for _, d := range index.engine.declarations {
-		if d.file == f && f.tf.Offset(d.fn.Pos()) < end && f.tf.Offset(d.fn.End()) > start {
+		if d.file == f && f.tf.Offset(d.syntax.Pos()) < end && f.tf.Offset(d.syntax.End()) > start {
 			return d
 		}
 	}

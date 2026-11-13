@@ -33,7 +33,7 @@ type overwriteScan struct {
 func (a *engine) overwriteAdvisories() []advisoryGroup {
 	groups := []advisoryGroup{}
 	for _, d := range a.declarations {
-		if !d.file.included || d.fn.Body == nil {
+		if !d.file.included || d.syntax.body == nil {
 			continue
 		}
 		scan := overwriteScan{owner: d, info: d.file.typeInfo(), labels: map[overwriteInput]string{}}
@@ -48,14 +48,14 @@ func (s *overwriteScan) prepare() bool {
 	if !s.supportedBody() || len(s.inputs) == 0 || len(s.inputs) > 2 || !s.stable() {
 		return false
 	}
-	for _, stmt := range s.owner.fn.Body.List {
+	for _, stmt := range s.owner.syntax.body.List {
 		s.collectCandidates(stmt)
 	}
 	return len(s.candidates) >= 2 && len(s.candidates) <= 32
 }
 func (s *overwriteScan) supportedBody() bool {
 	valid, count := true, 0
-	ast.Inspect(s.owner.fn.Body, func(n ast.Node) bool {
+	ast.Inspect(s.owner.syntax.body, func(n ast.Node) bool {
 		if _, ok := n.(ast.Stmt); ok {
 			count++
 		}
@@ -175,11 +175,11 @@ func (s *overwriteScan) local(obj types.Object) bool {
 	if _, ok := obj.(*types.Var); !ok {
 		return false
 	}
-	return obj.Pos() > s.owner.fn.Body.Pos() && obj.Pos() < s.owner.fn.Body.End()
+	return obj.Pos() > s.owner.syntax.body.Pos() && obj.Pos() < s.owner.syntax.body.End()
 }
 func (s *overwriteScan) stable() bool {
 	valid := true
-	ast.Inspect(s.owner.fn.Body, func(n ast.Node) bool {
+	ast.Inspect(s.owner.syntax.body, func(n ast.Node) bool {
 		if write, ok := n.(*ast.AssignStmt); ok {
 			valid = valid && s.safeAssignment(write)
 		}

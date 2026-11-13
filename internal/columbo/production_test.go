@@ -31,7 +31,7 @@ func TestTestInterfacesDoNotAffectHelperCandidates(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, a.declarations, 2)
 		for _, d := range a.declarations {
-			if d.fn.Name.Name == "work" {
+			if d.syntax.name.Name == "work" {
 				require.True(t, d.candidate)
 			}
 		}

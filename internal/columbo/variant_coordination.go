@@ -32,7 +32,7 @@ func (a *engine) variantCoordination(c *Case, domain string) {
 	for _, d := range a.declarations {
 		if d.file.included && d.hasBody() {
 			s := coordinationScan{owner: d, domain: domain, info: d.file.typeInfo()}
-			ast.Inspect(d.fn.Body, s.visit)
+			ast.Inspect(d.syntax.body, s.visit)
 			s.evidence(c)
 		}
 	}

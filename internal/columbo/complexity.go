@@ -287,9 +287,9 @@ func (d diagnostic) detail(kind string) Detail {
 	return Detail{Subject: kind, Value: d.Inc, Nesting: d.Nesting}
 }
 
-func scanComplexity(fn *ast.FuncDecl) *complexityVisitor {
-	v := &complexityVisitor{name: fn.Name, diagnosticsEnabled: true}
-	ast.Walk(v, fn)
+func scanComplexity(subject *subjectSyntax) *complexityVisitor {
+	v := &complexityVisitor{name: subject.name, diagnosticsEnabled: true}
+	subject.walk(v)
 	return v
 }
 

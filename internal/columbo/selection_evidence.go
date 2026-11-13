@@ -29,7 +29,7 @@ func selectionBoundary(d *declaration) bool {
 	if d.isRuntimeBoundary() {
 		return true
 	}
-	return hasSelectionBranch(d.fn.Body, token.GOTO)
+	return hasSelectionBranch(d.syntax.body, token.GOTO)
 }
 func (a *engine) selectionDeclaration(d *declaration) error {
 	scan := newSelectionScan(d, int(a.config.Counts["selection-use-implementations"]))
@@ -141,7 +141,7 @@ func (d *declaration) isRuntimeBoundary() bool {
 	}
 	return d.obj.Name() == "init" || d.obj.Name() == "main" && d.obj.Pkg().Name() == "main"
 }
-func (s *selectionScan) run() { s.block(s.owner.fn.Body.List, selectionEnv{}) }
+func (s *selectionScan) run() { s.block(s.owner.syntax.body.List, selectionEnv{}) }
 func (site *selectionSite) implementations() []string {
 	return (selectedValue{origins: site.origins}).implementations()
 }

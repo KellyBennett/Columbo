@@ -74,7 +74,7 @@ func guardedSubjectParameter(params *types.Tuple) bool {
 }
 func (helper *guardedHelper) collect() {
 	prefix := helper.target.helperPrefix()
-	for _, statement := range helper.target.fn.Body.List {
+	for _, statement := range helper.target.syntax.body.List {
 		if guard, ok := statement.(*ast.IfStmt); ok {
 			helper.collectGuard(guard)
 		}

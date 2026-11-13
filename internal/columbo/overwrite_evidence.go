@@ -26,7 +26,7 @@ func (s *overwriteScan) pair(first, last overwriteCandidate) []advisoryGroup {
 }
 func (s *overwriteScan) group(first, last overwriteCandidate, w *overwriteWitness) advisoryGroup {
 	subject := s.owner.symbol + ":" + first.target.Name()
-	key := fmt.Sprintf("%d:%d", first.write.Pos()-s.owner.fn.Pos(), last.write.Pos()-s.owner.fn.Pos())
+	key := fmt.Sprintf("%d:%d", first.write.Pos()-s.owner.syntax.Pos(), last.write.Pos()-s.owner.syntax.Pos())
 	id, _ := identity(overwriteKind, s.owner.file.rel, s.owner.symbol, key)
 	group := advisoryGroup{id: id, kind: overwriteKind, subject: subject, lead: overwriteLead, limits: overwriteLimits}
 	group.values = s.values(first, last, w)

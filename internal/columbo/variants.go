@@ -34,7 +34,7 @@ func (a *engine) repeatedVariants() error {
 }
 func (index *variantIndex) collect() {
 	for _, d := range index.engine.declarations {
-		if d.file.included && d.fn.Body != nil {
+		if d.file.included && d.syntax.body != nil {
 			collectVariantSites(d, index.domains)
 		}
 	}
@@ -74,7 +74,7 @@ type variantScanner struct {
 
 func collectVariantSites(d *declaration, domains map[string][]variantSite) {
 	scanner := variantScanner{owner: d, info: d.file.pkg.TypesInfo}
-	scanner.scan(d.fn.Body)
+	scanner.scan(d.syntax.body)
 	for _, site := range scanner.sites {
 		domains[site.domain] = append(domains[site.domain], site)
 	}

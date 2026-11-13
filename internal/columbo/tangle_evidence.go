@@ -67,7 +67,7 @@ type tangleCandidate struct {
 
 func (d *declaration) tangles() []TangleGroup {
 	scan := tangleScan{d, tangleFacts{d.file.typeInfo()}, map[string]*tangleCandidate{}}
-	ast.Inspect(d.fn.Body, scan.visit)
+	ast.Inspect(d.syntax.body, scan.visit)
 	return scan.finish()
 }
 func (s *tangleScan) visit(node ast.Node) bool {

@@ -36,13 +36,13 @@ func (a *engine) suppressions() error {
 }
 func (s *suppressionScanner) attachComments() {
 	for _, d := range s.engine.declarations {
-		if d.file.included && d.fn.Doc != nil {
+		if d.file.included && d.syntax.doc != nil {
 			s.attachDeclaration(d)
 		}
 	}
 }
 func (s *suppressionScanner) attachDeclaration(d *declaration) {
-	for _, c := range d.fn.Doc.List {
+	for _, c := range d.syntax.doc.List {
 		s.attached[c] = d
 	}
 }

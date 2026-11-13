@@ -18,7 +18,7 @@ func guardedHelperDeclarations(groups map[guardedUpdateKey][]advisorySite, helpe
 		for index := range sites {
 			owner := helpers[sites[index].symbol]
 			if owner != nil && sites[index].representation == "guarded-update" {
-				sites[index].receipts = append(sites[index].receipts, owner.nodeSource("guarded-helper-declaration", owner.fn, Detail{Subject: "sole pointer parameter maps to caller subject; one-hop evidence"}))
+				sites[index].receipts = append(sites[index].receipts, owner.nodeSource("guarded-helper-declaration", owner.syntax, Detail{Subject: "sole pointer parameter maps to caller subject; one-hop evidence"}))
 			}
 		}
 	}

@@ -11,7 +11,7 @@ func (p coordinationPair) excludesContinuation(key string) bool {
 	if !ok || left.Else != nil || len(left.Body.List) == 0 {
 		return false
 	}
-	body := p.scan.owner.fn.Body
+	body := p.scan.owner.syntax.body
 	variable := coordinationIsolatedSlot(body, p.scan.info, key)
 	if variable == nil {
 		return false

@@ -19,9 +19,9 @@ type choiceConstruction struct {
 
 func (d *declaration) choiceConstructions() []*choiceConstruction {
 	result := []*choiceConstruction{}
-	for n := 1; n < len(d.fn.Body.List); n++ {
+	for n := 1; n < len(d.syntax.body.List); n++ {
 		c := &choiceConstruction{owner: d, facts: choiceFacts{d.file.typeInfo()}}
-		if c.match(d.fn.Body.List[n-1], d.fn.Body.List[n]) {
+		if c.match(d.syntax.body.List[n-1], d.syntax.body.List[n]) {
 			result = append(result, c)
 		}
 	}

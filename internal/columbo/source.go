@@ -32,7 +32,7 @@ type file struct {
 	pkg       *packages.Package
 }
 type declaration struct {
-	fn                               *ast.FuncDecl
+	syntax                           *subjectSyntax
 	file                             *file
 	obj                              *types.Func
 	symbol                           string
@@ -283,7 +283,7 @@ func declarationName(name string, ordinals map[string]int) string {
 	return name + "#" + strconv.Itoa(ordinals[name])
 }
 func newDeclaration(f *file, fn *ast.FuncDecl, ordinals map[string]int) (*declaration, error) {
-	d := &declaration{fn: fn, file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
+	d := &declaration{syntax: funcSubject(fn), file: f, inputs: map[*types.Var]string{}, deps: map[string]bool{}}
 	if err := d.resolveSignature(); err != nil {
 		return nil, err
 	}
@@ -328,7 +328,7 @@ func (f *file) expressionSignature(expr ast.Expr) *types.Signature {
 	return signature
 }
 func (d *declaration) syntaxSignature() *types.Signature {
-	return d.file.expressionSignature(d.fn.Type)
+	return d.file.expressionSignature(d.syntax.typ)
 }
 func (d *declaration) resolveSignature() error {
 	d.obj = d.file.functionObject(d.functionName())
@@ -367,7 +367,7 @@ func receiverName(t types.Type) string {
 	}
 	return ""
 }
-func (d *declaration) parameterFields() []*ast.Field          { return d.fn.Type.Params.List }
+func (d *declaration) parameterFields() []*ast.Field          { return d.syntax.typ.Params.List }
 func (d *declaration) parameterVariable(index int) *types.Var { return d.signature.Params().At(index) }
 func (d *declaration) initializeInputs() {
 	for _, f := range d.parameterFields() {
@@ -454,7 +454,7 @@ func (f *file) variableIdentity(symbol string, v *types.Var) string {
 }
 func (f *file) line(pos token.Pos) int { return f.tf.PositionFor(pos, false).Line }
 func (d *declaration) declReceipt() Source {
-	return d.source("declaration", d.fn.Pos(), d.fn.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
+	return d.source("declaration", d.syntax.Pos(), d.syntax.End(), Detail{Subject: d.symbol, Value: nil, Nesting: nil})
 }
 func (a *engine) newCase(d *declaration, smell, key string) (*Case, error) {
 	if a.config.Severity[smell] == "off" {
@@ -568,10 +568,10 @@ func Analyze(dir string, patterns []string, c Config) (Report, error) {
 }
 
 func (d *declaration) bodyRange() (token.Pos, token.Pos) {
-	if d.fn.Body == nil {
+	if d.syntax.body == nil {
 		return 0, 0
 	}
-	return d.fn.Body.Lbrace, d.fn.Body.Rbrace
+	return d.syntax.body.Lbrace, d.syntax.body.Rbrace
 }
 func (f *file) tokenEnd(pos token.Pos) token.Pos {
 	for _, t := range f.tokens {
@@ -620,10 +620,10 @@ func (f *file) typeInfo() *types.Info     { return f.pkg.TypesInfo }
 func (f *file) packagePath() string       { return f.pkg.PkgPath }
 func (d *declaration) hasReceiver() bool  { return d.signature.Recv() != nil }
 func (d *declaration) methodName() string { return d.obj.Name() }
-func (d *declaration) hasBody() bool      { return d.fn.Body != nil }
+func (d *declaration) hasBody() bool      { return d.syntax.body != nil }
 func (d *declaration) inspectBody(visit func(ast.Node) bool) {
 	if d.hasBody() {
-		ast.Inspect(d.fn.Body, visit)
+		ast.Inspect(d.syntax.body, visit)
 	}
 }
 
@@ -639,8 +639,8 @@ func (d *declaration) matchesObject(obj *types.Func, pos token.Position) bool {
 	return d.obj != nil && d.obj.Name() == obj.Name() && d.file.path == pos.Filename && d.file.tf.Offset(d.obj.Pos()) == pos.Offset
 }
 
-func (d *declaration) bodyNode() ast.Node       { return d.fn.Body }
-func (d *declaration) functionName() *ast.Ident { return d.fn.Name }
+func (d *declaration) bodyNode() ast.Node       { return d.syntax.body }
+func (d *declaration) functionName() *ast.Ident { return d.syntax.name }
 func (d *declaration) callSite(call *ast.CallExpr) Site {
 	site := d.file.callSite(call)
 	ref := d.ref()

@@ -113,7 +113,7 @@ func (g *callGraph) classify() {
 	}
 }
 func (d *declaration) helperEligible(count int, firstClass bool) bool {
-	return d.file.included && d.fn.Body != nil && d.obj != nil && !d.obj.Exported() && d.fn.Name.Name != "_" && count == 1 && !firstClass
+	return d.file.included && d.syntax.body != nil && d.obj != nil && !d.obj.Exported() && d.syntax.name.Name != "_" && count == 1 && !firstClass
 }
 func (g *callGraph) interfaceMethod(d *declaration) bool {
 	if !d.hasReceiver() || g.unique[d] == nil {
