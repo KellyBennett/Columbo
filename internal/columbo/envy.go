@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"slices"
 	"sort"
 )
 
@@ -11,7 +12,13 @@ type accessGroup struct {
 	key      string
 	receipts []Source
 	first    int
+	local    bool
 }
+
+const (
+	localOwnerLead   = "Consider moving cohesive behavior toward the owner of that data."
+	foreignOwnerLead = "A qualifying value's type is declared in another package, so Go cannot take new methods on it. Consider a local type that wraps it and owns this behavior, or a value holding only the fields this code reads."
+)
 
 func stableValue(d *declaration, expr ast.Expr) (*types.Var, string, bool) {
 	path := resolveValuePath(d.file.typeInfo(), expr, valueBase)
@@ -65,6 +72,13 @@ func (v valueAccess) own() bool { return v.declaration.isOwnValue(v.root, v.key)
 func (v valueAccess) namedReceiver() bool {
 	return isNamedType(v.declaration.expressionType(v.selector.X))
 }
+func (v valueAccess) localType() bool {
+	named := stripPointer(v.declaration.expressionType(v.selector.X)).(*types.Named)
+	return declaredIn(named.Obj(), v.declaration.file.packagePath())
+}
+func (v valueAccess) newGroup(first int) *accessGroup {
+	return &accessGroup{key: v.key, first: first, local: v.localType()}
+}
 func (v valueAccess) receipt(kind string) Source {
 	return v.declaration.accessReceipt(kind, v.selector, v.key)
 }
@@ -96,6 +110,7 @@ func (c *accessCollection) caseFor(a *engine) (*Case, error) {
 		return report, err
 	}
 	c.evidence(report, qualifying, a.config)
+	report.Leads = append(report.Leads, ownershipLeads(qualifying)...)
 	return report, nil
 }
 func (c *accessCollection) evidence(report *Case, groups []*accessGroup, config Config) {
@@ -105,6 +120,18 @@ func (c *accessCollection) evidence(report *Case, groups []*accessGroup, config 
 	for _, group := range groups {
 		group.clues(report, c.own, config)
 	}
+}
+func ownershipLeads(groups []*accessGroup) []string {
+	local := slices.ContainsFunc(groups, func(g *accessGroup) bool { return g.local })
+	foreign := slices.ContainsFunc(groups, func(g *accessGroup) bool { return !g.local })
+	leads := []string{}
+	if local {
+		leads = append(leads, localOwnerLead)
+	}
+	if foreign {
+		leads = append(leads, foreignOwnerLead)
+	}
+	return leads
 }
 func (d *declaration) accesses() *accessCollection {
 	c := &accessCollection{declaration: d, own: []Source{}, groups: map[string]*accessGroup{}}
@@ -144,7 +171,7 @@ func (c *accessCollection) foreign(access valueAccess) {
 	receipt := access.receipt("foreign-access")
 	group := c.groups[access.key]
 	if group == nil {
-		group = &accessGroup{key: access.key, first: receipt.StartOffset}
+		group = access.newGroup(receipt.StartOffset)
 		c.groups[access.key] = group
 	}
 	group.receipts = append(group.receipts, receipt)
