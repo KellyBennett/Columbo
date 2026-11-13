@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Usage: calibrate.sh <db> <operators> [max-sites]
+# Measures Columbo's own module and every module in corpus.txt into one calibration.sqlite.
+# External corpora use build validity (go vet) so no downloaded code is executed.
+set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$here/.." && pwd)"
+db="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+ops="$2"
+max="${3:-40}"
+bin="$(mktemp -d)"
+trap 'rm -rf "$bin"' EXIT
+(cd "$root" && go build -o "$bin/columbo" ./cmd/columbo)
+(cd "$here" && go build -o "$bin/calibrate" ./cmd/calibrate)
+version="$(git -C "$root" rev-parse --short HEAD)"
+"$bin/calibrate" run --corpus "$root" --module github.com/KellyBennett/Columbo --version "$version" \
+  --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}"
+probe="$(mktemp -d)"
+(cd "$probe" && go mod init calibration.probe >/dev/null 2>&1)
+grep -v '^#' "$here/corpus.txt" | while read -r module modversion _license; do
+  [ -n "$module" ] || continue
+  dir="$(cd "$probe" && go mod download -json "$module@$modversion" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Dir"])')"
+  "$bin/calibrate" run --corpus "$dir" --module "$module" --version "$modversion" \
+    --columbo "$bin/columbo" --db "$db" --operators "$ops" --validity build --max-sites "$max" --workers "${WORKERS:-8}"
+done
+rm -rf "$probe"

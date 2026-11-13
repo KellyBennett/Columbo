@@ -1,0 +1,5 @@
+# Pinned external corpus: module, version, license. Columbo's own module is always measured too.
+github.com/spf13/cobra v1.9.1 Apache-2.0
+github.com/go-chi/chi/v5 v5.2.1 MIT
+github.com/BurntSushi/toml v1.5.0 MIT
+github.com/google/uuid v1.6.0 BSD-3-Clause
