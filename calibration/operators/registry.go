@@ -50,6 +50,11 @@ func init() {
 	register(duplicateBlock{})
 	register(renameAndRelabel{})
 	register(delegateDuplicate{})
+	register(inlineParameterObject{id: "inline-parameter-object", target: "data-clump"})
+	register(inlineParameterObject{id: "inline-parameter-object-lpl", target: "long-parameter-list"})
+	register(packAnonymousStruct("pack-anonymous-struct", "inline-parameter-object", "data-clump"))
+	register(packAnonymousStruct("pack-anonymous-struct-lpl", "inline-parameter-object-lpl", "long-parameter-list"))
+	register(reorderParams("reorder-params", "inline-parameter-object", "data-clump"))
 }
 
 func All() []harness.Operator {
