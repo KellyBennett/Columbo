@@ -36,6 +36,9 @@ func init() {
 	register(repeatVariantDecision{})
 	register(decisionToMapLookup{})
 	register(replaceConditionalWithPolymorphism{})
+	register(selectThenUse{})
+	register(launderSelection{})
+	register(extractFactory{})
 }
 
 func All() []harness.Operator {
