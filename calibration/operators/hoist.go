@@ -61,7 +61,9 @@ func (o hoistFields) Apply(c *harness.Corpus, site harness.Site, _ int) (harness
 		}
 		for _, use := range fld.uses {
 			ss = append(ss, splice{f.offset(use.Pos()), f.offset(use.End()), with})
-			replaced++
+			if !inFuncLit(use, h.parents) {
+				replaced++
+			}
 		}
 	}
 	ss = append(ss,
@@ -84,7 +86,7 @@ func (o hoistFields) Apply(c *harness.Corpus, site harness.Site, _ int) (harness
 			Catches: []string{envySmell},
 			Prediction: harness.Prediction{
 				Kill:   &caught,
-				Reason: fmt.Sprintf("%s keeps %d accesses after rewriting %d reads of %d fields (limit %d)", root, count, replaced, len(h.fields), l.foreign),
+				Reason: fmt.Sprintf("%s keeps %d counted accesses after rewriting %d counted reads of %d fields (limit %d)", root, count, replaced, len(h.fields), l.foreign),
 			},
 		},
 	}, nil
@@ -99,10 +101,11 @@ func (o hoistFields) plan(c *harness.Corpus, f fn) (hoistPlan, error) {
 }
 
 type hoistPlan struct {
-	f      fn
-	group  *accessGroup
-	own    int
-	fields []*hoistField
+	f       fn
+	group   *accessGroup
+	own     int
+	fields  []*hoistField
+	parents map[ast.Node]ast.Node
 }
 
 type hoistField struct {
@@ -135,11 +138,21 @@ func planHoist(c *harness.Corpus, f fn) (hoistPlan, error) {
 		if err != nil || len(fields) == 0 {
 			continue
 		}
-		h := hoistPlan{f: f, group: g, own: p.own, fields: fields}
+		h := hoistPlan{f: f, group: g, own: p.own, fields: fields, parents: parents}
 		h.name()
 		return h, nil
 	}
 	return hoistPlan{}, errors.New("no hoistable envied parameter")
+}
+
+// inFuncLit mirrors Columbo skipping nested function literals when it counts accesses.
+func inFuncLit(n ast.Node, parents map[ast.Node]ast.Node) bool {
+	for p := parents[n]; p != nil; p = parents[p] {
+		if _, ok := p.(*ast.FuncLit); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func isSigParam(sig *types.Signature, v *types.Var) bool {

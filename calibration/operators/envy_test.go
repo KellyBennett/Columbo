@@ -30,6 +30,9 @@ func TestMoveMethodInjectsEnvyAndEvadesAreMeasured(t *testing.T) {
 		"copy-fields-to-locals invoiceRemind": "killed",
 		"hide-behind-getters invoiceTotal":    "killed",
 		"hide-behind-getters invoiceRemind":   "killed",
+		"move-method-to-function Audit":       "killed",
+		"copy-fields-to-locals invoiceAudit":  "killed",
+		"hide-behind-getters invoiceAudit":    "killed",
 	}
 	for key, status := range want {
 		if got[key].Status != status {

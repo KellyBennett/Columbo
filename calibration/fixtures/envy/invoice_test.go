@@ -42,3 +42,12 @@ func TestRemind(t *testing.T) {
 		t.Errorf("Remind = %q", got)
 	}
 }
+
+func TestAudit(t *testing.T) {
+	inv := invoice()
+	var got []string
+	inv.Audit(func(s string) { got = append(got, s) })
+	if len(got) != 2 || got[0] != "EUR501072" || got[1] != "EUR2" {
+		t.Errorf("Audit logged %q", got)
+	}
+}

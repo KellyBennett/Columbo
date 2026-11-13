@@ -58,3 +58,11 @@ func shippingLabel(c Customer, copies int) string {
 func (inv *Invoice) Remind(c Customer) string {
 	return c.Name + ": " + inv.Currency + " " + strconv.Itoa(inv.Shipping) + "/" + strconv.Itoa(inv.TaxRate) + "/" + strconv.Itoa(inv.Discount) + " x" + strconv.Itoa(len(inv.Lines))
 }
+
+func (inv *Invoice) Audit(log func(string)) {
+	log(inv.Currency + strconv.Itoa(inv.Discount) + strconv.Itoa(inv.TaxRate) + strconv.Itoa(inv.Shipping) + strconv.Itoa(len(inv.Lines)))
+	again := func() {
+		log(inv.Currency + strconv.Itoa(len(inv.Lines)))
+	}
+	again()
+}
