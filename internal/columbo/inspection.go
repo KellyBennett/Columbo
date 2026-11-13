@@ -116,7 +116,7 @@ func (a *engine) inspectionFiles() ([]inspectionFile, error) {
 		if err != nil {
 			return err
 		}
-		if path != a.root && entry.IsDir() && strings.HasPrefix(entry.Name(), ".") {
+		if path != a.root && entry.IsDir() && prunedSourceDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
@@ -137,6 +137,10 @@ func (a *engine) inspectionFiles() ([]inspectionFile, error) {
 	})
 	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
 	return result, err
+}
+
+func prunedSourceDirectory(name string) bool {
+	return strings.HasPrefix(name, ".") || name == "node_modules"
 }
 
 func (a *engine) inspectionEntry(path string, selected map[string]*file) (inspectionFile, error) {

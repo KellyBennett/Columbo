@@ -26,16 +26,18 @@ func TestInspectionInventoryAcceptancePrecedesClassification(t *testing.T) {
 	assert.Equal(t, "generated.go", files[0].Path)
 }
 
-func TestInspectionInventoryPrunesDotFoldersAndRetainsNonSelectedBytes(t *testing.T) {
+func TestInspectionInventoryPrunesToolingFoldersAndRetainsNonSelectedBytes(t *testing.T) {
 	root := inspectionTestModule(t)
 	a, err := load(root, []string{"./..."}, Defaults())
 	require.NoError(t, err)
-	for _, name := range []string{".git", ".claude", "nested/.cache"} {
+	for _, name := range []string{".git", ".claude", "nested/.cache", "node_modules", "web/node_modules"} {
 		directory := filepath.Join(root, name)
 		require.NoError(t, os.MkdirAll(directory, 0700))
 		require.NoError(t, os.WriteFile(filepath.Join(directory, "notes.md"), []byte("ignored"), 0600))
 		require.NoError(t, os.Symlink("absent", filepath.Join(directory, "bad.go")))
 	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules", "@scope"), 0700))
+	require.NoError(t, os.Symlink(filepath.Join(root, "web"), filepath.Join(root, "node_modules", "@scope", "web")))
 	data := []byte("changed non-selected source")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "platform_windows.go"), data, 0600))
 	files, err := a.inspectionFiles()
