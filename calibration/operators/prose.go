@@ -37,14 +37,13 @@ func baselineProse(c *harness.Corpus, rel string) bool {
 	return false
 }
 
-// Keeping every //go: line is broader than Columbo's allowlist, so a cure leaves a case standing rather than delete machine input.
+// Directives are written //word with no space; prose is "// text". Treating every such
+// comment as machine input is broader than Columbo's allowlist, so a cure never deletes one.
 func machineInput(text string) bool {
-	for _, p := range []string{"//go:", "// +build", "//line ", "/*line ", "//export ", "//nolint", "//lint:ignore", "//lint:file-ignore", "//columbo:ignore"} {
-		if strings.HasPrefix(text, p) {
-			return true
-		}
+	if strings.HasPrefix(text, "/*line ") || strings.HasPrefix(text, "// +") {
+		return true
 	}
-	return false
+	return len(text) > 2 && strings.HasPrefix(text, "//") && text[2] != ' ' && text[2] != '\t'
 }
 
 func cgoPreamble(f *ast.File, g *ast.CommentGroup) bool {
