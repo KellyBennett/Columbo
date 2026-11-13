@@ -1,6 +1,11 @@
 package columbo
 
-import "sort"
+import (
+	"slices"
+	"sort"
+)
+
+const primitiveClumpLead = "Every member of this clump has a primitive type. Consider a distinct named type for each kind of value, such as one ID type per identifier; the type checker would then see the clump and reject values passed in each other's place."
 
 type parameterMultiset map[string]int
 
@@ -45,6 +50,7 @@ func (m parameterMultiset) copy() parameterMultiset {
 	}
 	return out
 }
+
 type clumpMiner struct {
 	engine   *engine
 	sites    []clumpSite
@@ -100,6 +106,7 @@ func (m *clumpMiner) support(s parameterMultiset) []clumpSite {
 	}
 	return out
 }
+
 type clumpPattern struct {
 	members parameterMultiset
 	support []clumpSite
@@ -146,6 +153,9 @@ func (m *clumpMiner) patternCase(pattern parameterMultiset, support []clumpSite)
 	}
 	evidence := c.clumpClues(parameters, len(support), m.engine.config)
 	evidence.include(support, pattern)
+	if allPrimitive(support[0].matched(pattern)) {
+		c.Leads = append(c.Leads, primitiveClumpLead)
+	}
 	return c, nil
 }
 
@@ -169,13 +179,12 @@ func (e *clumpEvidence) include(support []clumpSite, pattern parameterMultiset) 
 func (e *clumpEvidence) siteReceipts(site clumpSite, pattern parameterMultiset) {
 	e.finding.includeReceipt(site.receipt, "clump-support")
 	e.occurrences.add(site.receipt)
-	need := pattern.copy()
-	for _, member := range site.members {
-		if need[member.key] > 0 {
-			need[member.key]--
-			e.memberReceipt(member.receipt)
-		}
+	for _, member := range site.matched(pattern) {
+		e.memberReceipt(member.receipt)
 	}
+}
+func allPrimitive(members []clumpMember) bool {
+	return !slices.ContainsFunc(members, func(m clumpMember) bool { return !m.primitive })
 }
 func (e *clumpEvidence) memberReceipt(receipt Source) {
 	e.finding.Receipts = append(e.finding.Receipts, receipt)

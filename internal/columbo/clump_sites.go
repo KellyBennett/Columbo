@@ -1,13 +1,15 @@
 package columbo
 
 import (
+	"go/types"
 	"sort"
 	"strings"
 )
 
 type clumpMember struct {
-	key     string
-	receipt Source
+	key       string
+	primitive bool
+	receipt   Source
 }
 
 type clumpSite struct {
@@ -27,7 +29,7 @@ func (d *declaration) clumpSite() clumpSite {
 	members := []clumpMember{}
 	for _, p := range d.params {
 		if key, ok := clumpKey(p.obj.Name(), canonicalType(p.typ, d.signature)); ok {
-			members = append(members, clumpMember{key: key, receipt: d.parameterReceipt(p)})
+			members = append(members, clumpMember{key: key, primitive: primitive(p.typ), receipt: d.parameterReceipt(p)})
 		}
 	}
 	return newClumpSite(d.declReceipt(), members)
@@ -44,6 +46,32 @@ func looseName(name string) string {
 		return trimmed
 	}
 	return lower
+}
+func primitive(t types.Type) bool {
+	switch t := types.Unalias(t).(type) {
+	case *types.Basic:
+		return true
+	case *types.Pointer:
+		return primitive(t.Elem())
+	case *types.Slice:
+		return primitive(t.Elem())
+	case *types.Array:
+		return primitive(t.Elem())
+	case *types.Map:
+		return primitive(t.Key()) && primitive(t.Elem())
+	}
+	return false
+}
+func (s clumpSite) matched(pattern parameterMultiset) []clumpMember {
+	need := pattern.copy()
+	out := []clumpMember{}
+	for _, member := range s.members {
+		if need[member.key] > 0 {
+			need[member.key]--
+			out = append(out, member)
+		}
+	}
+	return out
 }
 func (s clumpSite) ref() DeclarationRef { return *s.receipt.Declaration }
 func (s clumpSite) before(other clumpSite) bool {

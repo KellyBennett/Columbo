@@ -97,6 +97,27 @@ func F(a int, b bool, c string, e byte) {}
 	require.Equal(t, []string{"fixture.A", "fixture.B", "fixture.C", "fixture.D", "fixture.E", "fixture.F"}, supportSymbols(c))
 }
 
+func TestPrimitiveClumpLeadsTowardNamedTypes(t *testing.T) {
+	h := &testHarness{T: t}
+	c := h.one(h.investigate(h.fixture(contextClumpSource), clumpConfig()), "data-clump")
+	require.Contains(t, c.Leads, primitiveClumpLead)
+}
+
+func TestPrimitiveClumpLeadCoversCompositesOfPrimitives(t *testing.T) {
+	h := &testHarness{T: t}
+	source := "package fixture\nfunc A(a *int, b map[string][]byte, c [2]rune){}\nfunc B(a *int, b map[string][]byte, c [2]rune){}\nfunc C(a *int, b map[string][]byte, c [2]rune){}\n"
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.Contains(t, c.Leads, primitiveClumpLead)
+}
+
+func TestNamedTypeClumpGetsNoPrimitiveLead(t *testing.T) {
+	h := &testHarness{T: t}
+	source := "package fixture\ntype OrgID string\nfunc A(org OrgID, a, b string){}\nfunc B(org OrgID, a, b string){}\nfunc C(org OrgID, a, b string){}\n"
+	c := h.one(h.investigate(h.fixture(source), clumpConfig()), "data-clump")
+	require.NotContains(t, c.Leads, primitiveClumpLead)
+	require.Equal(t, adviceCatalog["data-clump"].leads, c.Leads)
+}
+
 func clumpConfig() Config {
 	config := quiet()
 	config.Severity["data-clump"] = "fail"
