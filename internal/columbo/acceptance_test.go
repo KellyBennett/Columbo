@@ -487,7 +487,9 @@ func (t *testHarness) TestClumpClosedSupport() {
 	c := quiet()
 	c.Severity["data-clump"] = "fail"
 	r := t.investigate(dir, c)
-	require.Len(t.T, r.Cases, 2, "want both closed multisets")
+	clump := t.one(r, "data-clump")
+	require.Equal(t.T, 3, t.clueValue(clump, "clump-size"))
+	require.Equal(t.T, []string{"fixture.A", "fixture.B", "fixture.C", "fixture.D"}, supportSymbols(clump))
 	t.write(dir, "source.go", "package fixture\nfunc A(a int,b bool,c string,d float64){}\nfunc B(a int,b bool,c string,d float64){}\nfunc C(a int,b bool,c string,d float64){}\n")
 	r = t.investigate(dir, c)
 	require.Len(t.T, r.Cases, 1)

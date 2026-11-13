@@ -445,8 +445,11 @@ func (c *Case) sourceIdentity(source Source) {
 }
 
 func (c *Case) includeDeclaration(d *declaration, role string) {
-	c.Receipts = append(c.Receipts, d.declReceipt())
-	c.supportDeclaration(d.ref(), role)
+	c.includeReceipt(d.declReceipt(), role)
+}
+func (c *Case) includeReceipt(receipt Source, role string) {
+	c.Receipts = append(c.Receipts, receipt)
+	c.supportDeclaration(*receipt.Declaration, role)
 }
 
 func (q Clue) forMember(ref MemberRef) Clue {

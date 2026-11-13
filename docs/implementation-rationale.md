@@ -25,6 +25,8 @@ Closed frequent multisets are intersections of supporting signatures.
 
 Keep each intersection once rather than enumerate every possible subset.
 
+Report only the minimal qualifying intersections. A superset's support sits inside its subset's, so nested patterns are one clump family and the smallest names it once.
+
 clumpEvidence keeps the three support roles named until their clues are complete.
 
 

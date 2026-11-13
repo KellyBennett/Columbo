@@ -18,8 +18,8 @@ func TestInlineParameterObjectKillsAtOccurrences(t *testing.T) {
 			firstKill = r.Dose
 		}
 	}
-	if firstKill != 3 {
-		t.Errorf("data-clump first fired at dose %d, want 3 (data-clump-occurrences)", firstKill)
+	if firstKill != 2 {
+		t.Errorf("data-clump first fired at dose %d, want 2 (data-clump-occurrences less the struct's own field list)", firstKill)
 	}
 	if lpl := byOp["inline-parameter-object-lpl"]; len(lpl) != 1 || lpl[0].Status != "killed" {
 		t.Errorf("long-parameter-list inject rows = %+v, want one kill", lpl)
