@@ -189,10 +189,10 @@ WHERE m.status = 'survived' ORDER BY t.status, m.operator`,
 	},
 	{
 		title: "Untriaged survivors",
-		note:  "Survivors the operator's prediction cannot explain and calibration/triage.yaml does not cover. CI warns on every row here.",
+		note:  "Inject and evade survivors the operator's prediction cannot explain and calibration/triage.yaml does not cover. A surviving cure only means the cure did not get under the limit, so it is not a Columbo blind spot and is not listed. CI warns on every row here.",
 		query: `WITH ` + latestRuns + `
 SELECT m.operator, m.site_symbol, m.dose, m.reason FROM cur m
-WHERE m.status = 'survived'
+WHERE m.status = 'survived' AND m.class IN ('inject','evade')
  AND NOT EXISTS (SELECT 1 FROM temp.triage t WHERE t.operator = m.operator AND (t.symbol = '*' OR t.symbol = m.site_symbol) AND (t.dose = 0 OR t.dose = m.dose))
 ORDER BY m.operator, m.site_symbol, m.dose`,
 	},
