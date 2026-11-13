@@ -14,7 +14,8 @@ const variantSmell = "repeated-variant-decision"
 
 // repeatVariantDecision is Replace Polymorphism with Conditional at a second site: next to
 // an existing variant decision, add a function that decides over the same variants again.
-// Dose is the number of the original decision's variants the new decision repeats.
+// Dose is the number of the original decision's variants the new decision repeats. A
+// one-variant decision is not a site at all, so dose 1 never counts toward the domain.
 type repeatVariantDecision struct{}
 
 func (repeatVariantDecision) ID() string           { return "repeat-variant-decision" }
@@ -88,13 +89,17 @@ func (repeatVariantDecision) Apply(c *harness.Corpus, site harness.Site, dose in
 	if err != nil {
 		return harness.Applied{}, err
 	}
-	sites := append(variantDomains(c)[s.domain], variantSite{arms: s.arms[:dose]})
+	before := variantDomains(c)[s.domain]
+	sites := before
+	if dose >= 2 {
+		sites = append(sites[:len(sites):len(sites)], variantSite{arms: s.arms[:dose]})
+	}
 	repeated, fires := repeatedVariants(c, sites)
 	symbol := symbolOf(s.fn.pkg.PkgPath, &ast.FuncDecl{Name: ast.NewIdent(name)})
 	return harness.Applied{
 		Edit: harness.Edit{s.fn.rel: out},
 		Expectation: harness.Expectation{
-			Touched: append(siteSymbols(sites[:len(sites)-1]), symbol),
+			Touched: append(siteSymbols(before), symbol),
 			Prediction: harness.Prediction{Kill: &fires, Reason: fmt.Sprintf("%d repeated variants across %d decisions (limits %d sites, %d variants)",
 				len(repeated), len(sites), int(threshold(c, "repeated-variant-sites", 2)), int(threshold(c, "repeated-variant-variants", 2)))},
 		},
