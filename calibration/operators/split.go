@@ -12,9 +12,6 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// splitForwarding is the cosmetic evade for a long parent: cut its body into consecutive
-// private helpers that each take the parent's full parameter list unchanged. Dose is the
-// number of helpers.
 type splitForwarding struct {
 	id, follows, target string
 	catches             []string
@@ -141,9 +138,6 @@ type flow struct {
 	declares bool
 }
 
-// chunkFlows finds, for each chunk, the parent-level locals it needs from earlier chunks
-// and the ones it must hand to later chunks, so helpers can carry state through
-// parameters and results while still forwarding the parent's own parameters unchanged.
 func chunkFlows(f fn, stmts []ast.Stmt, cuts []int) []flow {
 	scope := f.pkg.TypesInfo.Scopes[f.decl.Type]
 	topLocal := func(obj types.Object) (*types.Var, bool) {
@@ -212,9 +206,6 @@ func sortVars(vs []*types.Var) {
 	sort.Slice(vs, func(i, j int) bool { return vs[i].Pos() < vs[j].Pos() })
 }
 
-// splitPlan returns k+1 statement indexes that cut the body into k chunks, choosing the
-// valid boundaries nearest an even split. A boundary is valid when nothing before it can
-// return, jump, or defer.
 func splitPlan(f fn, k int) ([]int, error) {
 	d := f.decl
 	if d.Body == nil || f.obj == nil || d.Type.TypeParams != nil || !forwardable(f) {

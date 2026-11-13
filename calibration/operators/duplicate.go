@@ -23,9 +23,7 @@ const duplicateSmell = "duplicate-code"
 
 var copyName = regexp.MustCompile(`Dup[0-9]*$`)
 
-// canonical renders a function's receiver type, signature, and body with every local
-// object renamed by order of appearance, so two declarations compare equal exactly when
-// one is a copy of the other up to local names.
+// canonical renders two declarations equal exactly when one is a copy of the other up to local names.
 func canonical(f fn) string {
 	var b strings.Builder
 	locals := map[types.Object]int{}
@@ -71,7 +69,6 @@ func canonical(f fn) string {
 	return b.String()
 }
 
-// twins lists the other declarations in f's package that are copies of f up to local names.
 func twins(c *harness.Corpus, f fn) []fn {
 	if f.decl.Body == nil || f.decl.Type.TypeParams != nil {
 		return nil
@@ -86,8 +83,6 @@ func twins(c *harness.Corpus, f fn) []fn {
 	return out
 }
 
-// duplicateBlock is the inverse of Extract Function's deduplication: it copies a function
-// into a new unexported twin placed right after it.
 type duplicateBlock struct{}
 
 func (duplicateBlock) ID() string           { return "duplicate-block" }
@@ -137,8 +132,7 @@ func (o duplicateBlock) Apply(c *harness.Corpus, site harness.Site, _ int) (harn
 	}, nil
 }
 
-// dupNodes counts the serialized dupl syntax nodes of the named declaration, the unit
-// Columbo's duplicate-tokens threshold compares against.
+// dupNodes counts serialized dupl syntax nodes, the unit Columbo's duplicate-tokens threshold compares against.
 func dupNodes(src []byte, name string) (int, error) {
 	dir, err := harness.TempDir("calibration-dupl-")
 	if err != nil {
@@ -172,8 +166,6 @@ func dupNodes(src []byte, name string) (int, error) {
 	return 0, fmt.Errorf("%s not found in dupl tree", name)
 }
 
-// renameAndRelabel is the cosmetic evade for a copied function: rename every local and
-// change every integer and string literal in the copy, leaving its structure intact.
 type renameAndRelabel struct{}
 
 func (renameAndRelabel) ID() string           { return "rename-and-relabel" }
@@ -261,9 +253,7 @@ func (o renameAndRelabel) Apply(c *harness.Corpus, site harness.Site, _ int) (ha
 	}, nil
 }
 
-// dupTypeSwitchSymbols maps each `switch x := v.(type)` symbol, which has no object of its own,
-// to one of the per-clause objects it declares, and maps every per-clause object to that
-// same representative, so the symbol and its uses get one new name.
+// A `switch x := v.(type)` symbol has no object of its own, so it and every per-clause object share one representative and one new name.
 func dupTypeSwitchSymbols(f fn) map[*ast.Ident]types.Object {
 	out := map[*ast.Ident]types.Object{}
 	ast.Inspect(f.decl, func(n ast.Node) bool {
@@ -312,10 +302,7 @@ func relabel(lit *ast.BasicLit) (string, bool) {
 	return "", false
 }
 
-// delegateDuplicate removes a duplicate the safe way when the copies are the same function
-// up to local names: every twin's body becomes a call to the case's primary declaration.
-// Structural clones that reference different fields, functions, or literals have no such
-// mechanical cure; they need a human to name the parameter that varies.
+// Only copies up to local names delegate; structural clones need a human to name the parameter that varies.
 type delegateDuplicate struct{}
 
 func (delegateDuplicate) ID() string           { return "delegate-duplicate" }

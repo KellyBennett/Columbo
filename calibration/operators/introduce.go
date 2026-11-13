@@ -13,9 +13,6 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// introduceParameterObject is the Introduce Parameter Object cure for a baseline Data Clump
-// case. It reads the case's parameter receipts, declares a named struct for the clump next
-// to the anchor declaration, and moves every supporting declaration and its call sites onto it.
 type introduceParameterObject struct{}
 
 func (introduceParameterObject) ID() string                                { return "introduce-parameter-object" }
@@ -23,8 +20,7 @@ func (introduceParameterObject) Class() harness.Class                      { ret
 func (introduceParameterObject) Target() string                            { return "data-clump" }
 func (introduceParameterObject) Doses(*harness.Corpus, harness.Site) []int { return []int{1} }
 
-// Sites lists one site per baseline Data Clump case. Offset is the case's ordinal among the
-// clump cases anchored on the same declaration, ordered by case ID.
+// Offset is the case's ordinal among clump cases anchored on the same declaration, ordered by case ID.
 func (o introduceParameterObject) Sites(c *harness.Corpus) []harness.Site {
 	var out []harness.Site
 	ordinal := map[string]int{}
@@ -78,8 +74,6 @@ func pkgOfSymbol(symbol string) string {
 	return symbol
 }
 
-// clumpPlan is the parameter object for one case: its fields, and for each supporting
-// declaration which of its parameters map to which field.
 type clumpPlan struct {
 	name     string
 	exported bool
@@ -88,13 +82,12 @@ type clumpPlan struct {
 }
 
 type clumpField struct {
-	// key is the parameter name the field was named after, before export casing.
+	// key is the parameter name before export casing.
 	name, typ, key string
 }
 
 type clumpMember struct {
-	f fn
-	// fieldOf maps a parameter index to the field it moves into.
+	f       fn
 	fieldOf map[int]int
 	first   int
 	param   string
@@ -148,7 +141,6 @@ func planClump(p *program, receipts []harness.ParameterReceipt) (clumpPlan, erro
 	return cl, nil
 }
 
-// slotFor returns the first anchor receipt of the given type not yet taken.
 func slotFor(anchor []harness.ParameterReceipt, typ string, taken map[int]bool) int {
 	for k, r := range anchor {
 		if r.Type == typ && !taken[k] {
@@ -158,7 +150,6 @@ func slotFor(anchor []harness.ParameterReceipt, typ string, taken map[int]bool) 
 	return -1
 }
 
-// paramName is the name a member gives the parameter it moves into field k, or "".
 func (m clumpMember) paramName(k int) string {
 	for idx, fk := range m.fieldOf {
 		if q := params(m.f)[idx]; fk == k && q.named() {
@@ -168,8 +159,6 @@ func (m clumpMember) paramName(k int) string {
 	return ""
 }
 
-// nameFields names each field by the parameter name most members use for it, so the
-// object reads in the members' own vocabulary.
 func (cl *clumpPlan) nameFields() {
 	for _, m := range cl.members {
 		cl.exported = cl.exported || m.f.decl.Name.IsExported()
@@ -197,8 +186,7 @@ func (cl *clumpPlan) nameFields() {
 	}
 }
 
-// realign fixes a member whose receipts picked a same-typed parameter other than the one
-// named like the field, as Columbo selects the first matching parameters in order.
+// realign exists because Columbo selects the first matching parameters in order, not the one named like the field.
 func (cl *clumpPlan) realign() {
 	for mi := range cl.members {
 		m := &cl.members[mi]
@@ -224,7 +212,6 @@ func (cl *clumpPlan) realign() {
 	}
 }
 
-// nameStruct names the object after its fields and each member's new parameter after it.
 func (cl *clumpPlan) nameStruct() {
 	var b strings.Builder
 	for _, f := range cl.fields {
@@ -312,9 +299,7 @@ func (cl clumpPlan) apply(p *program) (harness.Edit, error) {
 	return r.edit()
 }
 
-// callArgs packs the moved arguments into one keyed literal at the first moved position.
-// Keys follow argument order, so evaluation order is unchanged unless an unmoved argument
-// sits between moved ones, which then must be free of effects.
+// Keys follow argument order, so an unmoved argument between moved ones must be free of effects.
 func (cl clumpPlan) callArgs(r *rewrite, cs clumpCallSite, m clumpMember) ([]string, error) {
 	qual, ok := qualifierFor(cs.unit, m.f.pkg.PkgPath)
 	if !ok || (qual != "" && !cl.exported) {
@@ -347,8 +332,6 @@ func (cl clumpPlan) callArgs(r *rewrite, cs clumpCallSite, m clumpMember) ([]str
 	return out, nil
 }
 
-// forwarded reports the enclosing member's own parameter object when a call inside that
-// member passes exactly its moved parameters, each into the same field.
 func (cl clumpPlan) forwarded(cs clumpCallSite, m clumpMember) (string, bool) {
 	for _, outer := range cl.members {
 		if outer.f.rel != cs.rel || cs.call.Pos() < outer.f.decl.Pos() || cs.call.End() > outer.f.decl.End() {

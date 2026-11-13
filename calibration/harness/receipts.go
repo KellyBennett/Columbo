@@ -6,8 +6,7 @@ import (
 	"strings"
 )
 
-// ParameterReceipt is one parameter Columbo cited as evidence for a case: the declaration
-// that holds it, its expanded index in that declaration's parameter list, and its canonical type.
+// ParameterReceipt.Index is the position after expanding one entry per declared parameter name.
 type ParameterReceipt struct {
 	Symbol string
 	Index  int

@@ -14,7 +14,6 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// renameLocal renames the first local variable a function declares, at every use.
 type renameLocal struct{}
 
 func (renameLocal) ID() string                                { return "rename-local" }
@@ -67,11 +66,7 @@ func firstLocal(f fn) *ast.Ident {
 	return first
 }
 
-// renameDecl renames one unexported function or method and every reference in its package,
-// in-package tests included. It skips a name that a file outside that type-checked set
-// mentions, such as another platform's file, and a method name any interface in the package
-// declares, because renaming either could change what compiles or what satisfies an
-// interface.
+// Names mentioned outside the type-checked set or declared by a package interface are skipped: renaming could change what compiles or satisfies.
 type renameDecl struct{}
 
 func (renameDecl) ID() string                                { return "rename-decl" }
@@ -130,8 +125,6 @@ func renamable(f fn, names packageNames) bool {
 	return !names.opaque && !names.unchecked[name]
 }
 
-// packageNames is a package type-checked with its in-package test files, plus every
-// identifier spelled anywhere in its directory.
 type packageNames struct {
 	pkg              *packages.Package
 	all              map[string]bool
@@ -140,9 +133,7 @@ type packageNames struct {
 	opaque           bool
 }
 
-// scopeOf loads p again with its in-package tests, which the harness's own load leaves out,
-// and parses the directory's remaining .go files (other platforms, external tests) for names
-// only. It returns nil when the package does not load.
+// scopeOf reloads with in-package tests, which the harness's own load leaves out.
 func scopeOf(c *harness.Corpus, p *packages.Package) *packageNames {
 	cfg := &packages.Config{
 		Dir:   c.Root,
@@ -222,8 +213,6 @@ func neutralIdentNames(f *ast.File) map[string]bool {
 	return out
 }
 
-// neutralFresh returns a name no identifier in scope already spells, so the rename can neither
-// collide with nor shadow anything.
 func neutralFresh(base string, taken map[string]bool) string {
 	name := base + "Renamed"
 	for i := 2; taken[name]; i++ {
@@ -232,8 +221,6 @@ func neutralFresh(base string, taken map[string]bool) string {
 	return name
 }
 
-// renameObject respells every definition and use of target across files, matching
-// instantiated generic functions and methods by their origin.
 func renameObject(files []unit, target types.Object, name string) (harness.Edit, error) {
 	if target == nil {
 		return nil, errors.New("no object to rename")

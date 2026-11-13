@@ -156,8 +156,7 @@ func filterSites(sites []Site, touched []string) []Site {
 	return out
 }
 
-// sample keeps a deterministic, content-addressed subset so adding a site elsewhere in the
-// corpus does not reshuffle which sites a later run measures.
+// sample is content-addressed so adding a site elsewhere does not reshuffle which sites a later run measures.
 func sample(sites []Site, max int) []Site {
 	if max <= 0 || len(sites) <= max {
 		return sites

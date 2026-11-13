@@ -15,9 +15,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 )
 
-// Measure returns a unified patch of the edit against root, and its Size: the number of
-// AST nodes inserted or deleted across the top-level declarations the edit changes,
-// computed as an edit distance over each declaration's preorder node sequence.
+// Measure returns the edit's unified patch and its Size: AST nodes inserted or deleted across the top-level declarations it changes.
 func Measure(root string, edit Edit) ([]byte, int, error) {
 	var patch bytes.Buffer
 	size := 0
@@ -165,8 +163,7 @@ func distance(a, b []string) int {
 	return len(a) + len(b) - 2*prev[len(b)]
 }
 
-// commentSequence covers comments outside declarations, such as file-level prose, which
-// the per-declaration node sequences never visit.
+// Per-declaration node sequences never visit comments outside declarations, such as file-level prose.
 func commentSequence(src []byte) []string {
 	if src == nil {
 		return nil

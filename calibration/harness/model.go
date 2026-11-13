@@ -31,35 +31,27 @@ type Site struct {
 	File    string
 }
 
-// Edit maps module-relative slash paths to their new contents. A nil value deletes the file.
+// Edit maps module-relative slash paths to new contents; a nil value deletes the file.
 type Edit map[string][]byte
 
-// Prediction is the operator's own expectation, computed from metrics it can see in the
-// mutated source. Kill is nil when the operator cannot say.
+// Prediction is the operator's own expectation; Kill is nil when the operator cannot say.
 type Prediction struct {
 	Kill   *bool
 	Reason string
 }
 
-// Expectation tells the scorer which findings count for this mutant.
 type Expectation struct {
-	// Touched are the declaration symbols a finding may anchor to and still count.
 	Touched []string
-	// Catches are the smells that count as Columbo noticing an evade; empty means the target.
+	// Catches empty means the operator's target.
 	Catches []string
-	// Renames maps an original declaration symbol to its symbol in the mutant (neutral only).
 	Renames map[string]string
-	// Moves maps an original declaration symbol to its new module-relative file (neutral only).
-	Moves map[string]string
-	// Files restricts a baseline evade's check to cases in the files it edited, because
-	// file-wide cases in one package share a package-clause symbol.
-	Files []string
-	// FromBaseline marks an evade of a case already in the baseline, such as a red-team replay.
+	Moves   map[string]string
+	// Files scopes a baseline evade to its edited files, since file-wide cases in one package share a package-clause symbol.
+	Files        []string
 	FromBaseline bool
-	// AnyAdded makes any smell newly added on a touched symbol count as noticing an evade.
+	// AnyAdded counts any smell newly added on a touched symbol as noticing an evade.
 	AnyAdded bool
-	// Target overrides the operator's target for one mutant, for operators that replay many smells.
-	Target string
+	Target   string
 	Prediction
 }
 
@@ -112,7 +104,6 @@ type Finding struct {
 	Support []Decl
 }
 
-// Decl is one declaration a case names in case_declarations, primary or evidence.
 type Decl struct {
 	File   string
 	Symbol string

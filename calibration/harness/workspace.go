@@ -36,9 +36,7 @@ func TempDir(pattern string) (string, error) {
 	return filepath.EvalSymlinks(dir)
 }
 
-// CopyModule copies the module rooted at src, skipping VCS data and nested modules
-// outside testdata, because those are outside `./...` and would only slow every mutant.
-// Nested modules under testdata are test fixtures and must come along.
+// Nested modules outside testdata fall outside ./... and only slow every mutant; those under testdata are fixtures and must come along.
 func CopyModule(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

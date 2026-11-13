@@ -57,8 +57,7 @@ type section struct {
 	title, note, query string
 }
 
-// latestRuns selects, per corpus and operator, the mutants of the newest run that measured
-// that operator, so families can be measured in separate runs without hiding each other.
+// latestRuns picks per operator so families measured in separate runs do not hide each other.
 const latestRuns = `latest AS (SELECT max(id) AS id, corpus_module FROM runs GROUP BY corpus_module),
 cur AS (SELECT m.* FROM mutants m JOIN runs r ON r.id = m.run_id
  WHERE m.run_id = (SELECT max(m2.run_id) FROM mutants m2 JOIN runs r2 ON r2.id = m2.run_id

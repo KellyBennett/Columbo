@@ -13,12 +13,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// frozenSuffix keeps frozen Go sources out of this module's ./... and out of the
-// repository's database-boundary scan, which inspect every .go file.
+// frozenSuffix keeps frozen Go sources out of ./... and out of the repository's database-boundary scan.
 const frozenSuffix = ".frozen"
 
-// redTeam replays evasions an agent wrote against real Columbo output, frozen as whole files.
-// No model runs during calibration; only these files do.
+// No model runs during calibration; only these frozen files do.
 type redTeam struct {
 	dir     string
 	entries []redTeamEntry

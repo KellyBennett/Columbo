@@ -10,8 +10,7 @@ import (
 
 type findingKey struct{ smell, symbol string }
 
-// Diff matches findings by smell and primary symbol, as multisets, so a secondary-key
-// change such as a Data Clump's type list is not counted as an add and a remove.
+// Diff keys on smell and primary symbol so a secondary-key change, such as a Data Clump's type list, is not an add plus a remove.
 func Diff(before, after []Finding) (added, removed []Finding) {
 	count := map[findingKey]int{}
 	for _, f := range before {
@@ -40,8 +39,6 @@ func Diff(before, after []Finding) (added, removed []Finding) {
 	return added, removed
 }
 
-// renamed carries findings on a renamed declaration over to its new symbol, so a smell
-// that moves with its declaration is neither an add nor a remove.
 func renamed(fs []Finding, renames map[string]string) []Finding {
 	out := make([]Finding, len(fs))
 	for i, f := range fs {
@@ -100,10 +97,7 @@ func scoreInject(o *Outcome, exp Expectation, _, _ []Finding) {
 	o.Status, o.Reason = Survived, exp.Reason
 }
 
-// scoreEvade asks whether Columbo still reports a caught smell on a touched declaration.
-// An evade of an injected smell looks only at what the mutant added, because baseline
-// cases can share a symbol (prose-comment anchors every file on one package clause). An
-// evade of a baseline case looks at everything reported after it.
+// An injected evade reads only added findings because baseline cases can share a symbol (prose comments anchor on the package clause); a FromBaseline evade reads everything.
 func scoreEvade(o *Outcome, exp Expectation, _, after []Finding) {
 	catches := exp.Catches
 	if len(catches) == 0 {
@@ -124,8 +118,7 @@ func scoreEvade(o *Outcome, exp Expectation, _, after []Finding) {
 	o.Status, o.Reason = Survived, "evade silenced "+o.Target
 }
 
-// scoreCure counts a smell as moved, not new, when the same smell left a touched
-// declaration in the same mutant: extracting envious code carries its envy to the helper.
+// A smell leaving one touched declaration for another moved rather than appeared: extracting envious code carries its envy to the helper.
 func scoreCure(o *Outcome, exp Expectation, _, _ []Finding) {
 	if len(hits(o.Removed, []string{o.Target}, exp.Touched)) == 0 {
 		o.Status, o.Reason = Survived, "target case remains"
@@ -163,9 +156,7 @@ func scoreCure(o *Outcome, exp Expectation, _, _ []Finding) {
 
 func containsSymbol(touched []string, s string) bool { return slices.Contains(touched, s) }
 
-// idShape says which canonical identity fields (SPEC "Case identity and ordering") a smell
-// fills from its primary declaration. Keyed smells add a secondary key the snapshot does not
-// store; anchored smells take their primary from the earliest supporting declaration.
+// idShape follows SPEC "Case identity and ordering": keyed smells add a secondary key the snapshot does not store; anchored smells take the earliest supporting declaration.
 type idShape struct{ file, symbol, keyed, anchored bool }
 
 var declaredShape = idShape{file: true, symbol: true}
@@ -184,7 +175,6 @@ func shapeOf(smell string) idShape {
 	return declaredShape
 }
 
-// relocate maps an original declaration to where the mutant declares it.
 func (exp Expectation) relocate(d Decl) Decl {
 	if file, ok := exp.Moves[d.Symbol]; ok {
 		d.File = file
@@ -195,8 +185,7 @@ func (exp Expectation) relocate(d Decl) Decl {
 	return d
 }
 
-// caseID mirrors Columbo's identity function: C- plus 10 hex of SHA-256 over the
-// percent-escaped, pipe-joined fields.
+// caseID must reproduce Columbo's case identity function exactly.
 func caseID(smell, file, symbol, key string) string {
 	esc := strings.NewReplacer("%", "%25", "|", "%7C", "\r", "%0D", "\n", "%0A")
 	h := sha256.Sum256([]byte(strings.Join([]string{esc.Replace(smell), esc.Replace(file), esc.Replace(symbol), esc.Replace(key)}, "|")))
@@ -219,7 +208,6 @@ func (m *neutralMatch) claim(pred func(Finding) bool) bool {
 	return false
 }
 
-// match claims the mutant case that b predictably became, or says why none qualifies.
 func (m *neutralMatch) match(b Finding) string {
 	shape := shapeOf(b.Smell)
 	if shape.anchored {
@@ -253,9 +241,7 @@ func (m *neutralMatch) match(b Finding) string {
 	}
 }
 
-// matchAnchored finds the case with the same supporting declarations after relocation. Its
-// anchor must be the earliest of them, and an unmoved anchor must keep the exact ID because
-// the secondary key is unchanged by a neutral edit.
+// An unmoved anchor must keep its exact ID because a neutral edit leaves the secondary key unchanged.
 func (m *neutralMatch) matchAnchored(b Finding) string {
 	want := make([]Decl, len(b.Support))
 	for i, d := range b.Support {
@@ -302,9 +288,6 @@ func earliest(ds []Decl) Decl {
 	})
 }
 
-// scoreNeutral requires a one-to-one pairing of baseline and mutant cases in which every
-// changed case ID is explained by SPEC identity rules applied to the operator's renames and
-// moves. Anything else is id-drift.
 func scoreNeutral(o *Outcome, exp Expectation, before, after []Finding) {
 	m := &neutralMatch{exp: exp, after: after, claimed: make([]bool, len(after))}
 	var drift []string

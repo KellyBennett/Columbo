@@ -11,10 +11,6 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// splitByCollaborators is Extract Function along a collaborator seam: it moves one
-// contiguous run of top-level statements into a helper when the run and the rest of the
-// body each stay within the dependencies limit. It only extracts runs whose data flow it
-// can carry through parameters and results without changing behavior.
 type splitByCollaborators struct{}
 
 func (splitByCollaborators) ID() string           { return "split-by-collaborators" }
@@ -24,8 +20,7 @@ func (splitByCollaborators) Doses(*harness.Corpus, harness.Site) []int {
 	return []int{1}
 }
 
-// Sites lists every baseline case, so a case with no honest seam is logged with its
-// reason instead of disappearing from the run.
+// Sites lists every baseline case so one with no honest seam is logged with its reason instead of disappearing.
 func (o splitByCollaborators) Sites(c *harness.Corpus) []harness.Site {
 	var out []harness.Site
 	for _, f := range funcs(c) {
@@ -125,8 +120,6 @@ func usesReceiver(f fn, s seam) bool {
 	return used
 }
 
-// bestSeam picks the extractable run that minimizes the larger of the two estimated
-// dependency counts, keeping the helper within the parameter limit.
 func bestSeam(c *harness.Corpus, f fn) (seam, error) {
 	if err := splittable(f); err != nil {
 		return seam{}, err
@@ -197,8 +190,6 @@ func bestSeam(c *harness.Corpus, f fn) (seam, error) {
 	return seam{}, errors.New(reason)
 }
 
-// splittable rejects bodies whose statements cannot be moved without changing meaning:
-// local types or constants a helper could not name, labels, and goto.
 func splittable(f fn) error {
 	d := f.decl
 	if d.Body == nil || f.obj == nil || d.Type.TypeParams != nil || len(d.Body.List) < 2 {
@@ -226,7 +217,6 @@ func splittable(f fn) error {
 	return err
 }
 
-// seamAt checks that statements [from, to) can become a helper and returns its data flow.
 func seamAt(f fn, from, to int) (seam, error) {
 	stmts := f.decl.Body.List
 	for _, s := range stmts[from:to] {
@@ -248,8 +238,6 @@ func seamAt(f fn, from, to int) (seam, error) {
 	return seam{from: from, to: to, params: params, ins: fl.in, outs: fl.out, declares: fl.declares}, nil
 }
 
-// escapes reports a statement whose meaning depends on staying in the parent: a return,
-// defer, recover, or a closure that may outlive the run.
 func escapes(f fn, s ast.Stmt) bool {
 	bad := false
 	ast.Inspect(s, func(n ast.Node) bool {
@@ -271,8 +259,7 @@ func escapes(f fn, s ast.Stmt) bool {
 	return storesClosure(f, s)
 }
 
-// storesClosure reports a function literal in s that is not passed directly as a call
-// argument, since such a closure may run after the helper has returned.
+// A closure not passed directly as a call argument may run after the helper has returned.
 func storesClosure(f fn, s ast.Stmt) bool {
 	direct := map[*ast.FuncLit]bool{}
 	ast.Inspect(s, func(n ast.Node) bool {
@@ -322,8 +309,7 @@ func addressed(f fn, v *types.Var) bool {
 	return found
 }
 
-// capturedOutside reports v referenced by a function literal outside the run, which would
-// observe the parent's copy rather than the helper's.
+// A function literal outside the run would observe the parent's copy rather than the helper's.
 func capturedOutside(f fn, v *types.Var, from, to int) bool {
 	found := false
 	for i, s := range f.decl.Body.List {
@@ -347,7 +333,6 @@ func capturedOutside(f fn, v *types.Var, from, to int) bool {
 	return found
 }
 
-// paramsUsed lists the parameters the run reads, refusing a run that assigns to one.
 func paramsUsed(f fn, run []ast.Stmt) ([]*types.Var, error) {
 	sig := f.obj.Type().(*types.Signature)
 	var out []*types.Var
@@ -389,9 +374,7 @@ func paramsUsed(f fn, run []ast.Stmt) ([]*types.Var, error) {
 	return out, nil
 }
 
-// depSet approximates Columbo's scored dependency set: foreign named types, nonempty
-// unnamed interfaces, and foreign package references, with a package dropped once one of
-// its named types is present.
+// depSet approximates Columbo's scored dependency set.
 type depSet map[string]string
 
 func (d depSet) add(others ...depSet) {

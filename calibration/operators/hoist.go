@@ -11,10 +11,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// hoistFields is a cosmetic evade for feature-envy. It rewrites each read of a field on the
-// envied parameter, either into a local copied once at the top of the body
-// (copy-fields-to-locals) or into a call to a new getter on the envied type
-// (hide-behind-getters). Neither moves behavior, so Columbo should still see the envy.
+// Neither hoisting style moves behavior, so Columbo should still see the envy.
 type hoistFields struct {
 	id, follows string
 	getters     bool
@@ -118,9 +115,6 @@ func (h hoistPlan) getterRecv() string {
 	return "r " + types.TypeString(h.group.root.Type(), qualifier(h.f.unit))
 }
 
-// planHoist picks the first qualifying envied parameter whose fields can be read once up
-// front: the parameter is only ever used as a selector base, no pointer-receiver method is
-// called on it, and a hoisted field is never written, addressed, or sliced.
 func planHoist(c *harness.Corpus, f fn) (hoistPlan, error) {
 	if f.decl.Body == nil || f.obj == nil {
 		return hoistPlan{}, errors.New("no body")
@@ -232,8 +226,6 @@ func hoistable(f fn, root *types.Var, parents map[ast.Node]ast.Node) ([]*hoistFi
 	return out, nil
 }
 
-// written reports whether the value at s could be changed or aliased through its use: an
-// assignment target, an increment, an address, a slice, or a method call on it.
 func written(info *types.Info, s *ast.SelectorExpr, parents map[ast.Node]ast.Node) bool {
 	var cur ast.Node = s
 	for {

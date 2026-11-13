@@ -12,10 +12,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// extractFunction is Extract Function as a cure. Dose is the number of disjoint statement
-// runs extracted. Each run is chosen for the narrowest interface (values in plus values
-// out) among runs that can move without changing control flow, which is the closest
-// mechanical proxy for a responsibility seam.
+// Runs are chosen for the narrowest interface, the closest mechanical proxy for a responsibility seam.
 type extractFunction struct {
 	id, target string
 }
@@ -359,8 +356,6 @@ func assignedWithin(f fn, v *types.Var, start, end token.Pos) bool {
 	return found
 }
 
-// movable rejects runs whose control flow would change inside a helper: returns (except
-// in a trailing run of a function body), jumps out of the run, labels, and defers.
 func movable(stmts []ast.Stmt, suffix bool) bool {
 	ok := true
 	var walk func(n ast.Node, loop int)
@@ -408,7 +403,6 @@ func movable(stmts []ast.Stmt, suffix bool) bool {
 	return ok
 }
 
-// walkBreakable treats an unlabeled break inside a switch or select clause as local.
 func walkBreakable(clause ast.Node, loop int, walk func(ast.Node, int), ok *bool) {
 	ast.Inspect(clause, func(x ast.Node) bool {
 		if b, isBranch := x.(*ast.BranchStmt); isBranch && b.Tok == token.BREAK && b.Label == nil {

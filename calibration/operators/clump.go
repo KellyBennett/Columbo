@@ -12,9 +12,6 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// inlineParameterObject is the inverse of Introduce Parameter Object: a same-package struct
-// parameter is expanded into one parameter per field. A site is the struct type. Dose is the
-// number of functions that carry the struct, expanded in source order.
 type inlineParameterObject struct {
 	id, target string
 }
@@ -67,8 +64,6 @@ func (o inlineParameterObject) doses(c *harness.Corpus, p *program, st paramStru
 	return doses
 }
 
-// expansions lists the functions the operator would expand, in source order. For the
-// long-parameter-list target only functions the expansion pushes over the limit qualify.
 func (o inlineParameterObject) expansions(c *harness.Corpus, p *program, st paramStruct) []expansion {
 	all := candidates(p, st)
 	if o.target != "long-parameter-list" {
@@ -135,7 +130,6 @@ func (o inlineParameterObject) Apply(c *harness.Corpus, site harness.Site, dose 
 	}, nil
 }
 
-// paramStruct is a named, non-generic struct type whose fields could stand in as parameters.
 type paramStruct struct {
 	unit
 	spec   *ast.TypeSpec
@@ -212,14 +206,12 @@ func findStruct(p *program, symbol string) (paramStruct, bool) {
 	return paramStruct{}, false
 }
 
-// expansion is one function whose struct parameter becomes one parameter per field.
 type expansion struct {
 	f     fn
 	index int
 	ptr   bool
 	names []string
-	// whole is set when the body uses the struct as a value, so it is rebuilt locally
-	// from the new parameters instead of rewriting each field read.
+	// whole: the body uses the struct as a value, so it is rebuilt locally from the new parameters.
 	whole bool
 	reads []*ast.SelectorExpr
 }
@@ -281,9 +273,7 @@ func plan(p *program, st paramStruct, f fn) (expansion, error) {
 	return e, nil
 }
 
-// fieldReads finds every s.f read of the struct parameter. A use that is not a field read
-// makes the body need the whole value. Through a pointer, a write or a whole use would
-// change what the caller sees, so the function is not a candidate.
+// Through a pointer, a write or a whole use would change what the caller sees, so the function is not a candidate.
 func fieldReads(f fn, v *types.Var, ptr bool) ([]*ast.SelectorExpr, bool, error) {
 	info := f.pkg.TypesInfo
 	var reads []*ast.SelectorExpr
@@ -320,8 +310,6 @@ func fieldReads(f fn, v *types.Var, ptr bool) ([]*ast.SelectorExpr, bool, error)
 	return reads, false, nil
 }
 
-// writeRoots marks every selector reached by descending from an assigned, incremented,
-// addressed, or pointer-method-receiver expression.
 func writeRoots(f fn) map[*ast.SelectorExpr]bool {
 	info := f.pkg.TypesInfo
 	out := map[*ast.SelectorExpr]bool{}
@@ -371,8 +359,6 @@ func writeRoots(f fn) map[*ast.SelectorExpr]bool {
 	return out
 }
 
-// fieldArgs spells one argument per field for a struct argument: x.f for a side-effect-free
-// x, or the literal's own element for T{...} and &T{...}.
 func fieldArgs(cs clumpCallSite, arg ast.Expr, st paramStruct, text func(ast.Node) string) ([]string, error) {
 	e := ast.Unparen(arg)
 	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
@@ -502,14 +488,12 @@ func fieldIndex(st paramStruct, name string) int {
 	return -1
 }
 
-// supportSet is the declarations in one package whose parameter multiset contains a clump.
 type supportSet struct {
 	count   int
 	symbols []string
 }
 
-// support counts declarations carrying the clump types, as Columbo's Data Clump support
-// does, with the given expansions applied to their parameter lists.
+// support counts as Columbo's Data Clump support does.
 func support(p *program, pkgPath string, clump []string, es []expansion) supportSet {
 	want := multiset(clump)
 	expanded := map[string]expansion{}
@@ -545,10 +529,7 @@ type incidental struct {
 	symbols []string
 }
 
-// incidentalClump finds a multiset of at least size types that an expanded declaration now
-// shares with occ-1 other declarations, and did not carry before. Columbo reports every
-// closed frequent multiset, so a wide struct can complete a clump of common types (three
-// strings, say) with unrelated declarations long before its own field set recurs.
+// Columbo reports every closed frequent multiset, so a wide struct can complete a clump of common types with unrelated declarations.
 func incidentalClump(p *program, st paramStruct, es []expansion, size, occ int) (incidental, bool) {
 	expanded := map[string]expansion{}
 	for _, e := range es {

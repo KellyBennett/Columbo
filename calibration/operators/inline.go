@@ -13,8 +13,6 @@ import (
 	"github.com/uudashr/gocognit"
 )
 
-// inlineFunction is Inline Function, the inverse of Extract Function. Dose is the number
-// of call sites inlined into the parent, in source order.
 type inlineFunction struct {
 	id, target string
 }
@@ -197,8 +195,6 @@ func resolveCallee(c *harness.Corpus, parent fn, call *ast.CallExpr) (fn, bool) 
 	return fn{}, false
 }
 
-// inlinable is the restricted straight-line case the plan names: no defer, recover, go,
-// labels, named results, generics, variadics, or early returns.
 func inlinable(f fn) bool {
 	d := f.decl
 	if d.Body == nil || d.Type.TypeParams != nil || f.obj == nil {
@@ -264,8 +260,7 @@ func compatible(ic inlineCall, callee fn) bool {
 	return true
 }
 
-// shadows reports whether a package-level name the callee uses resolves to something
-// else at the call site, which would silently rebind it after inlining.
+// A package-level name resolving to something else at the call site would silently rebind after inlining.
 func shadows(parent fn, call *ast.CallExpr, callee fn) bool {
 	scope := parent.pkg.Types.Scope().Innermost(call.Pos())
 	if scope == nil {
@@ -383,7 +378,7 @@ func untyped(t types.Type) bool {
 	return ok && b.Info()&types.IsUntyped != 0
 }
 
-// simple arguments are substituted textually: re-evaluating them has no effect and no cost.
+// Simple arguments are substituted textually: re-evaluating them has no effect and no cost.
 func simple(e ast.Expr) bool {
 	switch e := e.(type) {
 	case *ast.Ident, *ast.BasicLit:
@@ -441,8 +436,7 @@ func refersTo(f fn, e ast.Expr, v *types.Var) bool {
 	return false
 }
 
-// qualifier prints types the way the target file names their packages, falling back to the
-// package name so the import fixer can add a missing import.
+// Falling back to the package name lets the import fixer add a missing import.
 func qualifier(u unit) types.Qualifier {
 	aliases := map[string]string{}
 	for _, imp := range u.file.Imports {
@@ -461,9 +455,6 @@ func qualifier(u unit) types.Qualifier {
 	}
 }
 
-// renameLocals prints n from the callee's source with every callee-local identifier
-// suffixed, so inlined names cannot collide with the parent's; substituted parameters
-// are replaced by their argument text.
 func renameLocals(callee fn, n ast.Node, suffix string, subst map[types.Object]string) string {
 	start := callee.offset(n.Pos())
 	var ss []splice
@@ -500,8 +491,7 @@ func renameLocals(callee fn, n ast.Node, suffix string, subst map[types.Object]s
 	return string(applySplices(text, ss))
 }
 
-// typeSwitchSymbols finds the x in `switch x := v.(type)`, which go/types never records as a
-// definition; only its per-clause implicit objects exist.
+// go/types never records the x in `switch x := v.(type)` as a definition; only its per-clause implicit objects exist.
 func typeSwitchSymbols(n ast.Node) map[*ast.Ident]bool {
 	out := map[*ast.Ident]bool{}
 	ast.Inspect(n, func(x ast.Node) bool {

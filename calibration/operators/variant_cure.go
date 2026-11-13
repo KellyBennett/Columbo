@@ -11,12 +11,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// replaceConditionalWithPolymorphism moves each arm of a type switch into a method on
-// that arm's concrete type, and replaces the switch with one dynamic dispatch through an
-// interface holding only the new method. Dose is how many of the domain's decisions it
-// cures. Only type-switch domains qualify: a value domain (an int or string enum) has no
-// types to carry the behavior, so curing it means replacing the enum with a type
-// hierarchy, which no mechanical edit can do.
+// Only type-switch domains qualify: a value enum has no types to carry the behavior, and replacing it with a hierarchy is not mechanical.
 type replaceConditionalWithPolymorphism struct{}
 
 func (replaceConditionalWithPolymorphism) ID() string           { return "replace-conditional-with-polymorphism" }
@@ -126,10 +121,7 @@ type polymorphicPlan struct {
 	methods []string
 }
 
-// polymorphicPlan accepts a type switch that opens its function, switches over a plain
-// identifier, and names one pointer type declared in this package per case. Pointer
-// cases keep dispatch exact: a value-receiver method would also match the pointer type,
-// which the switch sent to its default.
+// Pointer cases keep dispatch exact: a value-receiver method would also match the pointer type the switch sent to its default.
 func (s variantSite) polymorphicPlan() (polymorphicPlan, error) {
 	f := s.fn
 	n, ok := s.node.(*ast.TypeSwitchStmt)
@@ -268,9 +260,7 @@ func movableArm(body []ast.Stmt) bool {
 	return ok
 }
 
-// armFreeVars lists the function's parameters and receiver that the arms read, which
-// become the new method's parameters. The switch opens the function, so nothing else
-// local can be in scope.
+// The switch opens the function, so only parameters and the receiver can be in scope.
 func armFreeVars(f fn, arms []*ast.CaseClause) []*types.Var {
 	seen := map[*types.Var]bool{}
 	var out []*types.Var
@@ -318,8 +308,6 @@ func methodTaken(f fn, arms []*ast.CaseClause, name string) bool {
 	return false
 }
 
-// freshName returns base, numbered if needed, so it names nothing the function body
-// already mentions.
 func freshName(f fn, base string) string {
 	used := map[string]bool{}
 	ast.Inspect(f.decl, func(n ast.Node) bool {

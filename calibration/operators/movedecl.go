@@ -11,9 +11,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// moveDeclToFile moves one function declaration into a new file of the same package. It
-// only moves declarations with no comments, because prose-comment cases are anchored per
-// file and a moved comment would legitimately move its case.
+// Only comment-free declarations move: prose-comment cases anchor per file, so a moved comment would legitimately move its case.
 type moveDeclToFile struct{}
 
 func (moveDeclToFile) ID() string                                { return "move-decl-to-file" }
@@ -77,9 +75,7 @@ func declMovable(c *harness.Corpus, f fn) bool {
 	return unconstrained(f.path)
 }
 
-// unconstrained reports whether a file builds on every platform, so its declarations can
-// move to a file with no build constraint. A //go:build line or a GOOS or GOARCH file-name
-// suffix fails one of two disjoint platforms.
+// Any build constraint excludes at least one of two disjoint platforms.
 func unconstrained(file string) bool {
 	for _, p := range [][2]string{{"linux", "amd64"}, {"windows", "arm64"}} {
 		ctx := build.Default
@@ -91,8 +87,7 @@ func unconstrained(file string) bool {
 	return true
 }
 
-// movedRel names the new file after the declaration. The _decl suffix keeps the name clear
-// of _test and of GOOS and GOARCH suffixes.
+// The _decl suffix keeps the name clear of _test and of GOOS and GOARCH suffixes.
 func movedRel(f fn) string {
 	name := strings.ToLower(f.decl.Name.Name)
 	if f.decl.Recv != nil {
@@ -101,8 +96,7 @@ func movedRel(f fn) string {
 	return path.Join(path.Dir(f.rel), "moved_"+name+"_decl.go")
 }
 
-// importBlock copies the source file's named and plain imports so finish resolves the moved
-// declaration's selectors to the same packages; finish drops the ones it does not use.
+// Copying every import is safe because finish drops the ones the moved declaration does not use.
 func importBlock(u unit) string {
 	var b strings.Builder
 	b.WriteString("import (\n")

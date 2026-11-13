@@ -29,8 +29,7 @@ func TestInlineParameterObjectKillsAtOccurrences(t *testing.T) {
 			t.Errorf("reorder-params dose %d %s: %s", r.Dose, r.Status, r.Reason)
 		}
 	}
-	// Columbo compares parameter types, so one anonymous struct parameter hides both the
-	// clump and the long list. This pins the blind spot until a rule notices it.
+	// Columbo compares parameter types, so one anonymous struct parameter hides the clump and the long list; this pins that blind spot.
 	for _, op := range []string{"pack-anonymous-struct", "pack-anonymous-struct-lpl"} {
 		if len(byOp[op]) == 0 {
 			t.Errorf("%s never ran on a killed inject", op)

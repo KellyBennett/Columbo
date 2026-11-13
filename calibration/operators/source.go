@@ -159,8 +159,7 @@ func applySplices(src []byte, ss []splice) []byte {
 	return out
 }
 
-// finish formats a rewritten file and repairs its imports, so operators can emit
-// unformatted text and reference packages the target file did not import yet.
+// finish lets operators emit unformatted text and reference packages the file has not imported.
 func finish(path string, src []byte) ([]byte, error) {
 	out, err := imports.Process(path, src, &imports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: false})
 	if err != nil {
@@ -175,8 +174,7 @@ func nodeString(fset *token.FileSet, n any) string {
 	return b.String()
 }
 
-// bodyLines reimplements Columbo's function-lines metric: distinct physical lines that hold
-// a non-comment token inside the body braces, ignoring every brace and semicolon.
+// bodyLines reimplements Columbo's function-lines metric.
 func bodyLines(src []byte, body *ast.BlockStmt, fset *token.FileSet) int {
 	if body == nil {
 		return 0
@@ -209,8 +207,6 @@ func bodyLines(src []byte, body *ast.BlockStmt, fset *token.FileSet) int {
 	return len(lines)
 }
 
-// lineAware widens a deletion to its whole line when the comment is the only thing on it,
-// so removing a comment does not leave blank lines behind.
 func lineAware(src []byte, start, end int) splice {
 	ls := start
 	for ls > 0 && (src[ls-1] == ' ' || src[ls-1] == '\t') {

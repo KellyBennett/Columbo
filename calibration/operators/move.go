@@ -10,11 +10,7 @@ import (
 
 const envySmell = "feature-envy"
 
-// moveMethod is the inverse of Move Function. Without collaborator it turns a method into
-// a free function that takes the receiver as its first parameter. With collaborator it
-// moves the method onto the same-package type of one of its parameters, the plan's
-// "envied owner's collaborator". Either way the old receiver's own accesses become
-// foreign accesses. Collaborator dose is the parameter index plus one.
+// Collaborator dose is the parameter index plus one.
 type moveMethod struct {
 	id           string
 	collaborator bool
@@ -97,9 +93,7 @@ func (o moveMethod) Apply(c *harness.Corpus, site harness.Site, dose int) (harne
 	}, nil
 }
 
-// moveFunction is Move Function, the cure. For each baseline feature-envy case whose
-// qualifying group is a bare parameter of a same-package named type, it moves the
-// declaration onto that type. Dose is the parameter index plus one.
+// Dose is the parameter index plus one.
 type moveFunction struct{}
 
 func (moveFunction) ID() string           { return "move-function" }

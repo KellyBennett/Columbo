@@ -36,8 +36,7 @@ func run(args []string) error {
 	return fmt.Errorf("unknown command %q", args[0])
 }
 
-// resolveTempDir points TMPDIR at its symlink-free path, because columbo refuses a
-// symlinked source root and macOS keeps temp directories under the /var symlink.
+// columbo refuses a symlinked source root, and macOS keeps temp directories under the /var symlink.
 func resolveTempDir() error {
 	dir, err := filepath.EvalSymlinks(os.TempDir())
 	if err != nil {

@@ -8,10 +8,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// reorderDecls reverses the order of a file's top-level function, type, and constant
-// declarations. Variable declarations keep their slots because their initialization order
-// is observable, and a file with more than one init or blank function is skipped because
-// init#N and _#N number in declaration order and init order is observable.
+// Variable declarations keep their slots and multi-init or multi-blank files are skipped, because initialization order is observable.
 type reorderDecls struct{}
 
 func (reorderDecls) ID() string                                { return "reorder-decls" }
@@ -77,7 +74,6 @@ func reorderSpans(u unit) []span {
 	return spans
 }
 
-// declSpan covers a declaration with its doc comment and any comment trailing its last line.
 func (u unit) declSpan(d ast.Decl, doc *ast.CommentGroup) span {
 	start, end := d.Pos(), d.End()
 	if doc != nil {

@@ -10,16 +10,12 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// clumpEvade rewrites the parameter run an inline-parameter-object mutant left behind:
-// a consecutive run whose types match a same-package struct's fields in order. A site is
-// the struct type, and every function in its package that carries the run is rewritten.
 type clumpEvade struct {
 	id, follows, target string
 	catches             []string
 	rewrite             func(r *rewrite, p *program, run paramRun) (argMap, error)
 }
 
-// argMap respells one call's argument texts for a rewritten signature.
 type argMap func(cs clumpCallSite, args []string) []string
 
 func packAnonymousStruct(id, follows, target string) clumpEvade {
@@ -89,8 +85,6 @@ func (o clumpEvade) Apply(c *harness.Corpus, site harness.Site, _ int) (harness.
 	return harness.Applied{Edit: edit, Expectation: harness.Expectation{Touched: dedupe(touched), Catches: o.catches}}, nil
 }
 
-// paramRun is a run of consecutive named parameters whose types match a struct's fields
-// in order, which is the shape inline-parameter-object leaves.
 type paramRun struct {
 	f        fn
 	start, n int
@@ -125,9 +119,7 @@ func paramRuns(p *program, st paramStruct) []paramRun {
 
 func (run paramRun) params() []clumpParam { return params(run.f)[run.start : run.start+run.n] }
 
-// packRun replaces the run with one anonymous struct parameter. Anonymous struct types
-// with unexported field names differ across packages, so every caller must share the
-// function's package.
+// Anonymous struct types with unexported field names differ across packages, so every caller must share the function's package.
 func packRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 	f := run.f
 	for _, cs := range p.calls[funcKey(f.obj)] {
@@ -174,8 +166,7 @@ func packRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 	}, nil
 }
 
-// reverseRun reverses the run in the signature and at every call site. Reversing moves
-// argument evaluation, so every argument in the run must be free of effects.
+// Reversing moves argument evaluation, so every argument in the run must be free of effects.
 func reverseRun(r *rewrite, p *program, run paramRun) (argMap, error) {
 	f := run.f
 	for _, cs := range p.calls[funcKey(f.obj)] {

@@ -11,9 +11,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// isolateHelperCalls is the cheapest evade the cluster rule invites: wrap each statement of
-// a cosmetic parent in its own block. A nested block ends a cluster sequence, so the helper
-// calls no longer form one cluster even though nothing about the design changed.
+// A nested block ends a cluster sequence, so the helper calls stop forming one cluster though the design is unchanged.
 type isolateHelperCalls struct {
 	id, follows string
 }
@@ -96,8 +94,7 @@ func isolate(f fn, s ast.Stmt, qual types.Qualifier) (string, bool) {
 	return "", false
 }
 
-// helperTouched is the parent plus every same-package function it calls directly, so a
-// cosmetic or long-function case that lands on a helper still counts.
+// Helpers count as touched so a cosmetic or long-function case that lands on one still counts.
 func helperTouched(c *harness.Corpus, f fn) []string {
 	touched := []string{f.symbol}
 	ast.Inspect(f.decl.Body, func(n ast.Node) bool {

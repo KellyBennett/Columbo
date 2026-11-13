@@ -11,8 +11,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// accessGroup is one receiver value as Columbo's feature-envy rule keys it: a root variable
-// and an optional field path. Only groups whose static type is named are kept.
+// accessGroup keys a receiver value as Columbo's feature-envy rule does.
 type accessGroup struct {
 	root   *types.Var
 	path   string
@@ -23,8 +22,7 @@ type accessGroup struct {
 
 func (g *accessGroup) bare() bool { return g.path == "" }
 
-// envyProfile reimplements Columbo's feature-envy counting (SPEC "Feature Envy") for one
-// body, with own set to whichever variable is, or will be, the declaration's receiver.
+// envyProfile reimplements Columbo's feature-envy counting (SPEC "Feature Envy").
 type envyProfile struct {
 	own    int
 	groups []*accessGroup
@@ -154,7 +152,6 @@ func (p envyProfile) describe(l envyLimits) string {
 	return strings.Join(parts, ", ") + fmt.Sprintf(" (limit %d, ratio %.1f)", l.foreign, l.ratio)
 }
 
-// predictEnvy states whether the profile meets feature-envy's conditions.
 func predictEnvy(p envyProfile, l envyLimits, what string) harness.Prediction {
 	kill := len(p.qualifying(l)) > 0
 	return harness.Prediction{Kill: &kill, Reason: what + ": " + p.describe(l)}
@@ -167,8 +164,6 @@ func recvVarOf(f fn) *types.Var {
 	return recvVar(f)
 }
 
-// localNamed returns the named type a parameter can be moved onto: declared in pkg, not
-// generic, not an interface, and not itself a pointer.
 func localNamed(t types.Type, pkg *types.Package) (*types.Named, bool) {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()

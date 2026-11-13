@@ -37,9 +37,7 @@ func baselineProse(c *harness.Corpus, rel string) bool {
 	return false
 }
 
-// machineInput recognizes the comment spellings docs/prose-comments.md exempts. It keeps
-// every //go: line, which is broader than Columbo's allowlist: a cure that keeps an
-// unknown //go: line leaves its case standing instead of deleting machine input.
+// Keeping every //go: line is broader than Columbo's allowlist, so a cure leaves a case standing rather than delete machine input.
 func machineInput(text string) bool {
 	for _, p := range []string{"//go:", "// +build", "//line ", "/*line ", "//export ", "//nolint", "//lint:ignore", "//lint:file-ignore", "//columbo:ignore"} {
 		if strings.HasPrefix(text, p) {
@@ -67,8 +65,6 @@ func declDocOf(f *ast.File, imp *ast.ImportSpec) *ast.CommentGroup {
 	return nil
 }
 
-// addProseComment is the inverse of Delete Comment: it documents the first undocumented
-// top-level declaration of a comment-free file with an ordinary prose sentence.
 type addProseComment struct{}
 
 func (addProseComment) ID() string           { return "add-prose-comment" }
@@ -146,8 +142,6 @@ func (o addProseComment) Apply(c *harness.Corpus, site harness.Site, _ int) (har
 	}, nil
 }
 
-// proseToStringConstant is the cosmetic evade the prose policy names: it keeps the prose
-// but moves it from a doc comment into an unused string constant beside the declaration.
 type proseToStringConstant struct{}
 
 func (proseToStringConstant) ID() string           { return "prose-to-string-constant" }
@@ -239,8 +233,6 @@ func freeUnitName(u unit, base string, taken map[string]bool) string {
 	}
 }
 
-// deleteProseComments is the cure the policy asks for: remove every prohibited comment in
-// a file with a baseline prose-comment case, keeping machine input.
 type deleteProseComments struct{}
 
 func (deleteProseComments) ID() string           { return "delete-prose-comments" }

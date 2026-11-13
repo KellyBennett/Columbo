@@ -10,11 +10,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// variantSite reimplements Columbo's repeated-variant-decision trigger from the outside:
-// a value switch over a named integer or string type with constant cases, an if/else-if
-// chain of == comparisons between one discriminant and such constants, or a type switch
-// over a named interface whose cases are concrete types. Arms are the distinct variant
-// keys the decision names, in source order.
+// variantSite reimplements Columbo's repeated-variant-decision trigger from the outside.
 type variantSite struct {
 	fn     fn
 	node   ast.Node
@@ -227,8 +223,6 @@ func (s *variantSite) ifChain(first *ast.IfStmt) bool {
 	return true
 }
 
-// variantValuePath resolves a variable optionally followed by field selections, which is the
-// discriminant shape Columbo accepts in an if-chain.
 func variantValuePath(info *types.Info, e ast.Expr) (types.Object, string, bool) {
 	switch e := ast.Unparen(e).(type) {
 	case *ast.Ident:
@@ -247,7 +241,6 @@ func variantValuePath(info *types.Info, e ast.Expr) (types.Object, string, bool)
 	return nil, "", false
 }
 
-// variantDomains groups every decision site in the corpus by domain.
 func variantDomains(c *harness.Corpus) map[string][]variantSite {
 	out := map[string][]variantSite{}
 	for _, s := range variantSites(c) {
@@ -256,8 +249,6 @@ func variantDomains(c *harness.Corpus) map[string][]variantSite {
 	return out
 }
 
-// repeatedVariants applies Columbo's grouping: a variant is repeated when at least
-// minSites decisions name it; the domain fires when at least minVariants are repeated.
 func repeatedVariants(c *harness.Corpus, sites []variantSite) (repeated []string, fires bool) {
 	minSites := int(threshold(c, "repeated-variant-sites", 2))
 	minVariants := int(threshold(c, "repeated-variant-variants", 2))
@@ -288,8 +279,6 @@ func siteSymbols(sites []variantSite) []string {
 	return out
 }
 
-// domainTypeText spells the domain type at f's file, or reports that it cannot be
-// named there because it is unexported in another package.
 func domainTypeText(f fn, named *types.Named) (string, bool) {
 	obj := named.Obj()
 	if obj.Pkg() != nil && obj.Pkg() != f.pkg.Types && !obj.Exported() {

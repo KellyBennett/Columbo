@@ -144,8 +144,7 @@ func TestExtractFunctionCuresLongFunction(t *testing.T) {
 	}
 }
 
-// The block-isolation survivor is a known blind spot (see triage.yaml). When Columbo starts
-// seeing through bare blocks this test fails and the triage entry should be removed.
+// The block-isolation survivor is a known blind spot (triage.yaml); when this fails, remove the triage entry.
 func TestSplitIsCosmeticButBlockIsolationEvades(t *testing.T) {
 	rows := runFixture(t, "cosmetic", "split-long-function", "isolate-helper-calls")
 	var injects, evades int

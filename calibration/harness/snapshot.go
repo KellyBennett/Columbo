@@ -9,14 +9,12 @@ import (
 )
 
 type Snapshot struct {
-	Findings   []Finding
-	Thresholds map[string]float64
-	Version    string
-	// Dependencies maps a declaration symbol to its scored dependency identities.
-	Dependencies map[string][]string
-	// DuplicateFragments holds every declaration symbol that anchors a duplicate-code fragment.
+	Findings           []Finding
+	Thresholds         map[string]float64
+	Version            string
+	Dependencies       map[string][]string
 	DuplicateFragments map[string]bool
-	// Parameters holds each case's parameter receipts, keyed by case ID.
+	// Parameters is keyed by case ID.
 	Parameters map[string][]ParameterReceipt
 }
 

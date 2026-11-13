@@ -13,8 +13,7 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
 
-// collaborator is a foreign named type whose zero value is safe to construct and query,
-// so adding it changes a declaration's dependency set and nothing else.
+// A collaborator's zero value is safe to construct and query, so adding it changes the dependency set and nothing else.
 type collaborator struct {
 	path, name, typ, use string
 }
@@ -44,9 +43,7 @@ var collaboratorPool = []collaborator{
 
 const collaboratorVar = "calCollab"
 
-// addCollaborators is the inverse of splitting a declaration by collaborator group: it
-// makes a function construct and query dose new foreign named types. Doses straddle the
-// dependencies limit: the largest that should stay quiet and the smallest that should fire.
+// Doses straddle the dependencies limit: the largest that should stay quiet and the smallest that should fire.
 type addCollaborators struct{}
 
 func (addCollaborators) ID() string           { return "add-collaborators" }
@@ -113,9 +110,6 @@ func (o addCollaborators) Apply(c *harness.Corpus, site harness.Site, dose int) 
 	}, nil
 }
 
-// freshCollaborators lists the pool entries that would each add exactly one scored
-// identity: not already scored, not the function's own package, its package not already
-// scored as a bare package reference, and its package name free in the file.
 func freshCollaborators(c *harness.Corpus, f fn) []collaborator {
 	scored := c.Baseline.Dependencies[f.symbol]
 	var out []collaborator
@@ -155,9 +149,7 @@ func pathBase(path string) string {
 	return path
 }
 
-// routeThroughFacade is the cosmetic evade for added collaborators: it moves them into one
-// same-package unexported struct whose methods forward each query, so the function names
-// only the facade, which the dependency metric never scores.
+// The facade is a same-package type, which the dependency metric never scores.
 type routeThroughFacade struct{}
 
 func (routeThroughFacade) ID() string           { return "route-through-facade" }
@@ -183,7 +175,6 @@ type addedCollaborator struct {
 	decl, query            ast.Stmt
 }
 
-// addedCollaborators recognizes the statement pairs add-collaborators inserts.
 func addedCollaborators(f fn) []addedCollaborator {
 	if f.decl.Body == nil {
 		return nil
@@ -274,8 +265,6 @@ func collabLowerFirst(s string) string {
 	return string(r)
 }
 
-// collabFreeName returns base, or base with the smallest numeric suffix, that no package-level
-// object and no identifier in the function's file already uses.
 func collabFreeName(f fn, base string) string {
 	used := map[string]bool{}
 	ast.Inspect(f.file, func(n ast.Node) bool {

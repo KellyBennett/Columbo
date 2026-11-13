@@ -14,15 +14,12 @@ import (
 
 const selectionSmell = "selection-use-coupling"
 
-// roleInterface reports whether t is an interface with at least one method, the only kind
-// of role selection-use-coupling recognizes.
+// Only interfaces with at least one method count as roles for selection-use-coupling.
 func roleInterface(t types.Type) bool {
 	i, ok := types.Unalias(t).Underlying().(*types.Interface)
 	return ok && i.NumMethods() > 0
 }
 
-// selection is one conditional statement in a function that assigns concrete
-// implementations to a local of a role type, the shape SUC-001 calls a selection.
 type selection struct {
 	stmt    ast.Stmt
 	v       *types.Var
@@ -30,8 +27,6 @@ type selection struct {
 	impls   map[string]bool
 }
 
-// selections finds the outermost if-chains and expression switches in f that assign
-// concrete values to role-typed locals. Function literals are analysis boundaries.
 func selections(f fn) []selection {
 	var out []selection
 	info := f.pkg.TypesInfo
@@ -87,8 +82,7 @@ func implIdentity(t types.Type) string {
 	return types.TypeString(t, nil)
 }
 
-// usedAsRole reports whether v receives an interface method call after pos outside any
-// function literal, and whether it ever flows to a return, which exempts it.
+// Flowing to a return exempts a role variable.
 func usedAsRole(f fn, v *types.Var, pos token.Pos) (called, returned bool) {
 	info := f.pkg.TypesInfo
 	ast.Inspect(f.decl.Body, func(n ast.Node) bool {
@@ -135,9 +129,6 @@ func eligibleUser(f fn) bool {
 	return ok
 }
 
-// selectThenUse inlines a selecting factory into a caller that then sends the result a
-// message, which is the inverse of Extract Factory. A factory qualifies when its body is
-// only a decision whose every path returns one expression.
 type selectThenUse struct{}
 
 func (selectThenUse) ID() string           { return "select-then-use" }
@@ -154,10 +145,10 @@ type factoryCall struct {
 }
 
 type factoryShape struct {
-	// tag is the switch tag text; empty for an if-chain.
+	// tag is empty for an if-chain.
 	tag      string
 	isSwitch bool
-	heads    []string // case lists or conditions
+	heads    []string
 	results  []ast.Expr
 	fallback ast.Expr
 }
@@ -222,9 +213,6 @@ func factoryCalls(c *harness.Corpus, u fn) []factoryCall {
 	return out
 }
 
-// selectingFactory recognizes `switch t { case X: return a; ... }` or a run of
-// `if cond { return a }`, closed by a final return or a default, and requires at least
-// two distinct concrete results.
 func selectingFactory(f fn) (factoryShape, bool) {
 	d := f.decl
 	if d.Body == nil || f.obj == nil || d.Recv != nil || d.Type.TypeParams != nil || namedResults(d) {
@@ -323,8 +311,7 @@ func factoryImpls(f fn, shape factoryShape) map[string]bool {
 	return impls
 }
 
-// opaque reports a result that is neither nil nor concrete: an interface-typed value,
-// which SUC-001 treats as an unknown origin that can hide the alternatives.
+// SUC-001 treats an interface-typed result as an unknown origin that can hide the alternatives.
 func opaque(f fn, shape factoryShape) bool {
 	for _, r := range append(append([]ast.Expr{}, shape.results...), shape.fallback) {
 		if r == nil {
@@ -406,9 +393,6 @@ func (selectThenUse) Apply(c *harness.Corpus, site harness.Site, _ int) (harness
 	}, nil
 }
 
-// bindParams evaluates the call's arguments once, in order, into the factory's parameter
-// names, discarding the ones the body never reads and skipping arguments that already
-// carry the parameter's name.
 func bindParams(fac fn, call *ast.CallExpr, u fn) string {
 	sig := fac.obj.Type().(*types.Signature)
 	if sig.Params().Len() == 0 {
@@ -439,9 +423,7 @@ func bindParams(fac fn, call *ast.CallExpr, u fn) string {
 	return strings.Join(names, ", ") + " " + op + " " + strings.Join(args, ", ")
 }
 
-// launderSelection is the cosmetic evade: every concrete assignment in the selection is
-// passed through an identity helper typed as the role. The caller still chooses each
-// concrete player; the rule only stops seeing their types.
+// The caller still chooses each concrete player; the rule only stops seeing their types.
 type launderSelection struct{}
 
 func (launderSelection) ID() string           { return "launder-selection-through-role" }
@@ -509,9 +491,6 @@ func (launderSelection) Apply(c *harness.Corpus, site harness.Site, _ int) (harn
 	}, nil
 }
 
-// extractFactory is Extract Function aimed at the selection: each selection statement
-// moves into a helper that takes the role's current value and returns the role, so the
-// caller keeps only collaboration.
 type extractFactory struct{}
 
 func (extractFactory) ID() string           { return "extract-factory" }
@@ -538,8 +517,7 @@ func (extractFactory) Sites(c *harness.Corpus) []harness.Site {
 	return out
 }
 
-// sharedStatements rejects one statement selecting two roles; extracting it twice would
-// need a helper with two results.
+// Extracting one statement for two roles would need a helper with two results.
 func sharedStatements(sels []selection) bool {
 	seen := map[ast.Stmt]bool{}
 	for _, s := range sels {
@@ -557,9 +535,6 @@ type extraction struct {
 	free []*types.Var
 }
 
-// factoryPlan checks that the selection statement can move into a function unchanged:
-// it may not jump out, return, defer, or write any local other than the role variable,
-// and every local it reads must be copyable without changing meaning.
 func factoryPlan(f fn, s selection) (extraction, error) {
 	info := f.pkg.TypesInfo
 	start, end := s.stmt.Pos(), s.stmt.End()
@@ -681,8 +656,6 @@ func factoryPlan(f fn, s selection) (extraction, error) {
 	return extraction{free: free}, nil
 }
 
-// copyable accepts types whose copy shares or equals the original: scalars, strings,
-// pointers, interfaces, maps, slices, channels, and functions, all nameable outside f.
 func copyable(f fn, t types.Type) bool {
 	switch u := types.Unalias(t).(type) {
 	case *types.Named:

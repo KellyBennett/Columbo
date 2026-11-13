@@ -18,9 +18,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// program is a type-checked view of a module that includes _test.go files, so an operator
-// that changes a signature can rewrite every call site, tests included. Functions are keyed
-// by types.Func.FullName, which is stable across a package and its test variant.
+// Functions are keyed by types.Func.FullName, which is stable across a package and its test variant.
 type program struct {
 	units      []unit
 	calls      map[string][]clumpCallSite
@@ -63,8 +61,7 @@ func loadProgram(root string) (*program, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A test variant ("p [p.test]") type-checks the package's own files together with its
-	// internal tests, so prefer it over the plain package for files both contain.
+	// A test variant ("p [p.test]") also type-checks internal tests, so prefer it for files both contain.
 	sort.SliceStable(pkgs, func(i, j int) bool { return strings.Contains(pkgs[i].ID, " [") && !strings.Contains(pkgs[j].ID, " [") })
 	p := &program{calls: map[string][]clumpCallSite{}, values: map[string]int{}, ifaceNames: map[string]bool{}}
 	seen := map[string]bool{}
@@ -147,7 +144,6 @@ func calleeIdent(e ast.Expr) *ast.Ident {
 
 func funcKey(f *types.Func) string { return f.Origin().FullName() }
 
-// funcs lists the function declarations in non-test files.
 func (p *program) funcs() []fn {
 	var out []fn
 	for _, u := range p.units {
@@ -175,8 +171,6 @@ func (p *program) fn(symbol string) (fn, bool) {
 	return fn{}, false
 }
 
-// rewritable reports why a function's signature cannot change safely: it is generic, used
-// as a value, may satisfy an interface, or has a call site that spreads a multi-value call.
 func (p *program) rewritable(f fn) error {
 	sig := f.obj.Type().(*types.Signature)
 	if f.decl.Body == nil || f.decl.Type.TypeParams != nil || (sig.Recv() != nil && isGenericRecv(sig)) {
@@ -197,14 +191,13 @@ func (p *program) rewritable(f fn) error {
 	return nil
 }
 
-// params expands a declaration's parameter list into one entry per declared name, as
-// Columbo's Parameters metric counts them; an unnamed field counts once.
 type clumpParam struct {
 	field *ast.Field
 	name  *ast.Ident
 	v     *types.Var
 }
 
+// params counts one entry per declared name, as Columbo's Parameters metric does; an unnamed field counts once.
 func params(f fn) []clumpParam {
 	sig := f.obj.Type().(*types.Signature)
 	var out []clumpParam
@@ -225,7 +218,6 @@ func params(f fn) []clumpParam {
 
 func (p clumpParam) named() bool { return p.name != nil && p.name.Name != "_" }
 
-// paramText prints one parameter, keeping the declaration's own spelling of its type.
 func paramText(f fn, p clumpParam, unnamed bool) string {
 	typ := f.text(p.field.Type)
 	if unnamed || p.name == nil {
@@ -236,8 +228,7 @@ func paramText(f fn, p clumpParam, unnamed bool) string {
 
 var byteRune = regexp.MustCompile(`\b(byte|rune)\b`)
 
-// clumpCanonical approximates Columbo's clumpCanonical type string closely enough to compare
-// parameter types within one package.
+// clumpCanonical approximates Columbo's clumpCanonical closely enough to compare parameter types within one package.
 func clumpCanonical(t types.Type) string {
 	s := types.TypeString(types.Unalias(t), nil)
 	return byteRune.ReplaceAllStringFunc(s, func(m string) string {
@@ -273,8 +264,6 @@ func paramTypes(f fn) []string {
 	return out
 }
 
-// usedNames collects every identifier spelled inside a declaration, so a clumpFresh name
-// cannot capture or shadow anything the declaration refers to.
 func usedNames(n ast.Node) map[string]bool {
 	used := map[string]bool{}
 	ast.Inspect(n, func(x ast.Node) bool {
@@ -307,7 +296,6 @@ func clumpUpperFirst(s string) string {
 	return string(r)
 }
 
-// pure expressions have no calls or receives, so moving or repeating them changes nothing.
 func pure(e ast.Expr) bool {
 	ok := true
 	ast.Inspect(e, func(n ast.Node) bool {
@@ -322,9 +310,7 @@ func pure(e ast.Expr) bool {
 	return ok
 }
 
-// rewrite collects splices across files. Splices may nest: render returns a range's text
-// with every already-recorded splice inside it applied and consumed, so an outer rewrite
-// (a call-site argument) can carry an inner one (a renamed parameter use) along.
+// Splices may nest: render applies and consumes every recorded splice inside a range, so an outer rewrite carries inner ones along.
 type rewrite struct {
 	units map[string]unit
 	edits map[string][]splice
@@ -373,13 +359,11 @@ func (r *rewrite) edit() (harness.Edit, error) {
 	return out, nil
 }
 
-// replaceParams splices a new parameter list text in place of a declaration's own.
 func replaceParams(r *rewrite, f fn, list []string) {
 	fl := f.decl.Type.Params
 	r.add(f.unit, f.offset(fl.Opening)+1, f.offset(fl.Closing), strings.Join(list, ", "))
 }
 
-// replaceArgs splices new argument texts for a call, rendering nested rewrites first.
 func replaceArgs(r *rewrite, cs clumpCallSite, args []string) {
 	r.add(cs.unit, cs.offset(cs.call.Lparen)+1, cs.offset(cs.call.Rparen), strings.Join(args, ", "))
 }
@@ -392,15 +376,12 @@ func argTexts(r *rewrite, cs clumpCallSite) []string {
 	return out
 }
 
-// sortCallsInnermostFirst orders call sites so a call nested in another's arguments is
-// rewritten first and its text travels inside the outer rewrite.
 func sortCallsInnermostFirst(cs []clumpCallSite) {
 	sort.SliceStable(cs, func(i, j int) bool {
 		return cs[i].call.End()-cs[i].call.Pos() < cs[j].call.End()-cs[j].call.Pos()
 	})
 }
 
-// qualifierFor names pkgPath as the unit spells it, or "" for the unit's own package.
 func qualifierFor(u unit, pkgPath string) (string, bool) {
 	if u.pkg.PkgPath == pkgPath {
 		return "", true

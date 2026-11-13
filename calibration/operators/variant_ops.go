@@ -12,10 +12,7 @@ import (
 
 const variantSmell = "repeated-variant-decision"
 
-// repeatVariantDecision is Replace Polymorphism with Conditional at a second site: next to
-// an existing variant decision, add a function that decides over the same variants again.
-// Dose is the number of the original decision's variants the new decision repeats. A
-// one-variant decision is not a site at all, so dose 1 never counts toward the domain.
+// A one-variant decision is not a site at all, so dose 1 never counts toward the domain.
 type repeatVariantDecision struct{}
 
 func (repeatVariantDecision) ID() string           { return "repeat-variant-decision" }
@@ -106,9 +103,7 @@ func (repeatVariantDecision) Apply(c *harness.Corpus, site harness.Site, dose in
 	}, nil
 }
 
-// decisionToMapLookup is the cosmetic evade: the repeated decision becomes a lookup in a
-// table keyed by the same variants. The variant knowledge is still written out at the
-// second site; only its syntax changed.
+// The variant knowledge is still written out at the second site; only its syntax changed.
 type decisionToMapLookup struct{}
 
 func (decisionToMapLookup) ID() string           { return "decision-to-map-lookup" }
@@ -128,8 +123,6 @@ func (decisionToMapLookup) Sites(c *harness.Corpus) []harness.Site {
 
 func (decisionToMapLookup) Doses(*harness.Corpus, harness.Site) []int { return []int{1} }
 
-// lookupShape accepts a decision that only maps each variant to a constant result and
-// returns a fallback otherwise, which is the shape a table can replace exactly.
 func lookupShape(s variantSite) ([]string, bool) {
 	body := s.fn.decl.Body.List
 	if len(body) != 2 || body[0] != s.node || s.fn.decl.Type.Params.NumFields() != 1 {
