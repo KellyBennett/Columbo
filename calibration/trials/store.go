@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS lead_checks (
  symbol TEXT NOT NULL,
  lead_ordinal INTEGER NOT NULL,
  lead TEXT NOT NULL,
+ reading TEXT NOT NULL,
  refactoring TEXT NOT NULL,
  operator TEXT NOT NULL,
  outcome TEXT NOT NULL,
@@ -86,7 +87,7 @@ CREATE TABLE IF NOT EXISTS lead_checks (
 type Store struct{ db *sql.DB }
 
 // newestColumns are the last columns each table gained; a table without them predates the scorer that fills them.
-var newestColumns = map[string][]string{"trials": {"agent_columbo", "tests"}}
+var newestColumns = map[string][]string{"trials": {"agent_columbo", "tests"}, "lead_checks": {"reading"}}
 
 // NewStore adds the phase 8 tables to an open calibration database.
 func NewStore(db *sql.DB) (*Store, error) {
@@ -213,10 +214,10 @@ func (s *Store) NextBatch() (int64, error) {
 
 func (s *Store) RecordLead(batch int64, prov Provenance, c LeadCheck) error {
 	_, err := s.db.Exec(`INSERT INTO lead_checks (batch, corpus_module, corpus_version, columbo_version, config_hash, validity,
-		smell, case_id, symbol, lead_ordinal, lead, refactoring, operator, outcome, applications, dose, reason)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		smell, case_id, symbol, lead_ordinal, lead, reading, refactoring, operator, outcome, applications, dose, reason)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		batch, prov.Module, prov.Version, prov.Columbo, prov.ConfigHash, prov.Validity,
-		c.Case.Smell, c.Case.CaseID, c.Case.Symbol, c.Ordinal, c.Lead, c.Refactoring.Name, c.Refactoring.Operator,
+		c.Case.Smell, c.Case.CaseID, c.Case.Symbol, c.Ordinal, c.Lead, string(c.Refactoring.Reading), c.Refactoring.Name, c.Refactoring.Operator,
 		string(c.Outcome), c.Applications, c.Dose, c.Reason)
 	return err
 }

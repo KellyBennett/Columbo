@@ -82,15 +82,19 @@ FROM t ORDER BY smell, corpus_module, site_symbol, dose, repeat`,
 	},
 	{
 		title: "Leads by smell",
-		note: "Each lead Columbo wrote on a natural case in the corpora, and what applying the refactoring it names did to that same case, with no model involved. " +
-			"Cleared: the cure removed the case and added nothing. Conflict: removed it but set off another rule. Survived: the case remains. " +
-			"Not applicable: the cure has no mechanical application at that case. A lead that asks a question or says what to inspect names no refactoring.",
+		note: "Each lead Columbo wrote on a natural case in the corpora, and what applying the refactoring the harness maps it to did to that same case, with no model involved. " +
+			"Reading says how the harness got there: `says` when the lead's text names the change; `points toward` when the lead asks the reader to inspect something or answers a question, names what to look for, and the harness judged one refactoring the obvious action on finding it; `names none` when it names nothing specific or its answer acts on a test, a contract, or code outside the case. The `points toward` rows are the harness's judgment, listed here so a reader can discount them. " +
+			"Cleared: the cure removed the case and added nothing. Conflict: removed it but set off another rule. Survived: the case remains. Invalid: the cured code failed vet, or on a fixture its tests. " +
+			"No site: the cure has no application aimed at the case; cure operators take sites only where their own target smell is reported, so a cure for another smell usually has none. Refused: the cure had a site at the case and declined to rewrite it. " +
+			"extract-function extracts at most three segments, so a long-function case that survives it shows the limit of that mechanical cure, not that the lead's advice fails. " +
+			"delete-prose-comments deletes the reported comment, and the case is the comment, so its clearing the prose case is close to true by construction; it shows only that deleting the comment sets off nothing else.",
 		query: `WITH ` + latestLeads + `
 SELECT smell, lead,
- CASE WHEN refactoring = '' THEN 'names no refactoring' ELSE refactoring END AS refactoring,
+ CASE WHEN refactoring = '' THEN 'names none' ELSE reading END AS reading,
+ CASE WHEN refactoring = '' THEN '' ELSE refactoring END AS refactoring,
  CASE WHEN refactoring <> '' AND operator = '' THEN 'no cure operator' ELSE operator END AS cure,
  count(*) AS cases, sum(outcome = 'cleared') AS cleared, sum(outcome = 'conflict') AS conflict, sum(outcome = 'survived') AS survived,
- sum(outcome = 'invalid') AS invalid, sum(outcome = 'not-applicable') AS not_applicable
+ sum(outcome = 'invalid') AS invalid, sum(outcome = 'no-site') AS no_site, sum(outcome = 'refused') AS refused
 FROM l GROUP BY smell, lead ORDER BY smell, min(lead_ordinal), lead`,
 	},
 	{
@@ -98,7 +102,7 @@ FROM l GROUP BY smell, lead ORDER BY smell, min(lead_ordinal), lead`,
 		query: `WITH ` + latestLeads + `
 SELECT corpus_module, corpus_version, validity, count(DISTINCT case_id) AS cases, count(*) AS leads,
  sum(operator <> '') AS leads_with_cure, sum(outcome = 'cleared') AS cleared, sum(outcome = 'conflict') AS conflict,
- sum(outcome = 'survived') AS survived, sum(outcome = 'invalid') AS invalid, sum(outcome = 'not-applicable') AS not_applicable
+ sum(outcome = 'survived') AS survived, sum(outcome = 'invalid') AS invalid, sum(outcome = 'no-site') AS no_site, sum(outcome = 'refused') AS refused
 FROM l GROUP BY corpus_module ORDER BY corpus_module`,
 	},
 	{

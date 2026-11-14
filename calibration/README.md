@@ -200,15 +200,38 @@ restores the original at distance 0.
 ### How a lead check runs
 
 `calibrate trials leads` reads every lead Columbo wrote on each natural case of a corpus and
-looks it up in `leadRefactorings` in `trials/leads.go`. A lead names a refactoring only when
-its text tells the reader to perform one. A question or an instruction to inspect names none.
-For a lead that names a refactoring with a cure operator, the checker applies that operator at
+looks it up in `leadRefactorings` in `trials/leads.go`. That table maps each lead to the cure
+it most plausibly points toward, and records how it got there:
+
+- `says`: the lead's text names the change, as an instruction ("Move behavior toward the
+  object that owns its data"), a suggestion ("Consider moving..."), or a condition ("Introduce
+  a parameter object only if...").
+- `points toward`: the lead asks the reader to inspect something or answers a question, names
+  what to look for, and one refactoring at the case's own code is the obvious action on
+  finding it. "Look for cohesive responsibilities with different reasons to change" points
+  toward Extract Function. "Do these dependencies support one cohesive operation?" points
+  toward splitting the function by collaborator. This is the harness's judgment, not the
+  lead's words, and the report lists it beside every lead so a reader can discount it.
+- Names none: the lead names nothing specific to find ("Review each qualifying foreign
+  value..."), or acting on it means a test, a contract, documentation, or code outside the case.
+
+For a lead mapped to a refactoring with a cure operator, the checker applies that operator at
 every site and dose aimed at the case, meaning it rewrites one of the case's declarations in
 one of its files. It scores each application against the lead's own case, which may be a
 different smell from the one the operator targets. The best application decides the outcome:
-`cleared`, `conflict` (cleared but another rule fired), `survived`, or `invalid`. A lead whose
-operator has no site at the case is `not-applicable`. A lead whose refactoring has no operator
-is `no-operator`. Lead text missing from the table is `unclassified`, and the report lists it.
+`cleared`, `conflict` (cleared but another rule fired), `survived`, or `invalid`. When no
+application reaches the case, the outcome says why. `no-site` means the operator has no
+application aimed at the case, usually because cure operators take sites only where their own
+target smell is reported. `refused` means the operator had a site at the case and declined to
+rewrite it, and the reason gives its refusal. A lead whose refactoring has no operator is
+`no-operator`. Lead text missing from the table is `unclassified`, and the report lists it.
+
+Two cures need care when reading the results. `extract-function` extracts at most three
+segments, so a long-function case that survives it shows the limit of that mechanical cure,
+not that "look for cohesive responsibilities" is bad advice. `delete-prose-comments` is not a
+catalog refactoring. It deletes the reported comment, and the prose case is the comment, so
+its clearing that case is close to true by construction. It shows only that deleting the
+comment sets off no other rule.
 
 ## Decision trail
 

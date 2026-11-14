@@ -26,6 +26,24 @@ func TestEveryNamedCureIsARegisteredCureOperator(t *testing.T) {
 			t.Errorf("%q has a cure but names no refactoring", lead)
 		}
 	}
+	for lead, ref := range leadRefactorings {
+		if (ref.Name == "") != (ref.Reading == "") {
+			t.Errorf("%q maps to %q with reading %q; a refactoring needs a reading and none needs none", lead, ref.Name, ref.Reading)
+		}
+	}
+}
+
+func TestACureThatDeclinesTheCaseIsRefusedNotSiteless(t *testing.T) {
+	outcomes := map[LeadOutcome]int{}
+	for _, c := range checkFixture(t, "fixtures/dup") {
+		outcomes[c.Outcome]++
+		if c.Outcome == LeadRefused && !strings.Contains(c.Reason, "delegate-duplicate refused") {
+			t.Errorf("refused lead on %s gives reason %q, want the operator's refusal", c.Case.Symbol, c.Reason)
+		}
+	}
+	if outcomes[LeadRefused] == 0 || outcomes[LeadNoSite] == 0 {
+		t.Fatalf("fixtures/dup lead outcomes %v, want both a refusal and a cure with no site", outcomes)
+	}
 }
 
 func TestAProseCaseClearsEvenWhenASiblingFileSharesItsSymbol(t *testing.T) {
@@ -82,8 +100,8 @@ func TestLeadsThatNameACureClearTheirOwnCases(t *testing.T) {
 	want := map[string]map[string]LeadOutcome{
 		"fixtures/envy":     {"Consider moving cohesive behavior toward the owner": LeadCleared, "Review each qualifying foreign value": LeadNoRefactoring},
 		"fixtures/prose":    {"Remove obsolete explanations": LeadCleared, "write a regression test": LeadNoRefactoring},
-		"fixtures/variants": {"interchangeable role players": LeadCleared, "evaluate a visitor": LeadNoOperator, "Move behavior toward the object or role": LeadNotApplicable},
-		"fixtures/extract":  {"Look for cohesive responsibilities": LeadCleared, "Move behavior toward the object that owns": LeadNotApplicable},
+		"fixtures/variants": {"interchangeable role players": LeadCleared, "evaluate a visitor": LeadNoOperator, "Move behavior toward the object or role": LeadNoSite},
+		"fixtures/extract":  {"Look for cohesive responsibilities": LeadCleared, "Move behavior toward the object that owns": LeadNoSite},
 	}
 	for fixture, leads := range want {
 		checks := checkFixture(t, fixture)

@@ -10,68 +10,87 @@ import (
 	"github.com/KellyBennett/Columbo/calibration/operators"
 )
 
-// Refactoring is what a lead names. Name is empty when the lead names none; Operator is empty when the harness has no cure that performs it.
+// Reading is how the harness got from a lead's text to a refactoring.
+type Reading string
+
+const (
+	// Says means the lead's text names the change, as an instruction, a suggestion, or a condition.
+	Says Reading = "says"
+	// PointsToward means the lead asks the reader to inspect something or answers a question, names what to look for,
+	// and the harness judged one refactoring at the case's own code the obvious action on finding it. The judgment is
+	// the harness's, not the lead's words.
+	PointsToward Reading = "points toward"
+)
+
+// Refactoring is the cure the harness maps a lead to. Name is empty when the lead points at no single refactoring;
+// Operator is empty when the harness has no cure that performs it.
 type Refactoring struct {
 	Name     string
 	Operator string
+	Reading  Reading
 }
 
-// leadRefactorings classifies every lead Columbo writes into case_guidance. A lead counts as naming a refactoring
-// only when its text tells the reader to perform one; a question or an instruction to inspect names none.
+// leadRefactorings maps every lead Columbo writes into case_guidance to the cure it most plausibly points toward. An
+// inspection or question that names nothing specific to find, or whose answer acts on a test, a contract, or code outside
+// the case, maps to none.
 var leadRefactorings = map[string]Refactoring{
-	"Look for cohesive responsibilities with different reasons to change.": {"Extract Function", "extract-function"},
-	"Move behavior toward the object that owns its data.":                  {"Move Function", "move-function"},
+	"Look for cohesive responsibilities with different reasons to change.": {"Extract Function", "extract-function", PointsToward},
+	"Move behavior toward the object that owns its data.":                  {"Move Function", "move-function", Says},
 
-	"Examine whether inputs form a cohesive domain object.":    {"Introduce Parameter Object", "introduce-parameter-object"},
-	"Separate responsibilities that require different inputs.": {"Extract Function", "extract-function"},
+	"Examine whether inputs form a cohesive domain object.":    {"Introduce Parameter Object", "introduce-parameter-object", PointsToward},
+	"Separate responsibilities that require different inputs.": {"Extract Function", "extract-function", Says},
 
-	"Clarify early exits and simplify nested decisions.":        {"Replace Nested Conditional with Guard Clauses", ""},
-	"Examine whether variants deserve meaningful abstractions.": {"Replace Conditional with Polymorphism", "replace-conditional-with-polymorphism"},
+	"Clarify early exits and simplify nested decisions.":        {"Replace Nested Conditional with Guard Clauses", "", Says},
+	"Examine whether variants deserve meaningful abstractions.": {"Replace Conditional with Polymorphism", "replace-conditional-with-polymorphism", PointsToward},
 
-	"Does the caller know details its dependency could own?": {},
-	"Is policy repeated across boundaries?":                  {},
-	"Are behavioral assumptions explicit in the contract?":   {},
-	"Do these dependencies support one cohesive operation?":  {},
+	"Does the caller know details its dependency could own?": {"Move Function", "move-function", PointsToward},
+	"Is policy repeated across boundaries?":                  {"Extract Function", "delegate-duplicate", PointsToward},
+	"Are behavioral assumptions explicit in the contract?":   {"Introduce Assertion", "", PointsToward},
+	"Do these dependencies support one cohesive operation?":  {"Extract Function", "split-by-collaborators", PointsToward},
 	"Compare supplied arguments and consumed results with types appearing only in signatures or discarded results; origin lists overlap and do not alter the score.": {},
 
 	"Review each qualifying foreign value and its contributing accesses.": {},
-	"Consider moving cohesive behavior toward the owner of that data.":    {"Move Function", "move-function"},
-	"A qualifying value's type is declared in another package, so Go cannot take new methods on it. Consider a local type that wraps it and owns this behavior, or a value holding only the fields this code reads.": {"Introduce Local Extension", ""},
+	"Consider moving cohesive behavior toward the owner of that data.":    {"Move Function", "move-function", Says},
+	"A qualifying value's type is declared in another package, so Go cannot take new methods on it. Consider a local type that wraps it and owns this behavior, or a value holding only the fields this code reads.": {"Introduce Local Extension", "", Says},
 
-	"Inspect the participating signatures and struct types for a shared domain concept.": {},
-	"Introduce a parameter object only if the values belong together.":                   {"Introduce Parameter Object", "introduce-parameter-object"},
-	"Every member of this clump has a primitive type. Consider a distinct named type for each kind of value, such as one ID type per identifier; the type checker would then see the clump and reject values passed in each other's place.": {"Replace Primitive with Object", ""},
+	"Inspect the participating signatures and struct types for a shared domain concept.": {"Introduce Parameter Object", "introduce-parameter-object", PointsToward},
+	"Introduce a parameter object only if the values belong together.":                   {"Introduce Parameter Object", "introduce-parameter-object", Says},
+	"Every member of this clump has a primitive type. Consider a distinct named type for each kind of value, such as one ID type per identifier; the type checker would then see the clump and reject values passed in each other's place.": {"Replace Primitive with Object", "", Says},
 
 	"Review the qualifying helpers with their shared inputs and dependencies.": {},
 	"Establish cohesive boundaries with distinct ownership and collaboration.": {},
 
-	"Compare every duplicate-fragment receipt and identify knowledge that must change together.": {},
-	"Share an operation only when the copies own the same policy.":                               {"Extract Function", "delegate-duplicate"},
+	"Compare every duplicate-fragment receipt and identify knowledge that must change together.": {"Extract Function", "delegate-duplicate", PointsToward},
+	"Share an operation only when the copies own the same policy.":                               {"Extract Function", "delegate-duplicate", Says},
 
-	"Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves.":                                                                         {"Replace Conditional with Polymorphism", "replace-conditional-with-polymorphism"},
-	"If the variants select implementations, use a factory or construction boundary to select once and return a common behavioral role; callers then send messages through that role.":                    {"Replace Constructor with Factory Function", "extract-factory"},
-	"If independent operations inspect the same variants, evaluate a visitor or adapter with one dispatch boundary; keep operation-specific behavior, traversal policy, and results with each operation.": {"Introduce Visitor", ""},
-	"If branches merely map variants to data, consider a data-driven representation owned near the variant definition.":                                                                                   {"Replace Conditional with Lookup Table", ""},
-	"Move behavior toward the object or role that has the knowledge required to perform it.":                                                                                                              {"Move Function", "move-function"},
-	"The selected implementations already respond to the same required messages. Consider expressing that collaboration as a role owned by the consumer.":                                                 {"Extract Interface", ""},
+	"Examine whether callers can send the same message to interchangeable role players instead of selecting behavior themselves.":                                                                         {"Replace Conditional with Polymorphism", "replace-conditional-with-polymorphism", PointsToward},
+	"If the variants select implementations, use a factory or construction boundary to select once and return a common behavioral role; callers then send messages through that role.":                    {"Replace Constructor with Factory Function", "extract-factory", Says},
+	"If independent operations inspect the same variants, evaluate a visitor or adapter with one dispatch boundary; keep operation-specific behavior, traversal policy, and results with each operation.": {"Introduce Visitor", "", Says},
+	"If branches merely map variants to data, consider a data-driven representation owned near the variant definition.":                                                                                   {"Replace Conditional with Lookup Table", "", Says},
+	"Move behavior toward the object or role that has the knowledge required to perform it.":                                                                                                              {"Move Function", "move-function", Says},
+	"The selected implementations already respond to the same required messages. Consider expressing that collaboration as a role owned by the consumer.":                                                 {"Extract Interface", "", Says},
 
-	"Consider moving implementation selection into a factory or composition boundary that returns the role.":      {"Replace Constructor with Factory Function", "extract-factory"},
-	"Consider accepting the role as a dependency instead of deciding which concrete player to use here.":          {"Parameterize Function", ""},
-	"Keep collaboration expressed in terms of the role while centralizing knowledge of concrete implementations.": {},
+	"Consider moving implementation selection into a factory or composition boundary that returns the role.":      {"Replace Constructor with Factory Function", "extract-factory", Says},
+	"Consider accepting the role as a dependency instead of deciding which concrete player to use here.":          {"Parameterize Function", "", Says},
+	"Keep collaboration expressed in terms of the role while centralizing knowledge of concrete implementations.": {"Replace Constructor with Factory Function", "extract-factory", PointsToward},
 
 	"If a comment preserves an intentional omission or guards against a future fix, write a regression test that fails when the unwanted behavior is introduced. Comments are not a reliable enforcement mechanism.": {},
 	"Express intent through clear names, cohesive structure, and executable contracts; preserve useful design rationale in external documentation.":                                                                  {},
-	"Remove obsolete explanations and commented-out code after preserving any required behavior in tests.":                                                                                                           {"Remove Dead Code", "delete-prose-comments"},
+	// Deleting the comment is not a catalog refactoring, and since the case is the comment, clearing it is close to true by construction.
+	"Remove obsolete explanations and commented-out code after preserving any required behavior in tests.": {"Delete Comment", "delete-prose-comments", Says},
 }
 
 type LeadOutcome string
 
 const (
-	LeadCleared       LeadOutcome = "cleared"
-	LeadConflict      LeadOutcome = "conflict"
-	LeadSurvived      LeadOutcome = "survived"
-	LeadInvalid       LeadOutcome = "invalid"
-	LeadNotApplicable LeadOutcome = "not-applicable"
+	LeadCleared  LeadOutcome = "cleared"
+	LeadConflict LeadOutcome = "conflict"
+	LeadSurvived LeadOutcome = "survived"
+	LeadInvalid  LeadOutcome = "invalid"
+	// LeadNoSite means the cure has no application aimed at the case; cure operators take sites only where their own target smell is reported.
+	LeadNoSite LeadOutcome = "no-site"
+	// LeadRefused means the cure had a site at one of the case's declarations and declined to rewrite it.
+	LeadRefused       LeadOutcome = "refused"
 	LeadNoOperator    LeadOutcome = "no-operator"
 	LeadNoRefactoring LeadOutcome = "names-no-refactoring"
 	LeadUnclassified  LeadOutcome = "unclassified"
@@ -106,7 +125,7 @@ type application struct {
 	probe   harness.Probe
 }
 
-// refusal is a cure that declined a site, kept so a not-applicable lead can say why.
+// refusal is a cure that declined a site, kept so a lead with no application can say why.
 type refusal struct {
 	op   string
 	site harness.Site
@@ -219,10 +238,10 @@ func judge(c *harness.Corpus, check *LeadCheck, apps []*application, refused []r
 		}
 	}
 	if check.Applications == 0 {
-		check.Outcome, check.Reason = LeadNotApplicable, fmt.Sprintf("%s has no site at this case", check.Refactoring.Operator)
+		check.Outcome, check.Reason = LeadNoSite, fmt.Sprintf("%s has no site at this case", check.Refactoring.Operator)
 		for _, r := range refused {
 			if r.op == check.Refactoring.Operator && slices.ContainsFunc(declsOf(check.Case), func(d harness.Decl) bool { return d.Symbol == r.site.Symbol }) {
-				check.Reason = fmt.Sprintf("%s refused: %v", r.op, r.err)
+				check.Outcome, check.Reason = LeadRefused, fmt.Sprintf("%s refused: %v", r.op, r.err)
 				break
 			}
 		}
