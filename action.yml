@@ -25,6 +25,12 @@ inputs:
   head-sha:
     description: Commit to annotate; defaults to the PR head.
     default: ${{ github.event.pull_request.head.sha || github.sha }}
+  feedback:
+    description: On pull_request events, comment on the findings the pull request introduced or made worse so reviewers can react to them. Advisory; never changes the check or the job result.
+    default: 'false'
+  feedback-token:
+    description: GitHub token with pull-requests write permission, used only for feedback comments.
+    default: ${{ github.token }}
 outputs:
   check-url:
     description: URL of the published check.
@@ -48,6 +54,18 @@ runs:
         COLUMBO_STAGED: ${{ inputs.staged }}
         COLUMBO_CONFIG: ${{ inputs.config }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"
+    - name: Analyze the pull request base for feedback
+      id: base
+      if: ${{ !cancelled() && inputs.feedback == 'true' && github.event_name == 'pull_request' && steps.analyze.outputs.exit-code != '' && steps.analyze.outputs.exit-code != '2' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        COLUMBO_ANALYZER: ${{ steps.analyze.outputs.analyzer }}
+        COLUMBO_EVIDENCE: ${{ steps.analyze.outputs.evidence }}
+        COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        COLUMBO_CONFIG: ${{ inputs.config }}
+        COLUMBO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run-base-analysis.sh"
     - name: Publish findings
       id: publish
       if: ${{ !cancelled() && steps.analyze.outputs.exit-code != '' }}
@@ -58,12 +76,33 @@ runs:
         COLUMBO_EXIT_CODE: ${{ steps.analyze.outputs.exit-code }}
         COLUMBO_CHECK_NAME: ${{ inputs.name }}
         COLUMBO_HEAD_SHA: ${{ inputs.head-sha }}
+        COLUMBO_BASE_STATUS: ${{ steps.base.outputs.base-status }}
       run: |
+        warnings=()
+        if [[ "$COLUMBO_BASE_STATUS" == unavailable ]]; then
+          warnings+=(--warning "Columbo feedback skipped: the base commit could not be analyzed.")
+        fi
         python3 "$GITHUB_ACTION_PATH/scripts/github-check.py" \
           --snapshot "$COLUMBO_EVIDENCE/report.sqlite" --exit-code "$COLUMBO_EXIT_CODE" \
           --name "$COLUMBO_CHECK_NAME" --head-sha "$COLUMBO_HEAD_SHA" \
           --details-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-          --publication-status "$COLUMBO_EVIDENCE/publication.json"
+          --publication-status "$COLUMBO_EVIDENCE/publication.json" "${warnings[@]}"
+    - name: Comment on findings the pull request introduced or made worse
+      if: ${{ !cancelled() && inputs.feedback == 'true' && github.event_name == 'pull_request' && steps.analyze.outputs.exit-code != '' && steps.analyze.outputs.exit-code != '2' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.feedback-token }}
+        COLUMBO_EVIDENCE: ${{ steps.analyze.outputs.evidence }}
+        COLUMBO_EXIT_CODE: ${{ steps.analyze.outputs.exit-code }}
+        COLUMBO_BASE_SNAPSHOT: ${{ steps.base.outputs.base-snapshot }}
+        COLUMBO_BASE_STATUS: ${{ steps.base.outputs.base-status }}
+        COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/scripts/github-feedback.py" \
+          --head-snapshot "$COLUMBO_EVIDENCE/report.sqlite" --head-exit-code "$COLUMBO_EXIT_CODE" \
+          --base-snapshot "$COLUMBO_BASE_SNAPSHOT" --base-status "$COLUMBO_BASE_STATUS" \
+          --working-directory "$COLUMBO_WORKING_DIRECTORY" --evidence "$COLUMBO_EVIDENCE/feedback.json"
     - name: Retain evidence
       if: ${{ !cancelled() && steps.analyze.outputs.evidence != '' }}
       uses: actions/upload-artifact@v7
