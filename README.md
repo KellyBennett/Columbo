@@ -63,6 +63,39 @@ columbo ./...
 
 No configuration is required. Columbo currently analyzes production code; test files are excluded.
 
+### Pull request feedback
+
+Columbo can also comment on pull requests so your team can judge its findings during review. Turn it on with `feedback: true` and grant `pull-requests: write`:
+
+```yaml
+name: Columbo
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  columbo:
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: KellyBennett/Columbo@main
+        with:
+          feedback: true
+```
+
+The default checkout is enough. Columbo fetches the base commit by its SHA with the checkout's credentials, so keep `persist-credentials` at its default in a private repository.
+
+Columbo analyzes the pull request's base and head with the head's configuration. It comments only on findings the pull request introduced or made worse. Existing findings in code the pull request didn't touch stay quiet.
+
+Reviewers see one comment per finding, on the first changed line of the code it points at. Each comment says what Columbo found and why. React 👍 if the finding is right and 👎 if it's a nitpick.
+
+When a later push clears a finding, Columbo replies on its thread and resolves it. The comment and its reactions stay. If the finding comes back, the thread reopens.
+
+Feedback is advisory. It never changes the check or fails the job. Pull requests from forks are skipped with a warning, because their token can't comment. If the base commit can't be analyzed, nothing is posted and the check summary says so.
+
 ## Supported Languages
 
 - Go

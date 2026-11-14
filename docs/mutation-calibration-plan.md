@@ -249,18 +249,10 @@ case. Report trial counts and spread with every number.
 Done when each default smell has a fix-distance distribution from at least five
 trials.
 
-### Phase 9. Calibrate from work, privately (separate track)
+### Phase 9. Calibrate from work (withdrawn)
 
-Build a local case ledger (`~/.columbo/ledger.sqlite`) and a
-`columbo calibrate --export` command. The export holds only aggregates per rule
-and per operator. It contains no names, paths, hashes, case IDs, or
-justification text, and it drops any bucket with fewer than 5 cases or 3 repos.
-Use real-world shape frequencies from the ledger to weight the kill matrix.
-
-This track starts after phase 5. It needs its own design pass before it starts.
-
-Withdrawn. The ledger was built in #78 and closed unmerged. The reviewer feedback loop in
-#81 takes over this track.
+Replaced by the reviewer feedback loop in #81. A local case ledger was built in #78 and
+closed unmerged.
 
 ## How results change Columbo
 
@@ -272,7 +264,8 @@ the self-check case count. The harness never edits configuration or rules.
 ## Non-goals
 
 - Changing any rule as part of building the harness.
-- Running an LLM in any CI path.
+- Running an LLM in any enforcing CI path. An advisory feedback job (#81) may run an
+  agent, because it never changes a check conclusion or a job result.
 - Measuring false positives on natural code. The reviewer feedback loop (#81) and
   the self-check adjudication ledger cover that.
 
