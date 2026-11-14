@@ -1,0 +1,8 @@
+version: 1
+exclude:
+  - "**/*_generated.go"
+  - "**/vendor/**"
+  - "internal/snapshotdb/db.go"
+  - "internal/snapshotdb/models.go"
+  - "internal/snapshotdb/querier.go"
+  - "internal/snapshotdb/queries.sql.go"
