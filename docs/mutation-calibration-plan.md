@@ -1,11 +1,12 @@
 # Mutation calibration plan
 
-Status: implemented. Every phase below is built, in the nested `calibration/` module
-except phase 9's ledger, which lives in the `columbo` CLI. `calibration/README.md` says
-how to run each part, and `calibration/reports/` holds the generated results: the kill
-matrix (`canonical.md`, and `main-6440c9d.md` from a later main), the agent trials and
-lead checks (`agent-trials.md`), and a weighted kill matrix from a public ledger export
-(`weighted-sample.md`). The design of the ledger is in `docs/calibration-ledger-design.md`.
+Status: implemented through phase 8. Every phase from 1 to 8 is built, in the nested
+`calibration/` module. `calibration/README.md` says how to run each part, and
+`calibration/reports/` holds the generated results: the kill matrix (`canonical.md`, and
+`main-6440c9d.md` from a later main), and the agent trials and lead checks
+(`agent-trials.md`). Phase 9 was built as a local case ledger in #78 and then withdrawn
+before merging. A reviewer feedback loop on real pull requests (#81) replaces it, because
+it records the same cases along with a verdict on each.
 The text below is the plan as written, apart from the resolved decisions at the end.
 
 Columbo is meant to be strict and trustworthy at once. Today the two goals pull
@@ -258,6 +259,9 @@ Use real-world shape frequencies from the ledger to weight the kill matrix.
 
 This track starts after phase 5. It needs its own design pass before it starts.
 
+Withdrawn. The ledger was built in #78 and closed unmerged. The reviewer feedback loop in
+#81 takes over this track.
+
 ## How results change Columbo
 
 A threshold, severity, or rule change cites the calibration report rows that
@@ -269,8 +273,8 @@ the self-check case count. The harness never edits configuration or rules.
 
 - Changing any rule as part of building the harness.
 - Running an LLM in any CI path.
-- Measuring false positives on natural code. The work ledger (phase 9) and the
-  self-check adjudication ledger cover that.
+- Measuring false positives on natural code. The reviewer feedback loop (#81) and
+  the self-check adjudication ledger cover that.
 
 ## Resolved decisions
 
