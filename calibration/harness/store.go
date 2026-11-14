@@ -59,9 +59,6 @@ func OpenStore(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
-	if err := addRatioColumns(db); err != nil {
-		return nil, err
-	}
 	return &Store{db}, nil
 }
 
@@ -69,7 +66,11 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) DB() *sql.DB { return s.db }
 
+// BeginRun adds the ratio columns to an older database, so that only a writer alters it.
 func (s *Store) BeginRun(info RunInfo, baseline []Finding) (int64, error) {
+	if err := addRatioColumns(s.db); err != nil {
+		return 0, err
+	}
 	res, err := s.db.Exec(`INSERT INTO runs (corpus_module, corpus_version, columbo_version, config_hash, validity) VALUES (?,?,?,?,?)`,
 		info.Module, info.Version, info.Columbo, info.ConfigHash, string(info.Validity))
 	if err != nil {

@@ -26,7 +26,7 @@ INSERT INTO baseline_findings VALUES (1, 'long-function', 'example.com/old.f', '
 
 func ratio(v float64) *float64 { return &v }
 
-func TestOpenStoreAddsRatioColumnsToAnOldDatabase(t *testing.T) {
+func TestBeginRunAddsRatioColumnsToAnOldDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "calibration.sqlite")
 	old, err := sql.Open("sqlite", "file:"+path)
 	if err != nil {
@@ -36,14 +36,9 @@ func TestOpenStoreAddsRatioColumnsToAnOldDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	old.Close()
-	migrated, err := OpenStore(path)
-	if err != nil {
-		t.Fatalf("opening an old database: %v", err)
-	}
-	migrated.Close()
 	store, err := OpenStore(path)
 	if err != nil {
-		t.Fatalf("reopening a migrated database: %v", err)
+		t.Fatalf("opening an old database: %v", err)
 	}
 	defer store.Close()
 	finding := Finding{Smell: "long-function", Symbol: "example.com/m.f", File: "a.go", CaseID: "C-1", Verdict: "FAIL", Ratio: ratio(12.0 / 11)}

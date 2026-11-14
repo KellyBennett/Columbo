@@ -200,3 +200,51 @@ func TestLoadWeightsRejectsDocumentsItCannotTrust(t *testing.T) {
 		}
 	}
 }
+
+func TestReportReadsADatabaseFromBeforeRatiosWithoutWritingIt(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes to read-only files")
+	}
+	path := filepath.Join(t.TempDir(), "calibration.sqlite")
+	store, err := harness.OpenStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.BeginRun(harness.RunInfo{Module: "example.com/m", Validity: harness.ValidityTest}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder{t, store, run}.evade(1, true)
+	if _, err := store.DB().Exec(`ALTER TABLE baseline_findings DROP COLUMN ratio; ALTER TABLE mutant_findings DROP COLUMN ratio`); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	weights, err := report.LoadWeights(writeFile(t, export))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err = harness.OpenStore(path)
+	if err != nil {
+		t.Fatalf("opening a read-only database: %v", err)
+	}
+	defer store.Close()
+	var out bytes.Buffer
+	if _, err := report.Write(&out, store.DB(), nil); err != nil {
+		t.Fatalf("report: %v", err)
+	}
+	if err := report.WriteWeighted(&out, store.DB(), weights); err != nil {
+		t.Fatalf("weighted report: %v", err)
+	}
+	for _, row := range table(t, out.String(), "Weighted kill rate") {
+		if row["class"] == "evade" && row["unmeasured"] != "1/1" {
+			t.Errorf("evade %s: unmeasured = %q, want 1/1 because no finding has a ratio", row["operator"], row["unmeasured"])
+		}
+	}
+	var columns int
+	if err := store.DB().QueryRow(`SELECT count(*) FROM pragma_table_info('mutant_findings') WHERE name = 'ratio'`).Scan(&columns); err != nil || columns != 0 {
+		t.Errorf("the report added a ratio column (%d, %v)", columns, err)
+	}
+}

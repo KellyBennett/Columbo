@@ -152,19 +152,29 @@ func (w *Weights) bandOf(ratio sql.NullFloat64) string {
 }
 
 // subjectQuery gives every scored mutant its subject case's ratio; shaped is false when it has none.
+// %[1]s and %[2]s are the mutant and baseline ratio columns, or NULL in a database recorded before them.
 const subjectQuery = `WITH ` + latestRuns + `,
 scored AS (SELECT * FROM cur WHERE class IN ('inject','evade','cure') AND status IN ('killed','survived','conflict')),
 subjects AS (
- SELECT m.id, f.ratio FROM scored m JOIN mutant_findings f ON f.mutant_id = m.id AND f.side = 'added' AND f.smell = m.target
+ SELECT m.id, %[1]s AS ratio FROM scored m JOIN mutant_findings f ON f.mutant_id = m.id AND f.side = 'added' AND f.smell = m.target
  WHERE m.class = 'inject'
  UNION ALL
- SELECT m.id, f.ratio FROM scored m JOIN mutant_findings f ON f.mutant_id = m.parent_id AND f.side = 'added' AND f.smell = m.target
+ SELECT m.id, %[1]s FROM scored m JOIN mutant_findings f ON f.mutant_id = m.parent_id AND f.side = 'added' AND f.smell = m.target
  WHERE m.class = 'evade'
  UNION ALL
- SELECT m.id, b.ratio FROM scored m JOIN baseline_findings b ON b.run_id = m.run_id AND b.smell = m.target AND b.symbol = m.site_symbol
+ SELECT m.id, %[2]s FROM scored m JOIN baseline_findings b ON b.run_id = m.run_id AND b.smell = m.target AND b.symbol = m.site_symbol
  WHERE m.class = 'cure')
 SELECT m.class, m.target, m.operator, m.status = 'killed', s.id IS NOT NULL, s.ratio
 FROM scored m LEFT JOIN (SELECT id, max(ratio) AS ratio FROM subjects GROUP BY id) s ON s.id = m.id`
+
+// ratioColumn lets the report read a database that predates finding ratios without altering it.
+func ratioColumn(db *sql.DB, table, column string) (string, error) {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = 'ratio'`, table).Scan(&n); err != nil || n == 0 {
+		return "NULL", err
+	}
+	return column, nil
+}
 
 type tally struct{ killed, scored int }
 
@@ -175,7 +185,15 @@ type rateGroup struct {
 }
 
 func readGroups(db *sql.DB, weights *Weights) ([]*rateGroup, error) {
-	rows, err := db.Query(subjectQuery)
+	mutantRatio, err := ratioColumn(db, "mutant_findings", "f.ratio")
+	if err != nil {
+		return nil, err
+	}
+	baselineRatio, err := ratioColumn(db, "baseline_findings", "b.ratio")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(fmt.Sprintf(subjectQuery, mutantRatio, baselineRatio))
 	if err != nil {
 		return nil, err
 	}

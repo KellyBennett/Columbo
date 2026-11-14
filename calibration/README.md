@@ -84,9 +84,10 @@ shows `uncovered`. `covered` is the share of real cases in the bands that the we
 includes.
 
 The harness stores a `ratio` with each finding. The ratio is the value of the case's first
-limited clue divided by the smallest value that triggers it. `OpenStore` adds the column to an older
-`calibration.sqlite`. Findings recorded before that have no ratio, so their mutants land in
-`unmeasured` until you rerun them.
+limited clue divided by the smallest value that triggers it. `calibrate run` adds the column
+to an older `calibration.sqlite` when it starts a run. `calibrate report` never writes, and
+reads an older database as if every ratio were missing. Findings recorded without a ratio
+put their mutants in `unmeasured` until you rerun them.
 
 `ledger-sample.sh` builds a reproducible export from public code only. It records Columbo's
 own module and every module in `corpus.txt` into a throwaway ledger under a temporary HOME,

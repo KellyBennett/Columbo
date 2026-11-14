@@ -359,8 +359,11 @@ Today `calibration.sqlite` stores no metric for any finding, so no query can pla
 a mutant in a band. The harness has to record one number per finding. The change
 is additive: a nullable `ratio` column on `baseline_findings` and `mutant_findings`,
 read from the same first limited clue, with an `ALTER TABLE` for existing result
-databases. This reaches beyond `calibration/report`, which phase 8 also edits, so
-the change stays small and touches only the finding read and write paths.
+databases. The `ALTER TABLE` runs when a run begins, not when the store opens, so
+`calibrate report` never writes. It reads a database from before the change, even a
+read-only one, as if every ratio were missing. This reaches beyond
+`calibration/report`, which phase 8 also edits, so the change stays small and
+touches only the finding read and write paths.
 
 The ratio, not the band, goes into `calibration.sqlite`. The bounds come from the
 export at report time, so the band table lives in one place, Columbo. The trigger
