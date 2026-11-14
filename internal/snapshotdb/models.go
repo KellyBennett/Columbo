@@ -230,6 +230,29 @@ type File struct {
 	Path string
 }
 
+type LedgerBucket struct {
+	Smell      string
+	Verdict    string
+	Suppressed int64
+	Excess     int64
+	Cases      int64
+	Repos      int64
+}
+
+type LedgerCase struct {
+	Repo       []byte
+	CaseKey    []byte
+	Smell      string
+	Verdict    string
+	Suppressed int64
+	Excess     int64
+}
+
+type LedgerSecret struct {
+	ID     int64
+	Secret []byte
+}
+
 type PolicyReview struct {
 	ID           string
 	Note         string

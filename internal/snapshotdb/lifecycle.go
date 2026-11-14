@@ -326,3 +326,100 @@ func ValidateSidecars(path string) error {
 	return nil
 }
 
+const LedgerSchemaVersion = 1
+const LedgerApplicationID = 0x434c4c47
+
+//go:embed ledger_schema.sql
+var ledgerSchema string
+
+var ledgerIdentity = databaseIdentity{LedgerApplicationID, LedgerSchemaVersion}
+
+type Ledger struct {
+	db      *sql.DB
+	tx      *sql.Tx
+	queries Querier
+}
+
+func RecordLedger(path string) (*Ledger, error) {
+	db, err := openDatabase(ledgerURI(path, false))
+	if err != nil {
+		return nil, err
+	}
+	ledger := &Ledger{db: db}
+	if err = ledger.begin(); err != nil {
+		ledger.Close()
+		return nil, err
+	}
+	return ledger, nil
+}
+func (l *Ledger) begin() error {
+	tx, err := l.db.Begin()
+	if err != nil {
+		return err
+	}
+	l.tx, l.queries = tx, New(tx)
+	return prepareLedger(tx)
+}
+func OpenLedger(path string) (*Ledger, error) {
+	db, err := openDatabase(ledgerURI(path, true))
+	if err != nil {
+		return nil, err
+	}
+	if err = checkLedgerIdentity(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Ledger{db: db, queries: New(db)}, nil
+}
+func (l *Ledger) Queries() Querier { return l.queries }
+func (l *Ledger) Complete() error  { return l.tx.Commit() }
+func (l *Ledger) Close() error {
+	if l.tx != nil {
+		_ = l.tx.Rollback()
+	}
+	return l.db.Close()
+}
+
+func ledgerURI(path string, readonly bool) string {
+	uri := &url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	query := url.Values{"_pragma": {"busy_timeout(10000)"}, "_txlock": {"immediate"}}
+	if readonly {
+		query.Set("mode", "ro")
+	}
+	uri.RawQuery = query.Encode()
+	return uri.String()
+}
+func prepareLedger(tx *sql.Tx) error {
+	identity, err := readIdentity(tx)
+	if err != nil || identity == ledgerIdentity {
+		return err
+	}
+	var objects int
+	if err = tx.QueryRow("SELECT count(*) FROM sqlite_schema").Scan(&objects); err != nil {
+		return err
+	}
+	if identity != (databaseIdentity{}) || objects > 0 {
+		return unsupportedLedger(identity)
+	}
+	return createLedgerSchema(tx)
+}
+func createLedgerSchema(tx *sql.Tx) error {
+	if _, err := tx.Exec(ledgerSchema); err != nil {
+		return err
+	}
+	_, err := tx.Exec(fmt.Sprintf("PRAGMA application_id=%d; PRAGMA user_version=%d", LedgerApplicationID, LedgerSchemaVersion))
+	return err
+}
+func checkLedgerIdentity(db *sql.DB) error {
+	identity, err := readIdentity(db)
+	if err != nil || identity == ledgerIdentity {
+		return err
+	}
+	return unsupportedLedger(identity)
+}
+func unsupportedLedger(identity databaseIdentity) error {
+	if identity.applicationID != LedgerApplicationID {
+		return fmt.Errorf("not a Columbo ledger")
+	}
+	return fmt.Errorf("unsupported ledger version %d; move the ledger aside to start a new one", identity.userVersion)
+}

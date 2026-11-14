@@ -56,7 +56,7 @@ linters:
     generated: disable
     presets: []
     rules:
-      - path: '^internal/snapshotdb/(lifecycle|db|models|queries\.sql|querier)\.go$'
+      - path: '^internal/snapshotdb/(lifecycle|db|models|queries\.sql|ledger_queries\.sql|querier)\.go$'
         linters: [depguard, forbidigo]
       # Independent database oracles and adversarial malformed/constraint tests.
       # No runtime file, future test, or directory-wide exception is allowed.

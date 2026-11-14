@@ -279,3 +279,11 @@ FROM source_fields f JOIN source_ranges r ON r.id=f.range_id WHERE f.type_id=sql
 SELECT d.id,d.symbol,f.path,d.start_line,d.end_line,d.start_offset,d.end_offset,s.kind,s.receiver_type_id,s.sha256,sf.sha256 AS file_sha256
 FROM source_declarations s JOIN declarations d ON d.id=s.declaration_id JOIN files f ON f.id=d.file_id JOIN source_files sf ON sf.file_id=f.id
 ORDER BY f.path,d.start_offset,d.symbol;
+
+-- name: CaseShapes :many
+SELECT c.id,c.smell,c.verdict,c.suppressed,COALESCE(l.value_type,'') AS value_type,
+ CAST(COALESCE(l.numeric_value,0) AS REAL) AS value,CAST(COALESCE(l.limit_value,0) AS REAL) AS limit_value,
+ COALESCE(l.operator,'') AS operator
+FROM cases c LEFT JOIN clues l ON l.case_id=c.id
+ AND l.ordinal=(SELECT min(f.ordinal) FROM clues f WHERE f.case_id=c.id AND f.limit_value IS NOT NULL)
+ORDER BY c.ordinal;

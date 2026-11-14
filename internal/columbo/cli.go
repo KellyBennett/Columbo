@@ -13,6 +13,7 @@ import (
 )
 
 const usage = `Usage: columbo [flags] [packages...]
+       columbo calibrate --export
 
 Investigate Go code smells with source-backed SQLite evidence and ordered stages.
 Packages default to ./...; flags precede packages.
@@ -20,18 +21,19 @@ Packages default to ./...; flags precede packages.
   --output PATH       fresh SQLite snapshot outside the module (default OS temp directory)
   --staged=false      diagnose all rule verdicts instead of enforcing the current stage
   --no-history        disable optional Git provenance
+  --ledger            record case shapes in ~/.columbo/ledger.sqlite for calibration
   --version           print build version
   --help              print usage
 `
 
 type Invocation struct {
-	Dir, Version   string
-	Stdout, Stderr io.Writer
+	Dir, Version, Home string
+	Stdout, Stderr     io.Writer
 }
 type commandOptions struct {
 	config, output                                            string
-	noHistory, showVersion, help, shortHelp, explicit, staged bool
-	patterns                                                  []string
+	noHistory, showVersion, help, shortHelp, explicit, staged, ledger bool
+	patterns                                                          []string
 }
 type command struct {
 	invocation Invocation
@@ -42,6 +44,9 @@ func Run(args []string, invocation Invocation) int {
 	return (&command{invocation: invocation}).run(args)
 }
 func (c *command) run(args []string) int {
+	if len(args) > 0 && args[0] == "calibrate" {
+		return c.calibrate(args[1:])
+	}
 	if e := c.options.parse(args); e != nil {
 		return c.fatal(e)
 	}
@@ -89,6 +94,7 @@ func (o *commandOptions) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.output, "output", filepath.Join(os.TempDir(), "columbo-"+rand.Text()+".sqlite"), "")
 	fs.BoolVar(&o.staged, "staged", true, "")
 	fs.BoolVar(&o.noHistory, "no-history", false, "")
+	fs.BoolVar(&o.ledger, "ledger", false, "")
 	fs.BoolVar(&o.showVersion, "version", false, "")
 	fs.BoolVar(&o.help, "help", false, "")
 	fs.BoolVar(&o.shortHelp, "h", false, "")
@@ -129,7 +135,16 @@ func (c *command) publish(report Report) int {
 		return c.fatal(e)
 	}
 	defer snapshot.Close()
+	c.record(snapshot.Queries())
 	return c.output(snapshot.Queries(), path)
+}
+func (c *command) record(snapshot snapshotdb.Querier) {
+	if !c.options.ledger {
+		return
+	}
+	if e := c.invocation.recordLedger(snapshot); e != nil {
+		c.invocation.warning("columbo: ledger not recorded: " + e.Error())
+	}
 }
 func (c *command) output(queries snapshotdb.Querier, path string) int {
 	b, code, e := RenderSnapshot(queries, path)
