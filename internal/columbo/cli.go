@@ -31,7 +31,7 @@ type Invocation struct {
 	Stdout, Stderr     io.Writer
 }
 type commandOptions struct {
-	config, output                                            string
+	config, output                                                    string
 	noHistory, showVersion, help, shortHelp, explicit, staged, ledger bool
 	patterns                                                          []string
 }
