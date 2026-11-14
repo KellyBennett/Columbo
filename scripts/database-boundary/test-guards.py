@@ -68,12 +68,18 @@ with tempfile.TemporaryDirectory(prefix="columbo-db-negative-") as temporary:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / name, target)
     (base / "schema.sql").write_text("CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT NOT NULL);\n")
-    (base / "queries.sql").write_text("-- name: Values :many\nSELECT id, value FROM entries ORDER BY id;\n")
+    # One query file per claimed `<name>.sql.go` output, so the fixture generates
+    # exactly the manifest's files.
+    query_files = [Path(name).name.removesuffix(".go") for name in manifest["generated"]
+                   if name.endswith(".sql.go")]
+    for index, name in enumerate(query_files):
+        query = "Values" + (str(index) if index else "")
+        (base / name).write_text(f"-- name: {query} :many\nSELECT id, value FROM entries ORDER BY id;\n")
     (base / "sqlc.yaml").write_text('''version: "2"
 sql:
   - engine: sqlite
     schema: schema.sql
-    queries: queries.sql
+    queries: [''' + ", ".join(query_files) + ''']
     gen:
       go:
         package: snapshotdb

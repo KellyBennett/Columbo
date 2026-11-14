@@ -101,7 +101,10 @@ func snapshotDatabaseURI(path string, readonly bool) string {
 	return uri.String()
 }
 func openSnapshotDatabase(path string, readonly bool) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", snapshotDatabaseURI(path, readonly))
+	return openDatabase(snapshotDatabaseURI(path, readonly))
+}
+func openDatabase(uri string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return nil, err
 	}
@@ -137,20 +140,28 @@ func validateSnapshot(db *sql.DB) error {
 	return validateSnapshotData(db)
 }
 func validateSnapshotIdentity(db *sql.DB) error {
-	var applicationID, userVersion int
-	if err := db.QueryRow("PRAGMA application_id").Scan(&applicationID); err != nil {
+	identity, err := readIdentity(db)
+	if err != nil {
 		return err
 	}
-	if applicationID != SQLiteApplicationID {
+	if identity.applicationID != SQLiteApplicationID {
 		return fmt.Errorf("not a Columbo SQLite snapshot")
 	}
-	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
-		return err
-	}
-	if userVersion != SchemaVersion {
-		return fmt.Errorf("unsupported snapshot schema version %d", userVersion)
+	if identity.userVersion != SchemaVersion {
+		return fmt.Errorf("unsupported snapshot schema version %d", identity.userVersion)
 	}
 	return validateSnapshotReport(snapshotQueries(db))
+}
+
+type databaseIdentity struct{ applicationID, userVersion int }
+
+func readIdentity(db snapshotQuery) (databaseIdentity, error) {
+	var identity databaseIdentity
+	if err := db.QueryRow("PRAGMA application_id").Scan(&identity.applicationID); err != nil {
+		return identity, err
+	}
+	err := db.QueryRow("PRAGMA user_version").Scan(&identity.userVersion)
+	return identity, err
 }
 func validateSnapshotReport(queries Querier) error {
 	identity, err := queries.ReportIdentity(context.Background())
@@ -314,3 +325,4 @@ func ValidateSidecars(path string) error {
 	}
 	return nil
 }
+

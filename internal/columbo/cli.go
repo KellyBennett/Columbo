@@ -39,7 +39,9 @@ type command struct {
 }
 
 func Run(args []string, invocation Invocation) int {
-	c := &command{invocation: invocation}
+	return (&command{invocation: invocation}).run(args)
+}
+func (c *command) run(args []string) int {
 	if e := c.options.parse(args); e != nil {
 		return c.fatal(e)
 	}
