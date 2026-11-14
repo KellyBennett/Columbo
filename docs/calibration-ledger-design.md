@@ -296,6 +296,24 @@ of a dropped one. For the same reason, the bucket is the full joint cell. Two
 separate distributions per rule, one by excess and one by verdict and suppression,
 would each sum to the rule total and leak small cells by subtraction.
 
+### Say plainly that the difference between two exports is not protected
+
+Each export meets the floor on its own. Two exports of one ledger, taken at
+different times, do not. If a user exports, records one more repository, and exports
+again, the difference between the two documents is that repository's contribution,
+however small. A bucket that reads 6 cases in 3 repositories and then 8 cases in 4
+says that the new repository has 2 cases in that bucket.
+
+| Option | Why not |
+|---|---|
+| Round every count, for example down to a multiple of 5 | A difference still shows whenever a new repository moves a count across a rounding boundary, so rounding narrows the leak without closing it. It also costs the weights their precision in the buckets just above the floor. |
+| Add random noise to every count | Fresh noise on each export averages away over repeated exports. Closing the leak needs a privacy budget spent across every export a user ever shares, which is a differential privacy design and out of scope for phase 9. |
+
+The export stays exact. The `calibrate --help` text, the README, SPEC, and this
+document all tell the user to share a single export, and say that the floor does not
+protect the difference between two. A user who shares a second export later also
+publishes the difference.
+
 ### Prove the privacy rule with a test that tries to break it
 
 A Go test builds three fixture modules with distinctive module paths, directory
@@ -375,7 +393,7 @@ with a message that names the path and the `--ledger` flag.
 - **A new section, Calibration ledger.** State when Columbo records, the ledger
   location and identity, the link rule, the row contents, the repository identity,
   deduplication, the excess definition, the failure rule, the export format, the
-  floor.
+  floor, and that the floor does not protect the difference between two exports.
 - **Configuration.** No change. The section says so, because a configuration key
   was considered and rejected.
 

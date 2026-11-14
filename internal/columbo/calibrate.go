@@ -19,6 +19,8 @@ per smell, verdict, suppression, and excess band. It drops every bucket with few
 than 5 cases or 3 repositories, and holds no names, paths, hashes, or case IDs.
 A Git repository counts once across its clones, worktrees, and modules. Outside
 Git, each module path counts once, whatever its major version.
+Share a single export. The floor protects each export on its own, not the
+difference between two exports of the same ledger.
   --export            print the aggregate export
   --help              print usage
 `
