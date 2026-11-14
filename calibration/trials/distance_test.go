@@ -1,6 +1,7 @@
 package trials
 
 import (
+	"github.com/KellyBennett/Columbo/calibration/harness"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,5 +78,13 @@ func TestCodeMovedToANewFileCountsAsAddedThere(t *testing.T) {
 	}
 	if d.Fixed == 0 {
 		t.Fatal("moving a declaration to a new file scored as the original")
+	}
+}
+
+func TestAWrittenSemicolonMatchesALineBreak(t *testing.T) {
+	one := tokens([]byte("package p\n\nfunc f() {\n\ta := 1; _ = a\n}\n"))
+	two := tokens([]byte("package p\n\nfunc f() {\n\ta := 1\n\t_ = a\n}\n"))
+	if d := harness.EditDistance(one, two); d != 0 {
+		t.Fatalf("one-line and two-line statements are %d token edits apart, want 0", d)
 	}
 }

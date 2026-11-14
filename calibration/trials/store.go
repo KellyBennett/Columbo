@@ -2,7 +2,9 @@ package trials
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/KellyBennett/Columbo/calibration/harness"
 )
@@ -19,6 +21,7 @@ CREATE TABLE IF NOT EXISTS trials (
  dose INTEGER NOT NULL,
  repeat INTEGER NOT NULL,
  columbo_version TEXT NOT NULL,
+ agent_columbo TEXT NOT NULL,
  config_hash TEXT NOT NULL,
  validity TEXT NOT NULL,
  agent_command TEXT NOT NULL,
@@ -37,7 +40,8 @@ CREATE TABLE IF NOT EXISTS trials (
  reply TEXT NOT NULL,
  infra_error TEXT NOT NULL,
  vet_pass INTEGER,
- tests_pass INTEGER,
+ tests TEXT,
+ agent_tests_pass INTEGER,
  analyzed INTEGER,
  cleared INTEGER,
  target_remaining INTEGER,
@@ -81,12 +85,28 @@ CREATE TABLE IF NOT EXISTS lead_checks (
 
 type Store struct{ db *sql.DB }
 
+// newestColumns are the last columns each table gained; a table without them predates the scorer that fills them.
+var newestColumns = map[string][]string{"trials": {"agent_columbo", "tests"}}
+
 // NewStore adds the phase 8 tables to an open calibration database.
 func NewStore(db *sql.DB) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
+	for table, cols := range newestColumns {
+		for _, col := range cols {
+			if !hasColumn(db, table, col) {
+				return nil, fmt.Errorf("this database's %s table predates the current scorer; rescore it into a new database with `calibrate trials rescore --from`", table)
+			}
+		}
+	}
 	return &Store{db}, nil
+}
+
+func hasColumn(db *sql.DB, table, col string) bool {
+	var n int
+	err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, table, col).Scan(&n)
+	return err == nil && n > 0
 }
 
 // Provenance ties stored rows to the corpus and Columbo build that produced them.
@@ -96,14 +116,17 @@ type Provenance struct {
 
 // Row is one scored trial. Score is nil when the agent never got to work.
 type Row struct {
-	Key     string
-	Trial   Trial
-	Prov    Provenance
-	Command string
-	Model   string
-	Prompt  string
-	Run     AgentRun
-	Score   *Score
+	Key   string
+	Trial Trial
+	// Prov.Columbo planted and scored the trial; AgentColumbo is the build whose output the agent read and ran.
+	// They differ only for a rescored trial.
+	Prov         Provenance
+	AgentColumbo string
+	Command      string
+	Model        string
+	Prompt       string
+	Run          AgentRun
+	Score        *Score
 }
 
 // Done reports whether a trial already has a usable row. Rows with infrastructure errors are deleted so a rerun retries them.
@@ -136,7 +159,7 @@ func (s *Store) Record(r Row) error {
 	}{
 		{"trial_key", r.Key}, {"smell", p.Smell}, {"operator", p.Operator}, {"corpus_module", r.Prov.Module},
 		{"corpus_version", r.Prov.Version}, {"site_symbol", p.Site.Symbol}, {"dose", p.Dose}, {"repeat", r.Trial.Repeat},
-		{"columbo_version", r.Prov.Columbo}, {"config_hash", r.Prov.ConfigHash}, {"validity", r.Prov.Validity},
+		{"columbo_version", r.Prov.Columbo}, {"agent_columbo", r.AgentColumbo}, {"config_hash", r.Prov.ConfigHash}, {"validity", r.Prov.Validity},
 		{"agent_command", r.Command}, {"model", r.Model}, {"model_id", r.Run.ModelID}, {"prompt_version", PromptVersion},
 		{"prompt", r.Prompt}, {"mutant_cases", cases(p.Added)}, {"mutant_patch", p.Patch}, {"agent_exit", r.Run.Exit},
 		{"timed_out", r.Run.TimedOut}, {"agent_stop", r.Run.Stop}, {"turns", r.Run.Turns}, {"cost_usd", r.Run.CostUSD},
@@ -145,22 +168,25 @@ func (s *Store) Record(r Row) error {
 		rec.set(kv.col, kv.v)
 	}
 	if sc := r.Score; sc != nil {
-		var tests any
-		if sc.TestsPass != nil {
-			tests = *sc.TestsPass
+		var tests, agentTests any
+		if sc.Tests != "" {
+			tests = string(sc.Tests)
+		}
+		if sc.AgentTestsPass != nil {
+			agentTests = *sc.AgentTestsPass
 		}
 		for _, kv := range []struct {
 			col string
 			v   any
 		}{
-			{"vet_pass", sc.VetPass}, {"tests_pass", tests}, {"analyzed", sc.Analyzed}, {"cleared", sc.Cleared()},
+			{"vet_pass", sc.VetPass}, {"tests", tests}, {"agent_tests_pass", agentTests}, {"analyzed", sc.Analyzed}, {"cleared", sc.Cleared()},
 			{"target_remaining", sc.TargetRemaining}, {"other_remaining", sc.OtherRemaining},
 			{"introduced", len(sc.Introduced)}, {"introduced_cases", cases(sc.Introduced)},
 			{"out_of_scope_gone", len(sc.OutOfScopeGone)}, {"out_of_scope_gone_cases", cases(sc.OutOfScopeGone)},
 			{"suppressed", sc.Suppressed}, {"gamed", sc.Gamed()}, {"distance_fixed", sc.Distance.Fixed},
 			{"distance_mutant", sc.Distance.Mutant}, {"fix_distance", sc.Distance.Normalized()},
 			{"files_changed", sc.FilesChanged}, {"test_files_changed", sc.TestFilesChanged},
-			{"flags", strings.Join(sc.Flags, ",")}, {"note", sc.Note}, {"fix_patch", sc.Patch},
+			{"flags", flagList(sc.Flags)}, {"note", sc.Note}, {"fix_patch", sc.Patch},
 		} {
 			rec.set(kv.col, kv.v)
 		}
@@ -193,4 +219,41 @@ func (s *Store) RecordLead(batch int64, prov Provenance, c LeadCheck) error {
 		c.Case.Smell, c.Case.CaseID, c.Case.Symbol, c.Ordinal, c.Lead, c.Refactoring.Name, c.Refactoring.Operator,
 		string(c.Outcome), c.Applications, c.Dose, c.Reason)
 	return err
+}
+
+// Stored is a scored trial read back for rescoring: the mutant the agent got, what it was told, and what it did.
+type Stored struct {
+	Smell, Operator, Module, Version, Site string
+	Repeat                                 int
+	Command, Model, Prompt, AgentColumbo   string
+	MutantPatch, FixPatch                  []byte
+	Run                                    AgentRun
+}
+
+// ReadStored reads every scored trial, including from a database whose trials table predates agent_columbo.
+func ReadStored(db *sql.DB) ([]Stored, error) {
+	agentBuild := "columbo_version"
+	if hasColumn(db, "trials", "agent_columbo") {
+		agentBuild = "agent_columbo"
+	}
+	rows, err := db.Query(`SELECT smell, operator, corpus_module, corpus_version, site_symbol, repeat, agent_command, model, prompt, ` +
+		agentBuild + `, mutant_patch, fix_patch, agent_exit, timed_out, agent_stop, turns, cost_usd, wall_ms, reply, model_id
+		FROM trials WHERE infra_error = '' ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Stored
+	for rows.Next() {
+		var st Stored
+		var wallMS int64
+		if err := rows.Scan(&st.Smell, &st.Operator, &st.Module, &st.Version, &st.Site, &st.Repeat, &st.Command, &st.Model, &st.Prompt,
+			&st.AgentColumbo, &st.MutantPatch, &st.FixPatch, &st.Run.Exit, &st.Run.TimedOut, &st.Run.Stop, &st.Run.Turns,
+			&st.Run.CostUSD, &wallMS, &st.Run.Reply, &st.Run.ModelID); err != nil {
+			return nil, err
+		}
+		st.Run.Wall = time.Duration(wallMS) * time.Millisecond
+		out = append(out, st)
+	}
+	return out, rows.Err()
 }

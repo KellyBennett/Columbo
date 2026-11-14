@@ -21,7 +21,12 @@ type Snapshot struct {
 	Suppressed int
 	// Output is Columbo's terminal summary for the analysis.
 	Output string
+	// Files is Columbo's inventory of the module, keyed by module-relative path.
+	Files map[string]SourceFile
 }
+
+// SourceFile says whether Columbo looked for cases in a file, and whether a generated-code header kept it out.
+type SourceFile struct{ Analyzed, Generated bool }
 
 // Guidance is what Columbo tells the next agent about a case.
 type Guidance struct {
@@ -77,6 +82,9 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM cases WHERE suppressed = 1`).Scan(&s.Suppressed); err != nil {
+		return Snapshot{}, err
+	}
+	if s.Files, err = readSourceFiles(db); err != nil {
 		return Snapshot{}, err
 	}
 	sortFindings(s.Findings)
@@ -210,4 +218,22 @@ func readGuidance(db *sql.DB) (map[string]Guidance, error) {
 		out[id] = g
 	}
 	return out, items.Err()
+}
+
+func readSourceFiles(db *sql.DB) (map[string]SourceFile, error) {
+	rows, err := db.Query(`SELECT f.path, s.ordinary_target, s.generated FROM source_files s JOIN files f ON f.id = s.file_id`)
+	if err != nil {
+		return nil, fmt.Errorf("read source_files: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]SourceFile{}
+	for rows.Next() {
+		var path string
+		var f SourceFile
+		if err := rows.Scan(&path, &f.Analyzed, &f.Generated); err != nil {
+			return nil, err
+		}
+		out[path] = f
+	}
+	return out, rows.Err()
 }

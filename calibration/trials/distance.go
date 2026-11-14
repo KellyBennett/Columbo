@@ -91,7 +91,8 @@ func goFiles(root string) (map[string][]byte, error) {
 	return out, err
 }
 
-// tokens keeps comments because a prose-comment mutant changes nothing else, and folds every semicolon into one token so line breaks do not count.
+// tokens keeps comments because a prose-comment mutant changes nothing else. A semicolon the scanner inserts at a line end
+// and one written in the source are the same token.
 func tokens(src []byte) []string {
 	if src == nil {
 		return nil
@@ -105,8 +106,6 @@ func tokens(src []byte) []string {
 		switch {
 		case tok == token.EOF:
 			return out
-		case tok == token.SEMICOLON:
-			out = append(out, ";")
 		case tok == token.COMMENT:
 			out = append(out, "comment:"+strings.TrimSpace(lit))
 		case tok == token.IDENT || tok.IsLiteral():

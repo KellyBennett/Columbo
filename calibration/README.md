@@ -92,8 +92,21 @@ refactoring is applied? `agent-trials.sh` answers both and writes
 
 The `leads` step runs no model. The `trials` step runs the `claude` CLI and costs money. A
 rerun skips trials the database already holds, keyed by mutant, repeat, agent command, model,
-and prompt version, and retries rows where the agent never started. `WORKERS` sets how many
-agents run at once (default 4). `OUT` keeps each trial's prompt, transcript, and patches.
+prompt version, and Columbo build, and retries rows where the agent never started. The script
+builds Columbo with `-trimpath -buildvcs=false`, so the build hash changes only when Columbo's
+source or toolchain does, not with the checkout path or commit. A new build is a new set of
+trials, and the report keeps each build's numbers apart. `WORKERS` sets how many agents run at
+once (default 4). `OUT` keeps each trial's prompt, transcript, and patches.
+
+The `rescore` step replays stored fixes without running a model. It reads the trials in the
+database named by `FROM`, plants the same mutants with this checkout's Columbo, applies each
+stored fix patch to a fresh copy, and scores it into `<db>`. A trial is replayed only when the
+current build gives its mutant the exact prompt the agent saw, because a different prompt
+would be a different trial. Rescore into a new database after the scorer changes:
+
+```sh
+FROM=old.sqlite ./agent-trials.sh new.sqlite rescore
+```
 
 ### How a trial runs
 
@@ -137,19 +150,43 @@ trial measures. Lead checks on downloaded corpora keep build validity.
 ### How a trial is scored
 
 After the agent stops, the harness diffs the workspace against the mutant, runs `go vet` and
-the tests, and runs Columbo again. It compares the result with the unmutated baseline:
+the tests as the agent left them, runs the mutant's own tests against the fix, and runs
+Columbo again. It compares the result with the unmutated baseline:
 
-- **Cleared.** No case of the planted smell appears beyond the baseline, anywhere in the module.
+- **Cleared.** No case of the planted smell appears beyond the baseline, anywhere in the
+  module, and the trial is not gamed.
 - **Other remaining.** The mutant's other added cases that Columbo still reports.
 - **Introduced.** Cases that neither the baseline nor the mutant had.
 - **Out of scope gone.** Cases the prompt said to leave alone that the fix removed or moved.
-- **Gamed.** A new suppression or generated-code marker. A gamed trial never counts as cleared.
-  A changed `.columbo.yml` is restored before scoring and flagged as `config`.
+- **Tests.** The harness copies the fix, swaps its test files for the mutant's, and runs
+  `go vet` and `go test` on the copy. `pass` and `fail` are what they say: a fix that stubs
+  behavior and rewrites the assertions to match fails here. The agent's own test edits are
+  recorded separately. When the mutant's tests no longer compile, the fix changed a signature
+  they call, which a data-clump or parameter-list fix does on purpose. That case is `adapted`
+  when the agent's updated tests pass, still declare every original test function, and call
+  no production function the fix removed. Otherwise it is `broken`, which is how deleting the
+  reported code and its test scores. `pass` and `adapted` count as tests held. An `adapted`
+  trial still trusts the agent's assertions inside the test functions it kept.
+- **Gamed.** The fix hid code or cases from Columbo instead of changing the code it reports.
+  The harness reads Columbo's own file inventory from the mutant's and the fix's snapshots, so
+  whatever Columbo excludes counts here the same way:
+  - `suppression`: a new suppression directive.
+  - `generated-marker`: a file Columbo now skips because of a generated-code header, whatever
+    its line endings.
+  - `excluded`: a production file the fix changed or added that Columbo does not analyze, such
+    as a `*_generated.go` file, a vendored module, or a package outside `./...`, or a file
+    Columbo analyzed in the mutant and no longer does.
+  - `moved-to-test`: a function Columbo analyzed that now exists only in a test file.
+
+  A gamed trial never counts as cleared. A changed `.columbo.yml` is restored before scoring
+  and flagged as `config`. A production file Columbo analyzed that the fix deleted is flagged
+  `removed-file` but not counted as gamed, because the mutant's tests already judge whether
+  the deletion lost behavior.
 
 Fix distance compares token sequences from `go/scanner` over every Go file that the original,
 the mutant, or the fix changed. Comments count as tokens, because a `prose-comment` mutant
-changes nothing else. All semicolons fold into one token, so line breaks inside an expression
-cost nothing. The normalized distance is the token edits from the fix to the original divided
+changes nothing else. A semicolon is the same token whether it was written or inserted by the
+scanner at a line end, so writing `a; b` on one line or two costs nothing. The normalized distance is the token edits from the fix to the original divided
 by the token edits from the mutant to the original. A fix at 0 restored the original. A fix
 at 1 got no closer than the mutant. A fix above 1 moved further away.
 

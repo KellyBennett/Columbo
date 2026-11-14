@@ -1,6 +1,7 @@
 package trials
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -27,28 +28,79 @@ type Runner struct {
 	mu sync.Mutex
 }
 
-// Key identifies a trial across reruns: the same mutant, repeat, agent, model, and prompt wording.
-func (r *Runner) Key(t Trial) string {
-	command, model := r.Agent.Describe()
+// Key identifies a trial across reruns: the same mutant, repeat, agent command, model, prompt wording, and Columbo build.
+// A different build makes a different trial, so a rerun never pools numbers from two builds under one key.
+func Key(t Trial, command, model, build string) string {
 	p := t.Plant
 	h := sha256.Sum256([]byte(strings.Join([]string{p.Smell, p.Operator, p.Corpus.Module, p.Corpus.Version,
-		p.Site.Symbol, fmt.Sprint(p.Site.Offset), fmt.Sprint(p.Dose), fmt.Sprint(t.Repeat), command, model, PromptVersion}, "|")))
+		p.Site.Symbol, fmt.Sprint(p.Site.Offset), fmt.Sprint(p.Dose), fmt.Sprint(t.Repeat), command, model, PromptVersion, build}, "|")))
 	return hex.EncodeToString(h[:12])
+}
+
+// fixer stands in for the agent's turn: it changes the workspace and says how the run went.
+type fixer func(ws, prompt string) (AgentRun, error)
+
+// job is one trial to score, with who fixed it and which Columbo build the fixer read.
+type job struct {
+	trial          Trial
+	command, model string
+	agentBuild     string
+	fix            fixer
 }
 
 // Run skips trials the store already holds, so an interrupted batch resumes where it stopped.
 func (r *Runner) Run(trials []Trial) error {
-	var todo []Trial
-	for _, t := range trials {
-		done, err := r.Store.Done(r.Key(t))
+	command, model := r.Agent.Describe()
+	jobs := make([]job, len(trials))
+	for i, t := range trials {
+		jobs[i] = job{trial: t, command: command, model: model, agentBuild: r.build(t.Plant), fix: func(ws, prompt string) (AgentRun, error) {
+			return r.Agent.Fix(context.Background(), ws, prompt), nil
+		}}
+	}
+	return r.runJobs(jobs)
+}
+
+// Rescore replays stored fixes on fresh copies of their mutants with the current build and scorer. A stored trial is
+// replayed only when the current build gives its mutant the prompt the agent saw, since a different prompt is a different trial.
+func (r *Runner) Rescore(stored []Stored, plants []*Plant) error {
+	var jobs []job
+	for _, st := range stored {
+		p := st.plant(plants)
+		if p == nil {
+			return fmt.Errorf("no current mutant matches the stored %s trial on %s at %s; rerun it instead", st.Smell, st.Module, st.Site)
+		}
+		if Prompt(p.Mutant, p.Added) != st.Prompt {
+			r.logf("WARNING: the current build gives %s a different prompt than the agent saw, so it is not rescored; rerun it", shortName(p))
+			continue
+		}
+		jobs = append(jobs, job{trial: Trial{Plant: p, Repeat: st.Repeat}, command: st.Command, model: st.Model, agentBuild: st.AgentColumbo,
+			fix: func(ws, _ string) (AgentRun, error) { return st.Run, applyPatch(ws, st.FixPatch) }})
+	}
+	return r.runJobs(jobs)
+}
+
+func (st Stored) plant(plants []*Plant) *Plant {
+	for _, p := range plants {
+		if p.Smell == st.Smell && p.Operator == st.Operator && p.Corpus.Module == st.Module && p.Corpus.Version == st.Version &&
+			bytes.Equal(p.Patch, st.MutantPatch) {
+			return p
+		}
+	}
+	return nil
+}
+
+func (r *Runner) runJobs(jobs []job) error {
+	var todo []job
+	for _, j := range jobs {
+		done, err := r.Store.Done(r.key(j))
 		if err != nil {
 			return err
 		}
 		if !done {
-			todo = append(todo, t)
+			todo = append(todo, j)
 		}
 	}
-	r.logf("%d trials scheduled, %d already recorded", len(trials), len(trials)-len(todo))
+	r.logf("%d trials scheduled, %d already recorded", len(jobs), len(jobs)-len(todo))
 	errs := make([]error, len(todo))
 	harness.ForEach(len(todo), r.Workers, func(i int) { errs[i] = r.attempt(todo[i]) })
 	for _, err := range errs {
@@ -59,7 +111,12 @@ func (r *Runner) Run(trials []Trial) error {
 	return nil
 }
 
-func (r *Runner) attempt(t Trial) error {
+func (r *Runner) key(j job) string { return Key(j.trial, j.command, j.model, r.build(j.trial.Plant)) }
+
+func (r *Runner) build(p *Plant) string { return r.Env.Build(p.Mutant) }
+
+func (r *Runner) attempt(j job) error {
+	t := j.trial
 	p := t.Plant
 	prompt := Prompt(p.Mutant, p.Added)
 	ws, err := harness.TempDir("calibration-trial-")
@@ -72,9 +129,11 @@ func (r *Runner) attempt(t Trial) error {
 	if err := harness.CopyModule(p.Dir, ws); err != nil {
 		return err
 	}
-	run := r.Agent.Fix(context.Background(), ws, prompt)
-	command, model := r.Agent.Describe()
-	row := Row{Key: r.Key(t), Trial: t, Prov: r.provenance(p), Command: command, Model: model, Prompt: prompt, Run: run}
+	run, err := j.fix(ws, prompt)
+	if err != nil {
+		return fmt.Errorf("%s: %w", shortName(p), err)
+	}
+	row := Row{Key: r.key(j), Trial: t, Prov: r.provenance(p), AgentColumbo: j.agentBuild, Command: j.command, Model: j.model, Prompt: prompt, Run: run}
 	if run.InfraError == "" {
 		sc, err := ScoreFix(r.Env, p, ws)
 		if err != nil {
@@ -92,7 +151,7 @@ func (r *Runner) attempt(t Trial) error {
 }
 
 func (r *Runner) provenance(p *Plant) Provenance {
-	return Provenance{Module: p.Corpus.Module, Version: p.Corpus.Version, Columbo: r.Env.Build(p.Mutant),
+	return Provenance{Module: p.Corpus.Module, Version: p.Corpus.Version, Columbo: r.build(p),
 		ConfigHash: harness.ConfigHash(p.Corpus.Root), Validity: string(r.Env.Validity)}
 }
 
@@ -122,12 +181,16 @@ func summary(t Trial, row Row) string {
 		return head + " infra: " + row.Run.InfraError
 	}
 	s := row.Score
-	tests := "skip"
-	if s.TestsPass != nil {
-		tests = fmt.Sprint(*s.TestsPass)
-	}
 	return fmt.Sprintf("%s cleared=%v vet=%v tests=%s introduced=%d out-of-scope-gone=%d distance=%.2f (%d/%d) flags=%s",
-		head, s.Cleared(), s.VetPass, tests, len(s.Introduced), len(s.OutOfScopeGone), s.Distance.Normalized(), s.Distance.Fixed, s.Distance.Mutant, strings.Join(s.Flags, ","))
+		head, s.Cleared(), s.VetPass, s.Tests, len(s.Introduced), len(s.OutOfScopeGone), s.Distance.Normalized(), s.Distance.Fixed, s.Distance.Mutant, flagList(s.Flags))
+}
+
+func flagList(fs []Flag) string {
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = f.String()
+	}
+	return strings.Join(out, ", ")
 }
 
 func (r *Runner) logf(format string, args ...any) {

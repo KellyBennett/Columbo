@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -16,11 +17,13 @@ import (
 
 func trialsCmd(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: calibrate trials run|leads|report|export [flags]")
+		return fmt.Errorf("usage: calibrate trials run|rescore|leads|report|export [flags]")
 	}
 	switch args[0] {
 	case "run":
 		return trialsRun(args[1:])
+	case "rescore":
+		return trialsRescore(args[1:])
 	case "leads":
 		return trialsLeads(args[1:])
 	case "report":
@@ -83,12 +86,10 @@ func trialsRun(args []string) error {
 		want := strings.Split(*smells, ",")
 		rows = slices.DeleteFunc(rows, func(r trials.PlanRow) bool { return !slices.Contains(want, r.Smell) })
 	}
-	bin, err := filepath.Abs(*columbo)
+	env, err := trialEnv(*columbo)
 	if err != nil {
 		return err
 	}
-	env := harness.Env{Columbo: bin, Validity: harness.ValidityTest, Timeout: 15 * time.Minute}
-	logf := func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }
 	planter := &trials.Planter{Env: env, PlanDir: filepath.Dir(*plan), Workers: *probes, Log: logf}
 	plants, unplanted, err := planter.PlantPlan(rows, *perSmell, *limit)
 	defer planter.Cleanup(plants)
@@ -109,7 +110,7 @@ func trialsRun(args []string) error {
 	if *dryRun {
 		return printSchedule(scheduled)
 	}
-	path, err := agentPath(bin)
+	path, err := agentPath(env.Columbo)
 	if err != nil {
 		return err
 	}
@@ -127,6 +128,68 @@ func trialsRun(args []string) error {
 		Env: []string{"PATH=" + filepath.Dir(path) + string(os.PathListSeparator) + os.Getenv("PATH"), "TMPDIR=" + os.TempDir(), "GOFLAGS=-buildvcs=false", "GOWORK=off"}}
 	r := &trials.Runner{Env: env, Agent: agent, Store: ts, Workers: *workers, Out: *out, Keep: *keep, Log: logf}
 	return r.Run(scheduled)
+}
+
+// trials run every corpus's tests, since whether they still pass is half of what a trial measures.
+func trialEnv(columbo string) (harness.Env, error) {
+	bin, err := filepath.Abs(columbo)
+	return harness.Env{Columbo: bin, Validity: harness.ValidityTest, Timeout: 15 * time.Minute}, err
+}
+
+func logf(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }
+
+// trialsRescore replays the fixes stored in another database on fresh mutants, scoring them with this build.
+func trialsRescore(args []string) error {
+	fs := flag.NewFlagSet("trials rescore", flag.ContinueOnError)
+	from := fs.String("from", "", "database holding the trials to rescore; it is only read")
+	plan := fs.String("plan", "trials.tsv", "trial plan that planted the stored trials")
+	columbo := fs.String("columbo", "columbo", "columbo binary")
+	db := fs.String("db", "calibration.sqlite", "database to record the rescored trials in")
+	workers := fs.Int("workers", 4, "trials scored at once")
+	probes := fs.Int("probes", 8, "mutants probed at once while planting")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *from == "" {
+		return fmt.Errorf("trials rescore needs --from")
+	}
+	src, err := sql.Open("sqlite", "file:"+*from+"?mode=ro")
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	stored, err := trials.ReadStored(src)
+	if err != nil {
+		return err
+	}
+	rows, err := trials.ReadPlan(*plan)
+	if err != nil {
+		return err
+	}
+	rows = slices.DeleteFunc(rows, func(r trials.PlanRow) bool {
+		return !slices.ContainsFunc(stored, func(st trials.Stored) bool { return st.Smell == r.Smell })
+	})
+	env, err := trialEnv(*columbo)
+	if err != nil {
+		return err
+	}
+	planter := &trials.Planter{Env: env, PlanDir: filepath.Dir(*plan), Workers: *probes, Log: logf}
+	plants, err := planter.Plant(rows)
+	defer planter.Cleanup(plants)
+	if err != nil {
+		return err
+	}
+	store, err := harness.OpenStore(*db)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	ts, err := trials.NewStore(store.DB())
+	if err != nil {
+		return err
+	}
+	r := &trials.Runner{Env: env, Store: ts, Workers: *workers, Log: logf}
+	return r.Rescore(stored, plants)
 }
 
 // agentPath puts columbo on the agent's PATH under its plain name, so the allowed-tools rule can name it.
