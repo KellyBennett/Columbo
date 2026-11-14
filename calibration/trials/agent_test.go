@@ -80,3 +80,35 @@ func TestAnAgentThatNeverReportsIsAnInfrastructureError(t *testing.T) {
 		t.Fatalf("infra error %q, want the agent's stderr", run.InfraError)
 	}
 }
+
+func TestAnErrorResultIsAnInfrastructureErrorButTheTurnCapIsNot(t *testing.T) {
+	for subtype, infra := range map[string]bool{"success": true, "error_during_execution": true, "error_max_turns": false} {
+		bin := script(t, `echo '{"type":"result","subtype":"`+subtype+`","is_error":true,"num_turns":1,"result":"Not logged in","api_error_status":null}'
+`)
+		run := CommandAgent{Command: bin, Timeout: time.Minute}.Fix(context.Background(), t.TempDir(), "")
+		if (run.InfraError != "") != infra {
+			t.Errorf("is_error with subtype %s: infra error %q, want infra %v", subtype, run.InfraError, infra)
+		}
+	}
+}
+
+func TestTheAgentInheritsOnlyTheAllowedEnvironment(t *testing.T) {
+	t.Setenv("CALIBRATION_PROBE_TOKEN", "secret")
+	t.Setenv("USER", "someone")
+	bin := script(t, "env > \"$PWD/env.txt\"\necho '{\"type\":\"result\",\"subtype\":\"success\"}'\n")
+	dir := t.TempDir()
+	CommandAgent{Command: bin, Timeout: time.Minute, Env: []string{"GOWORK=off"}}.Fix(context.Background(), dir, "")
+	got, err := os.ReadFile(filepath.Join(dir, "env.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := "\n" + string(got)
+	for _, want := range []string{"\nUSER=someone\n", "\nGOWORK=off\n", "\nPATH="} {
+		if !strings.Contains(env, want) {
+			t.Errorf("agent environment lacks %q", strings.TrimSpace(want))
+		}
+	}
+	if strings.Contains(env, "CALIBRATION_PROBE_TOKEN") {
+		t.Error("agent inherited a variable outside the allowlist")
+	}
+}

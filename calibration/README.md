@@ -102,18 +102,37 @@ and keeps the mutants Columbo kills that still pass `go vet` and the tests. Each
 `--per-smell` trials (default 5). They take one mutant per corpus before any corpus gives a
 second site or dose, and repeat mutants when a smell has fewer than five, because agent
 nondeterminism is part of the spread. No fixture gives `inline-function-complexity` a kill, so
-`high-cognitive-complexity` trials use cobra v1.9.1 from `corpus.txt`. Trials run every
-corpus's tests, cobra's included. `calibrate.sh` avoids running downloaded code, but whether
-the tests still pass is half of what a trial measures.
+`high-cognitive-complexity` trials use cobra v1.9.1 from `corpus.txt`. `trials run` warns, before
+and after the run, about any planned smell that planted no killed mutant.
 
 The agent works in a fresh copy of the mutant. The prompt (`trials/prompt.go`, versioned by
 `PromptVersion`) holds Columbo's `--staged=false` output for the cases the mutant added, and
 each case's why, diagnosis, leads, and avoid guidance from the snapshot. It never says how the
 code changed. The default command is `claude -p --model sonnet` with `--safe-mode` and
-`--restricted`, so the user's settings, `CLAUDE.md`, plugins, and MCP servers stay out. File
-tools stay inside the workspace. Bash allows `go build`, `go vet`, `go test`, and `columbo`,
-plus the read-only commands Claude Code always allows. The run stops at 40 turns or 20 minutes.
-`--model` runs a different model, and `--agent` replaces the whole command.
+`--restricted`, so the user's settings, `CLAUDE.md`, plugins, and MCP servers stay out, and
+Claude Code's file tools stay inside the workspace. The allowed tools let the agent start
+`go build`, `go vet`, `go test`, and `columbo`, plus the read-only commands Claude Code always
+allows. The run stops at 40 turns or 20 minutes. `--model` runs a different model, and
+`--agent` replaces the whole command.
+
+### The agent is not isolated
+
+The allowed-tools list limits which commands the agent starts, not what they do. `go test`
+compiles and runs test code, and the agent can write that code, so a trial can do anything
+the user running it can do. This was accepted rather than solved:
+
+- The code is pinned public code: the fixtures in this repository, and cobra v1.9.1 fetched
+  checksum-verified into the module cache.
+- Each agent works in a fresh temporary copy of its mutant.
+- The agent inherits only `PATH`, `HOME`, `USER`, `TMPDIR`, and the Go toolchain and cache
+  variables, plus the settings the harness adds. The `claude` CLI needs `USER` and `HOME` to
+  find its own login. No other token, socket, or credential reaches the agent or its tests.
+
+Run trials only where that is acceptable. A container would isolate them, and the harness
+does not build one. The same reasoning reverses an earlier rule for trials only.
+`calibrate.sh` runs downloaded corpora at build validity, so their code never runs. Trials run
+every corpus's tests, cobra's included, because whether the tests still pass is half of what a
+trial measures. Lead checks on downloaded corpora keep build validity.
 
 ### How a trial is scored
 

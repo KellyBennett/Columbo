@@ -39,7 +39,7 @@ type AgentRun struct {
 }
 
 // DefaultCommand runs Claude Code headless without the user's settings, CLAUDE.md, plugins, or MCP servers.
-// Bash is limited to go build, vet, and test and the columbo binary; Claude Code also allows its own read-only commands.
+// The allowed tools limit which commands the agent may start, not what they do: go test runs test code the agent can write.
 const DefaultCommand = `claude -p --safe-mode --restricted --no-session-persistence --model {model} --max-turns {turns} ` +
 	`--output-format stream-json --verbose --permission-mode dontAsk --tools Read,Edit,Write,Glob,Grep,Bash ` +
 	`--allowedTools "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(columbo:*)"`
@@ -50,7 +50,23 @@ type CommandAgent struct {
 	Model    string
 	MaxTurns int
 	Timeout  time.Duration
-	Env      []string
+	// Env sets variables on top of the few inherited ones.
+	Env []string
+}
+
+// inheritedEnv names the variables an agent gets from the harness's own environment: what the go command needs to find
+// its toolchain and caches, and USER and HOME, which the claude CLI needs to find its login. Tokens, sockets, and every
+// other variable stay behind, because the agent's tests run with whatever the agent inherits.
+var inheritedEnv = []string{"PATH", "HOME", "USER", "TMPDIR", "GOPATH", "GOCACHE", "GOMODCACHE", "GOFLAGS", "GOTOOLCHAIN"}
+
+func agentEnv(extra []string) []string {
+	var env []string
+	for _, name := range inheritedEnv {
+		if v, ok := os.LookupEnv(name); ok {
+			env = append(env, name+"="+v)
+		}
+	}
+	return append(env, extra...)
 }
 
 func (a CommandAgent) Describe() (string, string) { return a.Command, a.Model }
@@ -67,7 +83,7 @@ func (a CommandAgent) Fix(ctx context.Context, dir, prompt string) AgentRun {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), a.Env...)
+	cmd.Env = agentEnv(a.Env)
 	cmd.Stdin = strings.NewReader(prompt)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
@@ -122,8 +138,11 @@ func readResult(run *AgentRun, transcript []byte) {
 		}
 		sort.Strings(models)
 		run.ModelID = strings.Join(models, ",")
-		if r.APIError != nil {
+		switch {
+		case r.APIError != nil:
 			run.InfraError = fmt.Sprintf("api error %v: %s", r.APIError, firstLine(r.Result))
+		case r.IsError && r.Subtype != "error_max_turns":
+			run.InfraError = "agent ended on an error: " + firstLine(r.Result)
 		}
 	}
 }
