@@ -70,6 +70,12 @@ jobs:
         env:
           COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
         run: python3 -m unittest discover -s scripts -p test_github_check.py -v
+      - name: Test base-commit analysis for pull request feedback
+        run: python3 -m unittest discover -s scripts -p test_run_base_analysis.py -v
+      - name: Test pull request feedback comparison, anchoring and reconciliation
+        env:
+          COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite
+        run: python3 -m unittest discover -s scripts -p test_github_feedback.py -v
       - name: Retain query fixture snapshot
         if: always()
         uses: actions/upload-artifact@v7
@@ -83,6 +89,7 @@ jobs:
     permissions:
       contents: read
       checks: write
+      pull-requests: write
     needs: acceptance
     runs-on: ubuntu-24.04
     env:
@@ -99,6 +106,7 @@ jobs:
         uses: ./
         with:
           artifact-name: columbo-self-check-snapshot
+          feedback: true
 
   calibration:
     name: Mutation calibration
