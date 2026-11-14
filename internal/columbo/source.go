@@ -29,6 +29,8 @@ type file struct {
 	tf        *token.File
 	tokens    []lexToken
 	included  bool
+	marker    int
+	excluded  bool
 	pkg       *packages.Package
 }
 type declaration struct {
@@ -248,7 +250,8 @@ func (a *engine) sourceFile(p *packages.Package, astFile *ast.File, path, rel st
 func (f *file) tokenFile() *token.File { return f.fset.File(f.ast.Pos()) }
 func (f *file) initialize(data []byte, excludes []string) error {
 	f.data = data
-	f.included = !generated(data)
+	f.marker = generatedMarker(data)
+	f.included = f.marker == 0
 	f.scan()
 	return f.exclude(excludes)
 }
@@ -259,7 +262,7 @@ func (f *file) exclude(patterns []string) error {
 			return e
 		}
 		if match {
-			f.included = false
+			f.included, f.excluded = false, true
 		}
 	}
 	return nil
@@ -398,18 +401,18 @@ func newSourceTokens(f *token.File, data []byte) *sourceTokens {
 	stream.scanner.Init(f, data, nil, scanner.ScanComments)
 	return stream
 }
-func generated(b []byte) bool {
+func generatedMarker(b []byte) int {
 	f := token.NewFileSet().AddFile("", -1, len(b))
-	return newSourceTokens(f, b).generated()
+	return newSourceTokens(f, b).generatedMarker(f)
 }
-func (s *sourceTokens) generated() bool {
+func (s *sourceTokens) generatedMarker(f *token.File) int {
 	for {
-		_, tok, literal := s.scanner.Scan()
+		pos, tok, literal := s.scanner.Scan()
 		if tok != token.COMMENT {
-			return false
+			return 0
 		}
 		if generatedRE.MatchString(literal) {
-			return true
+			return f.Line(pos)
 		}
 	}
 }
@@ -521,7 +524,7 @@ func (a *engine) target(obj *types.Func) *declaration {
 }
 
 func (a *engine) Analyze() (Report, error) {
-	for _, stage := range []func() error{a.inspectDeclarations, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.selectionUses, a.comments, a.suppressions} {
+	for _, stage := range []func() error{a.inspectDeclarations, a.generatedExclusions, a.clumps, a.cosmetic, a.duplicates, a.repeatedVariants, a.selectionUses, a.comments, a.suppressions} {
 		if e := stage(); e != nil {
 			return Report{}, e
 		}
@@ -557,6 +560,27 @@ func (a *engine) inspectDeclarations() error {
 		}
 	}
 	return nil
+}
+func (a *engine) generatedExclusions() error {
+	for _, f := range a.files {
+		if f.marker > 0 && !f.excluded {
+			a.report.Warnings = append(a.report.Warnings, f.generatedExclusion())
+		}
+	}
+	return nil
+}
+func (f *file) generatedExclusion() Warning {
+	message := fmt.Sprintf("Generated-code header excludes %s from analysis; function and method declarations hidden: %d. A matching exclude pattern acknowledges it.", f.rel, f.functionDeclarations())
+	return Warning{Code: "generated-exclusion", File: f.rel, Line: f.marker, Message: message}
+}
+func (f *file) functionDeclarations() int {
+	count := 0
+	for _, node := range f.ast.Decls {
+		if _, ok := node.(*ast.FuncDecl); ok {
+			count++
+		}
+	}
+	return count
 }
 func Analyze(dir string, patterns []string, c Config) (Report, error) {
 	input, err := inspectionLocation(dir)

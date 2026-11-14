@@ -15,7 +15,7 @@
     "/*line original.go:23:4*/",
     "//export Function",
     "//nolint",
-    "//nolint:revive,staticcheck // required reason",
+    "//nolint:revive,staticcheck",
     "//lint:ignore SA1019 compatibility reason",
     "//lint:file-ignore U1000 generated bridge",
     "// columbo:ignore long-function -- accepted design exception"
@@ -37,5 +37,11 @@
     "//export ",
     "//lint:ignore",
     "//columbo:ignore"
+  ],
+  "justified": [
+    {"text": "//nolint // required reason", "prose": "// required reason"},
+    {"text": "//nolint:revive,staticcheck // required reason", "prose": "// required reason"},
+    {"text": "//nolint:godot\t// ThrottleOpts represents a set of throttling options.", "prose": "// ThrottleOpts represents a set of throttling options."},
+    {"text": "//nolint:godot //", "prose": "//"}
   ]
 }

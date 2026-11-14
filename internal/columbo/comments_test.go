@@ -45,16 +45,47 @@ func TestProseCommentPolicy(t *testing.T) {
 	require.Empty(t, h.investigate(dir, cfg).Cases)
 }
 
-func TestMachineCommentRecognition(t *testing.T) {
+type justifiedDirective struct{ Text, Prose string }
+
+type directiveSamples struct {
+	Allowed, Rejected []string
+	Justified         []justifiedDirective
+}
+
+func loadDirectiveSamples(t *testing.T) directiveSamples {
+	t.Helper()
 	data, err := os.ReadFile("testdata/comment-directives.json")
 	require.NoError(t, err)
-	var samples struct{ Allowed, Rejected []string }
+	var samples directiveSamples
 	require.NoError(t, json.Unmarshal(data, &samples))
+	return samples
+}
+
+func TestMachineCommentRecognition(t *testing.T) {
+	samples := loadDirectiveSamples(t)
 	for _, text := range samples.Allowed {
-		require.True(t, machineComment(text), text)
+		_, prose := proseOffset(text)
+		require.False(t, prose, text)
 	}
 	for _, text := range samples.Rejected {
-		require.False(t, machineComment(text), text)
+		offset, prose := proseOffset(text)
+		require.True(t, prose, text)
+		require.Zero(t, offset, text)
+	}
+	for _, sample := range samples.Justified {
+		offset, prose := proseOffset(sample.Text)
+		require.True(t, prose, sample.Text)
+		require.Equal(t, sample.Prose, sample.Text[offset:])
+	}
+}
+
+func TestDirectiveJustificationIsProse(t *testing.T) {
+	for _, sample := range loadDirectiveSamples(t).Justified {
+		source := "package fixture\n" + sample.Text + "\nvar Value int\n"
+		receipts := commentSource(t, source).proseComments()
+		require.Len(t, receipts, 1, sample.Text)
+		require.Equal(t, sample.Prose, source[receipts[0].StartOffset:receipts[0].EndOffset])
+		require.Equal(t, 2, receipts[0].StartLine)
 	}
 }
 

@@ -47,14 +47,14 @@ func (f *file) proseComments() []Source {
 func (f *file) commentSources(group *ast.CommentGroup) []Source {
 	sources := []Source{}
 	for _, comment := range group.List {
-		if !machineComment(comment.Text) {
-			sources = append(sources, f.commentReceipt(comment))
+		if offset, prose := proseOffset(comment.Text); prose {
+			sources = append(sources, f.commentReceipt(comment, offset))
 		}
 	}
 	return sources
 }
-func (f *file) commentReceipt(comment *ast.Comment) Source {
-	source := f.receipt("prose-comment", comment.Pos(), f.commentEnd(comment), Detail{Subject: f.packageClauseRef().Symbol, Value: 1})
+func (f *file) commentReceipt(comment *ast.Comment, offset int) Source {
+	source := f.receipt("prose-comment", comment.Pos()+token.Pos(offset), f.commentEnd(comment), Detail{Subject: f.packageClauseRef().Symbol, Value: 1})
 	return source.forDeclaration(f.packageClauseRef())
 }
 func (f *file) commentEnd(comment *ast.Comment) token.Pos {
