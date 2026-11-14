@@ -17,14 +17,16 @@ def limited(text, maximum=65536):
     return encoded[:maximum - len(suffix.encode())].decode("utf-8", errors="ignore") + suffix
 
 
+def number_text(kind, value):
+    if kind in ("parameter-overlap", "dependency-overlap", "foreign-own-ratio"):
+        return f"{value:.6f}"
+    return str(value)
+
+
 def metric_text(row):
-    def number(value):
-        if row["kind"] in ("parameter-overlap", "dependency-overlap", "foreign-own-ratio"):
-            return f"{value:.6f}"
-        return str(value)
-    text = f'{row["kind"]} {row["subject"]}: {number(row["numeric_value"])}'
+    text = f'{row["kind"]} {row["subject"]}: {number_text(row["kind"], row["numeric_value"])}'
     if row["limit_value"] is not None:
-        text += f' (limit {row["operator"]} {number(row["limit_value"])})'
+        text += f' (limit {row["operator"]} {number_text(row["kind"], row["limit_value"])})'
     return text
 
 
@@ -63,7 +65,10 @@ class Snapshot:
         """, (case_id,))]
 
     def guidance(self, case_id):
-        return [f'{item["kind"]}: {item["item"]}' for item in self.db.execute(
+        return [f"{kind}: {item}" for kind, item in self.guidance_items(case_id)]
+
+    def guidance_items(self, case_id):
+        return [(row["kind"], row["item"]) for row in self.db.execute(
             "SELECT kind,item FROM case_guidance WHERE case_id=? ORDER BY kind,ordinal", (case_id,))]
 
     def supporting_evidence(self, case_id):
