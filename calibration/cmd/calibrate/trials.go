@@ -108,6 +108,9 @@ func trialsRun(args []string) error {
 		scheduled = scheduled[:*limit]
 	}
 	if *dryRun {
+		if err := printRecorded(scheduled, *db, *command, *model, env); err != nil {
+			return err
+		}
 		return printSchedule(scheduled)
 	}
 	path, err := agentPath(env.Columbo)
@@ -200,6 +203,34 @@ func agentPath(bin string) (string, error) {
 	}
 	link := filepath.Join(dir, "columbo")
 	return link, os.Symlink(bin, link)
+}
+
+// printRecorded says how many scheduled trials the database already holds, so a dry run shows what a real run would pay for.
+func printRecorded(scheduled []trials.Trial, db, command, model string, env harness.Env) error {
+	if _, err := os.Stat(db); err != nil {
+		return nil
+	}
+	store, err := harness.OpenStore(db)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	ts, err := trials.NewStore(store.DB())
+	if err != nil {
+		return err
+	}
+	recorded := 0
+	for _, t := range scheduled {
+		done, err := ts.Recorded(trials.Key(t, command, model, env.Build(t.Plant.Mutant)))
+		if err != nil {
+			return err
+		}
+		if done {
+			recorded++
+		}
+	}
+	fmt.Printf("%d trials scheduled, %d already recorded in %s, %d would run an agent\n\n", len(scheduled), recorded, db, len(scheduled)-recorded)
+	return nil
 }
 
 func printSchedule(scheduled []trials.Trial) error {

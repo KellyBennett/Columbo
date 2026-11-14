@@ -135,8 +135,13 @@ func (s *Store) Done(key string) (bool, error) {
 	if _, err := s.db.Exec(`DELETE FROM trials WHERE trial_key = ? AND infra_error <> ''`, key); err != nil {
 		return false, err
 	}
+	return s.Recorded(key)
+}
+
+// Recorded reports whether a trial has a usable row, changing nothing.
+func (s *Store) Recorded(key string) (bool, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT count(*) FROM trials WHERE trial_key = ?`, key).Scan(&n)
+	err := s.db.QueryRow(`SELECT count(*) FROM trials WHERE trial_key = ? AND infra_error = ''`, key).Scan(&n)
 	return n > 0, err
 }
 
