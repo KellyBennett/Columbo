@@ -12,7 +12,8 @@ func Main(version string) int {
 	return Run(os.Args[1:], processInvocation(dir, version))
 }
 func processInvocation(dir, version string) Invocation {
-	return Invocation{Dir: dir, Version: version, Stdout: os.Stdout, Stderr: os.Stderr}
+	home, _ := os.UserHomeDir()
+	return Invocation{Dir: dir, Version: version, Home: home, Stdout: os.Stdout, Stderr: os.Stderr}
 }
 func processError(e error, code int) int {
 	os.Stderr.WriteString(e.Error() + "\n")

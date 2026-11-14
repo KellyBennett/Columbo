@@ -4,6 +4,7 @@
     "internal/snapshotdb/db.go",
     "internal/snapshotdb/models.go",
     "internal/snapshotdb/queries.sql.go",
+    "internal/snapshotdb/ledger_queries.sql.go",
     "internal/snapshotdb/querier.go"
   ],
   "test_exceptions": {

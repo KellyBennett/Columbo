@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the four claimed sqlc files in a private copy, then byte-compare."""
+"""Regenerate the claimed sqlc files in a private copy, then byte-compare."""
 import argparse
 import json
 import os

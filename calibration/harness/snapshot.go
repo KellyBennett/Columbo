@@ -28,7 +28,7 @@ func ReadSnapshot(path string) (Snapshot, error) {
 	if err := db.QueryRow(`SELECT columbo_version FROM report`).Scan(&s.Version); err != nil {
 		return Snapshot{}, fmt.Errorf("read report: %w", err)
 	}
-	rows, err := db.Query(`SELECT c.smell, d.symbol, f.path, c.id, c.verdict
+	rows, err := db.Query(`SELECT c.smell, d.symbol, f.path, c.id, c.verdict, ` + caseRatio + `
 		FROM cases c JOIN declarations d ON d.id = c.primary_declaration_id JOIN files f ON f.id = d.file_id
 		WHERE c.suppressed = 0`)
 	if err != nil {
@@ -37,7 +37,7 @@ func ReadSnapshot(path string) (Snapshot, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var f Finding
-		if err := rows.Scan(&f.Smell, &f.Symbol, &f.File, &f.CaseID, &f.Verdict); err != nil {
+		if err := rows.Scan(&f.Smell, &f.Symbol, &f.File, &f.CaseID, &f.Verdict, &f.Ratio); err != nil {
 			return Snapshot{}, err
 		}
 		s.Findings = append(s.Findings, f)

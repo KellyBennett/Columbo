@@ -55,6 +55,53 @@ drift).
 | neutral | | | `equivalent`: no change; `id-drift`: a case ID changed unexplained |
 | cure | target removed, nothing added | target remains | `conflict`: target removed, another smell added |
 
+## Weight kill rates by real case shapes
+
+An unweighted kill rate counts a mutant 40 lines over the limit the same as one a line
+over. To weight each band by how often real cases have that shape, pass the export of a
+Columbo case ledger to the report:
+
+```sh
+columbo calibrate --export > export.json
+/tmp/calibrate report --db calibration.sqlite --weights export.json
+```
+
+The report then adds two sections. `Real case shapes` shows how each smell's exported cases
+split across the excess bands. `Weighted kill rate` places each scored mutant in the band of
+its subject case and weights each band's kill rate by that band's share of the target
+smell's real cases. [The ledger design](../docs/calibration-ledger-design.md) defines the
+bands and the formula.
+
+| Class | Subject case |
+|---|---|
+| inject | the target-smell case the mutant added |
+| evade | the target-smell case the parent inject added |
+| cure | the target-smell case on the site symbol in the baseline |
+
+A mutant with no subject case is `unshaped`. Every surviving inject is unshaped, and so is
+a frozen red-team evade, which has no parent. A row with any unshaped mutant shows its
+`kill rate` but a `withheld` weighted rate, because its shaped mutants are not the population
+the kill rate counts. A band with exported cases and no scored mutant shows `uncovered`.
+`covered` is the share of exported cases in the bands that the weighted rate includes. A
+band whose cases the export's floor dropped shows blank.
+
+The harness stores a `ratio` with each finding. The ratio is the value of the case's first
+limited clue divided by the smallest value that triggers it. `calibrate run` adds the column
+to an older `calibration.sqlite` when it starts a run. `calibrate report` never writes, and
+reads an older database as if every ratio were missing. Findings recorded without a ratio
+put their mutants in `unmeasured` until you rerun them.
+
+`ledger-sample.sh` builds a reproducible export from public code only. It records Columbo's
+own module and every module in `corpus.txt` into a throwaway ledger under a temporary HOME,
+then exports it. It never reads or writes your real `~/.columbo`.
+
+```sh
+./ledger-sample.sh reports/ledger-export-sample.json
+```
+
+`reports/ledger-export-sample.json` is that export, and `reports/weighted-sample.md` is the
+weighted report it produces against a `calibrate.sh <db> all 8` run over the same modules.
+
 ## Chains
 
 A chain applies several operators in a row, rereading the code after each step, and checks

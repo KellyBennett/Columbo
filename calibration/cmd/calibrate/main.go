@@ -121,12 +121,19 @@ func reportCmd(args []string) error {
 	db := fs.String("db", "calibration.sqlite", "results database")
 	triagePath := fs.String("triage", "triage.yaml", "survivor triage file")
 	failUntriaged := fs.Bool("fail-untriaged", false, "exit 1 when a survivor is not triaged")
+	weightsPath := fs.String("weights", "", "columbo calibrate --export JSON that weights kill rates by real case shapes")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	triage, err := report.LoadTriage(*triagePath)
 	if err != nil {
 		return err
+	}
+	var weights *report.Weights
+	if *weightsPath != "" {
+		if weights, err = report.LoadWeights(*weightsPath); err != nil {
+			return err
+		}
 	}
 	store, err := harness.OpenStore(*db)
 	if err != nil {
@@ -136,6 +143,11 @@ func reportCmd(args []string) error {
 	untriaged, err := report.Write(os.Stdout, store.DB(), triage)
 	if err != nil {
 		return err
+	}
+	if weights != nil {
+		if err := report.WriteWeighted(os.Stdout, store.DB(), weights); err != nil {
+			return err
+		}
 	}
 	if untriaged > 0 {
 		fmt.Fprintf(os.Stderr, "warning: %d untriaged survivors\n", untriaged)

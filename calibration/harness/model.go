@@ -102,6 +102,8 @@ type Finding struct {
 	CaseID  string
 	Verdict string
 	Support []Decl
+	// Ratio is nil when the case has no limited clue.
+	Ratio *float64
 }
 
 type Decl struct {

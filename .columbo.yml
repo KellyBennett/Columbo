@@ -6,3 +6,4 @@ exclude:
   - "internal/snapshotdb/models.go"
   - "internal/snapshotdb/querier.go"
   - "internal/snapshotdb/queries.sql.go"
+  - "internal/snapshotdb/ledger_queries.sql.go"

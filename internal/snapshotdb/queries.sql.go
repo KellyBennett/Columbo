@@ -201,6 +201,58 @@ func (q *Queries) AdvisoryValues(ctx context.Context, arg AdvisoryValuesParams) 
 	return items, nil
 }
 
+const caseShapes = `-- name: CaseShapes :many
+SELECT c.id,c.smell,c.verdict,c.suppressed,COALESCE(l.value_type,'') AS value_type,
+ CAST(COALESCE(l.numeric_value,0) AS REAL) AS value,CAST(COALESCE(l.limit_value,0) AS REAL) AS limit_value,
+ COALESCE(l.operator,'') AS operator
+FROM cases c LEFT JOIN clues l ON l.case_id=c.id
+ AND l.ordinal=(SELECT min(f.ordinal) FROM clues f WHERE f.case_id=c.id AND f.limit_value IS NOT NULL)
+ORDER BY c.ordinal
+`
+
+type CaseShapesRow struct {
+	ID         string
+	Smell      string
+	Verdict    string
+	Suppressed int64
+	ValueType  string
+	Value      float64
+	LimitValue float64
+	Operator   string
+}
+
+func (q *Queries) CaseShapes(ctx context.Context) ([]CaseShapesRow, error) {
+	rows, err := q.db.QueryContext(ctx, caseShapes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CaseShapesRow
+	for rows.Next() {
+		var i CaseShapesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Smell,
+			&i.Verdict,
+			&i.Suppressed,
+			&i.ValueType,
+			&i.Value,
+			&i.LimitValue,
+			&i.Operator,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const dependencyScored = `-- name: DependencyScored :one
 SELECT scored FROM declaration_dependencies WHERE declaration_id=? AND dependency_id=?
 `

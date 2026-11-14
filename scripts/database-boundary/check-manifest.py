@@ -47,7 +47,7 @@ for name in sorted(allowed):
 for path in sorted((root / "internal/snapshotdb").rglob("*.go")):
     name = path.relative_to(root).as_posix()
     if name not in allowed:
-        report(name, 1, "Only lifecycle.go and the four exact sqlc outputs may be in snapshotdb")
+        report(name, 1, "Only lifecycle.go and the manifest's exact sqlc outputs may be in snapshotdb")
 
 # Deliberately inspect all Go source, including build-tagged and generated source.
 # testdata is an analyzer corpus, not application source; guard fixtures use .txt.

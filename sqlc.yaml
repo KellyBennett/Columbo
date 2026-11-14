@@ -1,8 +1,12 @@
 version: "2"
 sql:
   - engine: sqlite
-    schema: internal/snapshotdb/schema.sql
-    queries: internal/snapshotdb/queries.sql
+    schema:
+      - internal/snapshotdb/schema.sql
+      - internal/snapshotdb/ledger_schema.sql
+    queries:
+      - internal/snapshotdb/queries.sql
+      - internal/snapshotdb/ledger_queries.sql
     gen:
       go:
         package: snapshotdb

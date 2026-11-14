@@ -14,6 +14,7 @@ type Querier interface {
 	AdvisoryReceipts(ctx context.Context, arg AdvisoryReceiptsParams) ([]AdvisoryReceiptsRow, error)
 	AdvisorySites(ctx context.Context, arg AdvisorySitesParams) ([]AdvisorySitesRow, error)
 	AdvisoryValues(ctx context.Context, arg AdvisoryValuesParams) ([]AdvisoryValuesRow, error)
+	CaseShapes(ctx context.Context) ([]CaseShapesRow, error)
 	DependencyScored(ctx context.Context, arg DependencyScoredParams) (int64, error)
 	InsertAdvisoryCollector(ctx context.Context, arg InsertAdvisoryCollectorParams) error
 	InsertAdvisoryGroup(ctx context.Context, arg InsertAdvisoryGroupParams) error
@@ -39,6 +40,7 @@ type Querier interface {
 	InsertGuidance(ctx context.Context, arg InsertGuidanceParams) error
 	InsertHistory(ctx context.Context, arg InsertHistoryParams) error
 	InsertHistoryFile(ctx context.Context, arg InsertHistoryFileParams) error
+	InsertLedgerSecret(ctx context.Context, arg InsertLedgerSecretParams) error
 	InsertPolicy(ctx context.Context, arg InsertPolicyParams) error
 	InsertReport(ctx context.Context, arg InsertReportParams) error
 	InsertRoleCandidate(ctx context.Context, arg InsertRoleCandidateParams) error
@@ -85,6 +87,8 @@ type Querier interface {
 	InspectionSiblings(ctx context.Context, arg InspectionSiblingsParams) ([]SourceReceiverSibling, error)
 	InspectionStoragePaths(ctx context.Context, arg InspectionStoragePathsParams) ([]SourceStoragePath, error)
 	InspectionTypes(ctx context.Context) ([]InspectionTypesRow, error)
+	LedgerBuckets(ctx context.Context, arg LedgerBucketsParams) ([]LedgerBucket, error)
+	LedgerSecret(ctx context.Context) ([]byte, error)
 	LinkCaseDeclaration(ctx context.Context, arg LinkCaseDeclarationParams) error
 	LinkClueReceipt(ctx context.Context, arg LinkClueReceiptParams) error
 	LinkCorrelationCase(ctx context.Context, arg LinkCorrelationCaseParams) error
@@ -92,6 +96,7 @@ type Querier interface {
 	LinkCorrelationRole(ctx context.Context, arg LinkCorrelationRoleParams) error
 	LinkPolicy(ctx context.Context, arg LinkPolicyParams) error
 	LinkRoleCase(ctx context.Context, arg LinkRoleCaseParams) error
+	RecordLedgerCase(ctx context.Context, arg RecordLedgerCaseParams) error
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	StageCollectors(ctx context.Context, arg StageCollectorsParams) ([]StageCollector, error)
 	SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error)
