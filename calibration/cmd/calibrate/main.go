@@ -22,7 +22,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: calibrate run|report [flags]")
+		return fmt.Errorf("usage: calibrate run|report|trials [flags]")
 	}
 	if err := resolveTempDir(); err != nil {
 		return err
@@ -32,6 +32,8 @@ func run(args []string) error {
 		return runCmd(args[1:])
 	case "report":
 		return reportCmd(args[1:])
+	case "trials":
+		return trialsCmd(args[1:])
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }

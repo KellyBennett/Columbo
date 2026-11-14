@@ -65,26 +65,11 @@ type Chainer struct {
 }
 
 func (ch *Chainer) Prepare() error {
-	base, err := TempDir("calibration-chain-base-")
+	c, err := ch.Env.PrepareCorpus(ch.Source, nil, "", "")
 	if err != nil {
 		return err
 	}
-	ch.base = base
-	if err := CopyModule(ch.Source, base); err != nil {
-		return err
-	}
-	if why := ch.Env.Check(base, nil); why != "" {
-		return fmt.Errorf("unmutated corpus is not valid: %s", why)
-	}
-	snap, err := ch.Env.Analyze(base)
-	if err != nil {
-		return err
-	}
-	pkgs, err := LoadPackages(base)
-	if err != nil {
-		return err
-	}
-	ch.corpus = &Corpus{Root: base, Packages: pkgs, Baseline: snap}
+	ch.corpus, ch.base = c, c.Root
 	return nil
 }
 

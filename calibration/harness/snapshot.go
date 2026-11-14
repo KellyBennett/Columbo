@@ -14,8 +14,24 @@ type Snapshot struct {
 	Version            string
 	Dependencies       map[string][]string
 	DuplicateFragments map[string]bool
-	// Parameters is keyed by case ID.
+	// Parameters and Guidance are keyed by case ID.
 	Parameters map[string][]ParameterReceipt
+	Guidance   map[string]Guidance
+	// Suppressed counts cases a directive hid; Findings leaves them out.
+	Suppressed int
+	// Output is Columbo's terminal summary for the analysis.
+	Output string
+	// Files is Columbo's inventory of the module, keyed by module-relative path.
+	Files map[string]SourceFile
+}
+
+// SourceFile says whether Columbo looked for cases in a file, and whether a generated-code header kept it out.
+type SourceFile struct{ Analyzed, Generated bool }
+
+// Guidance is what Columbo tells the next agent about a case.
+type Guidance struct {
+	Why, Diagnosis string
+	Leads, Avoid   []string
 }
 
 func ReadSnapshot(path string) (Snapshot, error) {
@@ -60,6 +76,15 @@ func ReadSnapshot(path string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if s.Parameters, err = readParameterReceipts(db); err != nil {
+		return Snapshot{}, err
+	}
+	if s.Guidance, err = readGuidance(db); err != nil {
+		return Snapshot{}, err
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM cases WHERE suppressed = 1`).Scan(&s.Suppressed); err != nil {
+		return Snapshot{}, err
+	}
+	if s.Files, err = readSourceFiles(db); err != nil {
 		return Snapshot{}, err
 	}
 	sortFindings(s.Findings)
@@ -154,4 +179,61 @@ func readDuplicateFragments(db *sql.DB, into map[string]bool) error {
 		into[symbol] = true
 	}
 	return rows.Err()
+}
+
+func readGuidance(db *sql.DB) (map[string]Guidance, error) {
+	out := map[string]Guidance{}
+	rows, err := db.Query(`SELECT id, why, diagnosis FROM cases`)
+	if err != nil {
+		return nil, fmt.Errorf("read guidance: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var g Guidance
+		if err := rows.Scan(&id, &g.Why, &g.Diagnosis); err != nil {
+			return nil, err
+		}
+		out[id] = g
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	items, err := db.Query(`SELECT case_id, kind, item FROM case_guidance ORDER BY case_id, kind, ordinal`)
+	if err != nil {
+		return nil, fmt.Errorf("read case_guidance: %w", err)
+	}
+	defer items.Close()
+	for items.Next() {
+		var id, kind, item string
+		if err := items.Scan(&id, &kind, &item); err != nil {
+			return nil, err
+		}
+		g := out[id]
+		if kind == "lead" {
+			g.Leads = append(g.Leads, item)
+		} else {
+			g.Avoid = append(g.Avoid, item)
+		}
+		out[id] = g
+	}
+	return out, items.Err()
+}
+
+func readSourceFiles(db *sql.DB) (map[string]SourceFile, error) {
+	rows, err := db.Query(`SELECT f.path, s.ordinary_target, s.generated FROM source_files s JOIN files f ON f.id = s.file_id`)
+	if err != nil {
+		return nil, fmt.Errorf("read source_files: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]SourceFile{}
+	for rows.Next() {
+		var path string
+		var f SourceFile
+		if err := rows.Scan(&path, &f.Analyzed, &f.Generated); err != nil {
+			return nil, err
+		}
+		out[path] = f
+	}
+	return out, rows.Err()
 }

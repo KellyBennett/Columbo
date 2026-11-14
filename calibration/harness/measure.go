@@ -58,9 +58,9 @@ func declDistance(before, after []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	total := distance(commentSequence(before), commentSequence(after))
+	total := EditDistance(commentSequence(before), commentSequence(after))
 	for name, seq := range b {
-		total += distance(seq, a[name])
+		total += EditDistance(seq, a[name])
 	}
 	for name, seq := range a {
 		if _, ok := b[name]; !ok {
@@ -147,7 +147,8 @@ func nodeSequence(n ast.Node) []string {
 	return seq
 }
 
-func distance(a, b []string) int {
+// EditDistance counts the insertions and deletions that turn a into b.
+func EditDistance(a, b []string) int {
 	prev := make([]int, len(b)+1)
 	cur := make([]int, len(b)+1)
 	for i := 1; i <= len(a); i++ {

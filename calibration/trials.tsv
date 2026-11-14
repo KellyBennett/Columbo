@@ -1,0 +1,33 @@
+# Agent trial plan (plan phase 8): smell, inject operator, corpus.
+# A corpus is a fixture directory relative to this file, or a pinned module@version from corpus.txt.
+# Trials take one killed mutant per corpus before any corpus gives a second site or dose, and repeat
+# mutants when a smell has fewer than --per-smell of them.
+long-function	inline-function	fixtures/inline
+long-parameter-list	inline-parameter-object-lpl	fixtures/clump
+long-parameter-list	inline-parameter-object-lpl	fixtures/envy
+# No fixture has a helper with enough control flow for inline-function-complexity to fire, so this smell uses cobra.
+high-cognitive-complexity	inline-function-complexity	github.com/spf13/cobra@v1.9.1
+excessive-dependencies	add-collaborators	fixtures/deps
+excessive-dependencies	add-collaborators	fixtures/envy
+excessive-dependencies	add-collaborators	fixtures/inline
+excessive-dependencies	add-collaborators	fixtures/variants
+excessive-dependencies	add-collaborators	fixtures/selection
+feature-envy	move-method-to-function	fixtures/envy
+feature-envy	move-method-to-collaborator	fixtures/envy
+data-clump	inline-parameter-object	fixtures/clump
+data-clump	inline-parameter-object	fixtures/envy
+cosmetic-extraction	split-long-function	fixtures/cosmetic
+cosmetic-extraction	split-long-function	fixtures/extract
+cosmetic-extraction	split-long-function	fixtures/deps
+duplicate-code	duplicate-block	fixtures/dup
+duplicate-code	duplicate-block	fixtures/envy
+duplicate-code	duplicate-block	fixtures/extract
+duplicate-code	duplicate-block	fixtures/cosmetic
+duplicate-code	duplicate-block	fixtures/deps
+repeated-variant-decision	repeat-variant-decision	fixtures/variants
+selection-use-coupling	select-then-use	fixtures/selection
+prose-comment	add-prose-comment	fixtures/inline
+prose-comment	add-prose-comment	fixtures/clump
+prose-comment	add-prose-comment	fixtures/deps
+prose-comment	add-prose-comment	fixtures/envy
+prose-comment	add-prose-comment	fixtures/variants

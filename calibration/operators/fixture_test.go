@@ -1,45 +1,16 @@
 package operators_test
 
 import (
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/KellyBennett/Columbo/calibration/harness"
+	"github.com/KellyBennett/Columbo/calibration/internal/columbotest"
 	"github.com/KellyBennett/Columbo/calibration/operators"
 )
 
-var (
-	columboOnce sync.Once
-	columboBin  string
-	columboErr  error
-)
-
-func columbo(t testing.TB) string {
-	t.Helper()
-	columboOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "calibration-columbo-")
-		if err != nil {
-			columboErr = err
-			return
-		}
-		columboBin = filepath.Join(dir, "columbo")
-		cmd := exec.Command("go", "build", "-o", columboBin, "./cmd/columbo")
-		cmd.Dir = filepath.Join("..", "..")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			columboErr = err
-			t.Log(string(out))
-		}
-	})
-	if columboErr != nil {
-		t.Fatalf("build columbo: %v", columboErr)
-	}
-	return columboBin
-}
+func columbo(t testing.TB) string { return columbotest.Binary(t) }
 
 type row struct {
 	Class, Operator, Symbol, Status, Reason string
@@ -52,11 +23,7 @@ func runFixture(t *testing.T, fixture string, ops ...string) []row {
 	if testing.Short() {
 		t.Skip("runs columbo and go test on mutants")
 	}
-	resolved, err := filepath.EvalSymlinks(os.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TMPDIR", resolved)
+	columbotest.ResolveTempDir(t)
 	selected, err := operators.Select(ops)
 	if err != nil {
 		t.Fatal(err)
