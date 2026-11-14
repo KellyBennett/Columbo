@@ -167,7 +167,9 @@ func (e Env) Analyze(dir string) (Snapshot, error) {
 	if err != nil && !(errors.As(err, &exit) && exit.ExitCode() == 1) {
 		return Snapshot{}, fmt.Errorf("columbo: %v: %s", err, firstLines(text, 5))
 	}
-	return ReadSnapshot(out)
+	snap, err := ReadSnapshot(out)
+	snap.Output = text
+	return snap, err
 }
 
 func firstLines(s string, n int) string {
