@@ -1,6 +1,13 @@
 # Mutation calibration plan
 
-Status: plan. Nothing here is built yet.
+Status: implemented through phase 8. Every phase from 1 to 8 is built, in the nested
+`calibration/` module. `calibration/README.md` says how to run each part, and
+`calibration/reports/` holds the generated results: the kill matrix (`canonical.md`, and
+`main-6440c9d.md` from a later main), and the agent trials and lead checks
+(`agent-trials.md`). Phase 9 was built as a local case ledger in #78 and then withdrawn
+before merging. A reviewer feedback loop on real pull requests (#81) replaces it, because
+it records the same cases along with a verdict on each.
+The text below is the plan as written, apart from the resolved decisions at the end.
 
 Columbo is meant to be strict and trustworthy at once. Today the two goals pull
 apart. On its own source, the enforced staged gate passes, while the all-rule
@@ -252,6 +259,9 @@ Use real-world shape frequencies from the ledger to weight the kill matrix.
 
 This track starts after phase 5. It needs its own design pass before it starts.
 
+Withdrawn. The ledger was built in #78 and closed unmerged. The reviewer feedback loop in
+#81 takes over this track.
+
 ## How results change Columbo
 
 A threshold, severity, or rule change cites the calibration report rows that
@@ -263,19 +273,22 @@ the self-check case count. The harness never edits configuration or rules.
 
 - Changing any rule as part of building the harness.
 - Running an LLM in any CI path.
-- Measuring false positives on natural code. The work ledger (phase 9) and the
-  self-check adjudication ledger cover that.
+- Measuring false positives on natural code. The reviewer feedback loop (#81) and
+  the self-check adjudication ledger cover that.
 
-## Open decisions
+## Resolved decisions
 
-- **Where the harness lives.** The recommendation is a nested module at
-  `calibration/` with its own `go.mod`. That keeps product dependencies and the
-  release build unchanged. The cost is that `columbo ./...` on the root module
-  doesn't analyze the harness code. An in-tree `internal/calibration` package
-  would dogfood the harness, at the price of a heavier product module.
-- **Cost of the validity check.** A full `go test ./...` for every mutant of
-  Columbo's own module is slow. One option runs only the mutated package's
-  tests. Another runs build-only for operators that preserve behavior by
-  construction, and samples full test runs. Measure one before choosing.
-- **When the survivor gate blocks CI.** The recommendation is to warn until
-  phase 5's triage file covers the existing survivors, and then fail.
+The build settled the three questions this plan left open.
+
+- **Where the harness lives.** It is a nested module at `calibration/` with its
+  own `go.mod`, as recommended. Product dependencies and the release build are
+  unchanged, and `columbo ./...` on the root module does not analyze the harness.
+- **Cost of the validity check.** Both options were built. Columbo's own module
+  runs `go vet` plus the tests of the mutated packages only. External corpora
+  use `--validity build`, which runs `go vet` alone, so no downloaded code is
+  executed. On Columbo's own module, build and full-test validity agreed on all
+  16 mutants compared (see `docs/calibration-tuning-proposals.md`).
+- **When the survivor gate blocks CI.** It warns. The calibration job on pushes
+  to main publishes untriaged survivors as a workflow warning, and
+  `calibration/triage.yaml` covers the existing survivors. Pull requests run
+  only the operator fixture tests, which fail on a broken kill.
