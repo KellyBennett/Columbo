@@ -208,10 +208,14 @@ def main():
     parser.add_argument("--name", default="Columbo findings")
     parser.add_argument("--details-url", required=True)
     parser.add_argument("--publication-status", default="")
+    parser.add_argument("--warning", action="append", default=[],
+                        help="Text shown at the top of the check summary; repeatable.")
     args = parser.parse_args()
     publication = None
     try:
         annotations, summary = read_snapshot(args.snapshot, args.exit_code)
+        # Leading, so truncation of a long summary cannot drop the warning.
+        summary = "\n\n".join([*args.warning, summary])
         api = ChecksAPI(os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", ""))
         publication = Publication(api, args.name, args.head_sha, args.details_url, args.exit_code, summary, annotations)
         publication.publish()

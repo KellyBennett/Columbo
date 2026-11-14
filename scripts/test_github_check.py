@@ -2,10 +2,13 @@
 
 import copy
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import shutil
 import sqlite3
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -327,6 +330,31 @@ class PublisherTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "HTTP 403") as caught:
                 api.request("POST", "", {})
         self.assertNotIn("secret-token", str(caught.exception))
+
+    def test_warnings_lead_the_published_summary(self):
+        sent = []
+
+        class Response:
+            def __init__(self, request):
+                sent.append(json.loads(request.data))
+
+            def __enter__(self):
+                return io.StringIO('{"id": 7, "html_url": "https://github.com/example/repo/runs/7"}')
+
+            def __exit__(self, *exc):
+                return False
+
+        argv = ["github-check.py", "--snapshot", str(self.snapshot), "--exit-code", "1",
+                "--head-sha", "b" * 40, "--details-url", "https://example.invalid/run",
+                "--warning", "Columbo feedback skipped: the base commit could not be analyzed."]
+        env = {"GITHUB_REPOSITORY": "example/repo", "GH_TOKEN": "token", "GITHUB_OUTPUT": ""}
+        with patch.object(sys, "argv", argv), patch.dict(os.environ, env), \
+                patch.object(publisher, "urlopen", side_effect=lambda request, timeout: Response(request)):
+            self.assertEqual(0, publisher.main())
+        summary = sent[0]["output"]["summary"]
+        self.assertTrue(summary.startswith("Columbo feedback skipped: the base commit could not be analyzed.\n\n"))
+        self.assertIn("11 failed, 0 warned, 0 suppressed", summary)
+        self.assertEqual("failure", sent[-1]["conclusion"])
 
     def test_message_limits_are_utf8_byte_limits(self):
         message = publisher.limited("🙂" * 20000)
