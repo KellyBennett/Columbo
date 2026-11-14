@@ -245,7 +245,8 @@ func (s *Score) findHidden(ws string, changed []string, mutant, fixed harness.Sn
 			unseen[rel] = true
 		}
 	}
-	for rel, f := range mutant.Files {
+	for _, rel := range sortedKeys(mutant.Files) {
+		f := mutant.Files[rel]
 		switch {
 		case !f.Analyzed:
 		case !exists(filepath.Join(ws, rel)):
@@ -277,7 +278,7 @@ func exists(path string) bool {
 	return err == nil
 }
 
-func sortedKeys(m map[string]bool) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

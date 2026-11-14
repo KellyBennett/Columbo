@@ -33,8 +33,8 @@ func readSyntax(root string) (goSyntax, error) {
 	}
 	g := goSyntax{used: map[string]bool{}}
 	fset := token.NewFileSet()
-	for rel, src := range files {
-		f, err := parser.ParseFile(fset, rel, src, parser.SkipObjectResolution)
+	for _, rel := range sortedKeys(files) {
+		f, err := parser.ParseFile(fset, rel, files[rel], parser.SkipObjectResolution)
 		if err != nil {
 			continue
 		}
