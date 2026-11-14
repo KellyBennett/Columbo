@@ -55,6 +55,39 @@ drift).
 | neutral | | | `equivalent`: no change; `id-drift`: a case ID changed unexplained |
 | cure | target removed, nothing added | target remains | `conflict`: target removed, another smell added |
 
+## Weight kill rates by real case shapes
+
+An unweighted kill rate counts a mutant 40 lines over the limit the same as one a line
+over. To weight each band by how often real cases have that shape, pass the export of a
+Columbo case ledger to the report:
+
+```sh
+columbo calibrate --export > export.json
+/tmp/calibrate report --db calibration.sqlite --weights export.json
+```
+
+The report then adds two sections. `Real case shapes` shows how each smell's exported cases
+split across the excess bands. `Weighted kill rate` places each scored mutant in the band of
+its subject case and weights each band's kill rate by that band's share of the target
+smell's real cases. [The ledger design](../docs/calibration-ledger-design.md) defines the
+bands and the formula.
+
+| Class | Subject case |
+|---|---|
+| inject | the target-smell case the mutant added |
+| evade | the target-smell case the parent inject added |
+| cure | the target-smell case on the site symbol in the baseline |
+
+A mutant with no subject case is `unshaped` and counts in neither rate. A frozen red-team
+evade has no parent, so it is always unshaped. A band with real cases and no scored mutant
+shows `uncovered`. `covered` is the share of real cases in the bands that the weighted rate
+includes.
+
+The harness stores a `ratio` with each finding. The ratio is the value of the case's first
+limited clue divided by the smallest value that triggers it. `OpenStore` adds the column to an older
+`calibration.sqlite`. Findings recorded before that have no ratio, so their mutants land in
+`unmeasured` until you rerun them.
+
 ## Chains
 
 A chain applies several operators in a row, rereading the code after each step, and checks
