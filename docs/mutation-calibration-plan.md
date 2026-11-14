@@ -1,6 +1,12 @@
 # Mutation calibration plan
 
-Status: plan. Nothing here is built yet.
+Status: implemented. Every phase below is built, in the nested `calibration/` module
+except phase 9's ledger, which lives in the `columbo` CLI. `calibration/README.md` says
+how to run each part, and `calibration/reports/` holds the generated results: the kill
+matrix (`canonical.md`, and `main-6440c9d.md` from a later main), the agent trials and
+lead checks (`agent-trials.md`), and a weighted kill matrix from a public ledger export
+(`weighted-sample.md`). The design of the ledger is in `docs/calibration-ledger-design.md`.
+The text below is the plan as written, apart from the resolved decisions at the end.
 
 Columbo is meant to be strict and trustworthy at once. Today the two goals pull
 apart. On its own source, the enforced staged gate passes, while the all-rule
