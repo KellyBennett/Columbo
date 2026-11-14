@@ -9,3 +9,6 @@
 
 # Pinned architecture guard tools
 /.tools/
+
+# Python bytecode from the action scripts and their tests
+__pycache__/
