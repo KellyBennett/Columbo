@@ -52,8 +52,14 @@ class ActionRunnerTests(unittest.TestCase):
             self.assertTrue((evidence / 'provenance.txt').exists())
             self.assertTrue((evidence / 'build.txt').exists())
             self.assertEqual((evidence / 'report.sqlite').exists(), build_exit == 0)
+            self.assertFalse((evidence / 'columbo').exists())
             if not build_exit:
                 self.assertIn('analysis completed', (evidence / 'report.txt').read_text())
+                analyzer_output = Path(outputs['analyzer'])
+                self.assertTrue(os.access(analyzer_output, os.X_OK))
+                self.assertNotIn(evidence, analyzer_output.parents)
+            else:
+                self.assertNotIn('analyzer', outputs)
 
     def test_default_staged_mode_is_forwarded(self):
         self.run_case(1)
