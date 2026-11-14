@@ -19,6 +19,8 @@ Print the local case ledger (~/.columbo/ledger.sqlite) as aggregate JSON on stdo
 Columbo records the ledger only for runs with --ledger. The export holds case counts
 per smell, verdict, suppression, and excess band. It drops every bucket with fewer
 than 5 cases or 3 repositories, and holds no names, paths, hashes, or case IDs.
+A Git repository counts once across its clones, worktrees, and modules. Outside
+Git, each module path counts once, whatever its major version.
   --export            print the aggregate export
   --help              print usage
 `

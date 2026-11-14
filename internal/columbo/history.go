@@ -32,9 +32,10 @@ func (a *engine) history() {
 		h.attach(&a.report.Cases[i])
 	}
 }
-func (h *gitHistory) run(args ...string) (string, error) {
+func (h *gitHistory) run(args ...string) (string, error) { return gitOutput(h.root, args...) }
+func gitOutput(dir string, args ...string) (string, error) {
 	c := exec.Command("git", args...)
-	c.Dir = h.root
+	c.Dir = dir
 	b, e := c.Output()
 	return string(b), e
 }

@@ -63,7 +63,7 @@ The ledger has one row per case per repository.
 
 | Column | Type | Meaning |
 |---|---|---|
-| `repo` | 32 bytes | HMAC-SHA256 of the module path, keyed by the ledger secret |
+| `repo` | 32 bytes | HMAC-SHA256 of the repository identity, keyed by the ledger secret |
 | `case_key` | 32 bytes | HMAC-SHA256 of the case ID, keyed by the ledger secret |
 | `smell`, `verdict`, `suppressed`, `excess` | the case shape | `excess` is the band's ordinal, 0 to 4 |
 
@@ -176,24 +176,69 @@ Exit 2 was the alternative, on the grounds that the user explicitly asked for a
 side effect that did not happen. That would make a CI verdict depend on the state
 of a home directory, so the warning wins.
 
-### Identify a repository by a keyed hash of its module path
+### Identify a repository by its root commits
 
-The three-repository floor needs a repository identity that stays on the machine.
+The three-repository floor needs a repository identity that stays on the machine,
+and it has to count each repository once. If one repository can produce three keys,
+its own cases pass the floor alone, and the export publishes counts that come from a
+single repository.
 
 | Option | Why not |
 |---|---|
 | The module root's absolute path | Two worktrees or clones of one repository would count as two repositories. Columbo's own development uses several worktrees at once. |
-| The Git remote URL | Columbo does not require Git, and `--no-history` skips it. |
+| The `go.mod` module path | A repository with three modules, or one module at `/v2` and `/v3`, counts as three repositories. The first version of this design used it, and a review turned 2 cases from one repository into an exported bucket of 6 cases in 3 repositories. |
+| The Git remote URL | A clone can have no remote, several remotes, or a renamed one. |
 | A random ID stored in the repository | Writing into the analyzed repository is worse than writing into the home directory. |
-| A plain hash of the module path | Anyone with the ledger can confirm a guessed module path by hashing it. |
+| A plain hash of any of these | Anyone with the ledger can confirm a guessed module path or commit by hashing it. |
 
-The repository key is HMAC-SHA256 of the `go.mod` module path, keyed by the ledger
-secret. Clones and worktrees of one module share a key. Two modules in one
-repository count as two repositories. That is acceptable because they are separate
-code bases with separate configurations. The key protects a ledger that is copied
-somewhere without its secret. It does not protect a ledger copied whole, because
-the secret lives in the same file. The export is the privacy boundary, and it never
-contains a key.
+The repository key is HMAC-SHA256 of the repository identity, keyed by the ledger
+secret. In a Git work tree, the identity is every root commit reachable from `HEAD`,
+from `git rev-list --max-parents=0 HEAD`, sorted. Every clone and worktree of a
+repository has the same root commits, and so does every module and major version in
+it. Unrelated repositories have different ones. A fork shares its upstream's root
+commits and counts as the same repository. That errs toward fewer repositories,
+which makes the floor drop more buckets, not fewer.
+
+Two Git states have no usable identity, and recording refuses both with the usual
+warning. A shallow clone reports its shallow boundary as its root commits, so its
+identity would change with every fetch. A work tree with no commit has no `HEAD`.
+Recording either one under a stand-in identity would give the repository a second
+key once it had a real one.
+
+Outside Git, or where Git is not installed, the identity is the module path without
+its major-version suffix. `module.SplitPathVersion` from `golang.org/x/mod` removes
+`/vN` and the `gopkg.in` form `.vN`, so copies of one module and its major versions
+share a key. Separate modules in one source tree without Git count as separate
+repositories, because nothing outside Git says they belong together. A tree that
+later gains Git also gets a new key.
+
+One Git history still splits a repository. Merging an unrelated history adds a root
+commit, so the identity changes at that merge, and cases recorded before and after it
+count under two keys. Such a merge needs `--allow-unrelated-histories` and is rare.
+Keying on one root commit, such as the oldest, would instead merge two repositories
+that each imported the same third-party history.
+
+The key protects a ledger that is copied somewhere without its secret. It does not
+protect a ledger copied whole, because the secret lives in the same file. The export
+is the privacy boundary, and it never contains a key.
+
+### Ask Git for the identity even under `--no-history`
+
+SPEC says that disabled history does not access Git, so that an analysis never
+depends on Git when the user turned history off. The repository identity is not
+analysis evidence. It never reaches the snapshot, the summary, or the exit status.
+It does have to stay the same for every run of one repository.
+
+| Option | Why not |
+|---|---|
+| Use the module path whenever history is disabled | A user who passes `--no-history` on some runs records each repository under two keys, which is the defect that root commits fix. |
+| Refuse to record whenever history is disabled | A repository whose committed configuration sets `history.enabled: false` could never be recorded, and a module outside Git would need history turned on only to watch it fail. |
+
+So whenever `--ledger` is set, recording runs two read-only Git commands in the
+module root: `git rev-parse --is-shallow-repository` and
+`git rev-list --max-parents=0 HEAD`. SPEC's history section now limits its rule to
+history evidence and names this exception. `--ledger` is an explicit opt-in, so the
+user who passes it asks for the Git access.
 
 ### Count each case once, with its latest shape
 
@@ -259,6 +304,13 @@ exports an empty document would pass vacuously, so the test also requires at lea
 one bucket. A separate test drives the ledger directly and checks the floor at its
 edges: 4 cases are dropped and 5 kept, 2 repositories are dropped and 3 kept.
 
+Another test records layouts that are each one repository next to two unrelated
+repositories, and requires each exported bucket to count 3 repositories. The layouts
+are three modules in one Git repository, a module moved to `/v2` inside Git, two
+clones of one Git repository, three copies of one module outside Git, and one module
+outside Git at major versions 1, 2, and 3. Under the module-path key, the first two
+and the last fail.
+
 ### Define "per operator" as the rule's distribution applied to each operator
 
 The plan asks for aggregates per rule and per operator. Real code carries no
@@ -306,12 +358,15 @@ with a message that names the path and the `--ledger` flag.
 
 - **CLI and exit codes.** Add `--ledger` to the supported flags and add the
   `columbo calibrate --export` form, with the subcommand rule above.
+- **Git history.** Disabled history does not access Git for history evidence.
+  `--ledger` recording still runs Git to read the repository identity.
 - **One SQLite evidence snapshot.** Say that the calibration export is not a
   findings report. It carries no case, location, or evidence, so the rule that there
   is no JSON export of findings still holds.
 - **A new section, Calibration ledger.** State when Columbo records, the ledger
-  location and identity, the row contents, deduplication, the excess definition,
-  the failure rule, the export format, and the floor.
+  location and identity, the row contents, the repository identity,
+  deduplication, the excess definition, the failure rule, the export format, the
+  floor.
 - **Configuration.** No change. The section says so, because a configuration key
   was considered and rejected.
 

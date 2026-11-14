@@ -63,7 +63,7 @@ columbo ./...
 
 No configuration is required. Columbo currently analyzes production code; test files are excluded.
 
-To help calibrate Columbo's rules against real work, run it with `--ledger`. Columbo then records the shape of each case, such as its smell and how far it is past its limit, in `~/.columbo/ledger.sqlite`. It stores keyed hashes in place of module paths and case IDs, and no names, file paths, or source. `columbo calibrate --export` prints the ledger as aggregate counts that you can read before you share them. Without `--ledger`, Columbo writes nothing outside its snapshot.
+To help calibrate Columbo's rules against real work, run it with `--ledger`. Columbo then records the shape of each case, such as its smell and how far it is past its limit, in `~/.columbo/ledger.sqlite`. It stores keyed hashes in place of repository identities and case IDs, and no names, file paths, or source. To tell repositories apart, recording reads the repository's root commits with Git, even under `--no-history`. `columbo calibrate --export` prints the ledger as aggregate counts that you can read before you share them. Without `--ledger`, Columbo writes nothing outside its snapshot.
 
 ## Supported Languages
 

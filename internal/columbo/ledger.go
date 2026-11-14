@@ -5,14 +5,17 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 )
 
 type excessBand struct {
@@ -62,7 +65,7 @@ func (i Invocation) recordLedger(snapshot snapshotdb.Querier) error {
 	if err != nil {
 		return err
 	}
-	module, err := invocationModule(i.Dir)
+	repository, err := invocationRepository(i.Dir)
 	if err != nil {
 		return err
 	}
@@ -70,25 +73,50 @@ func (i Invocation) recordLedger(snapshot snapshotdb.Querier) error {
 	if err != nil {
 		return err
 	}
-	return recordShapes(path, module, shapes)
+	return recordShapes(path, repository, shapes)
 }
 
-func invocationModule(dir string) (string, error) {
+func invocationRepository(dir string) (string, error) {
 	root, err := moduleRoot(dir)
 	if err != nil {
 		return "", err
 	}
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
-	return modfile.ModulePath(data), err
+	if err != nil {
+		return "", err
+	}
+	return repositoryIdentity(root, modfile.ModulePath(data))
 }
 
-func recordShapes(path, module string, shapes []snapshotdb.CaseShapesRow) error {
+func repositoryIdentity(root, modulePath string) (string, error) {
+	shallow, err := gitOutput(root, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		prefix, _, _ := module.SplitPathVersion(modulePath)
+		return "module\x00" + prefix, nil
+	}
+	if strings.TrimSpace(shallow) == "true" {
+		return "", errors.New("a shallow clone does not know its root commits; fetch the full history to record it")
+	}
+	return gitRootCommits(root)
+}
+
+func gitRootCommits(root string) (string, error) {
+	roots, err := gitOutput(root, "rev-list", "--max-parents=0", "HEAD")
+	if err != nil {
+		return "", errors.New("cannot list the repository's root commits; record it after its first commit")
+	}
+	commits := strings.Fields(roots)
+	slices.Sort(commits)
+	return "git\x00" + strings.Join(commits, " "), nil
+}
+
+func recordShapes(path, repository string, shapes []snapshotdb.CaseShapesRow) error {
 	ledger, err := openLedgerFile(path)
 	if err != nil {
 		return err
 	}
 	defer ledger.Close()
-	if err = writeShapes(ledger.Queries(), module, shapes); err != nil {
+	if err = writeShapes(ledger.Queries(), repository, shapes); err != nil {
 		return err
 	}
 	return ledger.Complete()
@@ -108,8 +136,8 @@ func openLedgerFile(path string) (*snapshotdb.Ledger, error) {
 	return snapshotdb.RecordLedger(path)
 }
 
-func writeShapes(queries snapshotdb.Querier, module string, shapes []snapshotdb.CaseShapesRow) error {
-	recorder, err := newLedgerRecorder(queries, module)
+func writeShapes(queries snapshotdb.Querier, repository string, shapes []snapshotdb.CaseShapesRow) error {
+	recorder, err := newLedgerRecorder(queries, repository)
 	if err != nil {
 		return err
 	}
@@ -127,14 +155,14 @@ type ledgerRecorder struct {
 	repo    []byte
 }
 
-func newLedgerRecorder(queries snapshotdb.Querier, module string) (*ledgerRecorder, error) {
+func newLedgerRecorder(queries snapshotdb.Querier, repository string) (*ledgerRecorder, error) {
 	ctx := context.Background()
 	if err := queries.InsertLedgerSecret(ctx, snapshotdb.InsertLedgerSecretParams{Secret: newLedgerSecret()}); err != nil {
 		return nil, err
 	}
 	secret, err := queries.LedgerSecret(ctx)
 	recorder := &ledgerRecorder{queries: queries, secret: secret}
-	recorder.repo = recorder.key("repo", module)
+	recorder.repo = recorder.key("repo", repository)
 	return recorder, err
 }
 

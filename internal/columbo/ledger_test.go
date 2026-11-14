@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -31,11 +32,17 @@ func newLedgerRun(t *testing.T) *ledgerRun {
 
 func privateModule(t *testing.T, n int) string {
 	dir := t.TempDir()
+	writePrivateModule(t, dir, fmt.Sprintf("example.com/zebrafinch-%d-hushhush", n), n)
+	return dir
+}
+
+// writePrivateModule writes two unsuppressed and two suppressed at-limit Long Function cases.
+func writePrivateModule(t *testing.T, dir, path string, n int) {
 	write := func(name, text string) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644))
 	}
-	write("go.mod", fmt.Sprintf("module example.com/zebrafinch-%d-hushhush\n\ngo 1.25\n", n))
+	write("go.mod", fmt.Sprintf("module %s\n\ngo 1.25\n", path))
 	var source strings.Builder
 	source.WriteString("package marmaladevault\n")
 	for i, name := range []string{"A", "B", "C", "D"} {
@@ -45,7 +52,6 @@ func privateModule(t *testing.T, n int) string {
 		fmt.Fprintf(&source, "func ComputeWombatPayroll%d%s(a int) int {\n%s\treturn a\n}\n", n, name, strings.Repeat("\ta++\n", 10))
 	}
 	write("internal/marmaladevault/quokkasecretplans.go", source.String())
-	return dir
 }
 
 func (r *ledgerRun) analyze(dir string, args ...string) (int, string) {
@@ -174,13 +180,118 @@ func TestLedgerCountsRepeatedRunsOnce(t *testing.T) {
 	require.Contains(t, widened, `"repos": 4`)
 }
 
-func TestLedgerCountsCheckoutsOfOneModuleOnce(t *testing.T) {
-	run := newLedgerRun(t)
-	for range 3 {
-		run.analyze(privateModule(t, 1), "--ledger")
+func TestLedgerCountsEachRepositoryOnce(t *testing.T) {
+	for _, x := range []struct {
+		name   string
+		layout func(t *testing.T) []string
+		cases  int64
+	}{
+		{"three copies of one module outside Git", func(t *testing.T) []string {
+			return []string{privateModule(t, 1), privateModule(t, 1), privateModule(t, 1)}
+		}, 2},
+		{"one module outside Git at major versions 1, 2, and 3", func(t *testing.T) []string {
+			var dirs []string
+			for _, path := range []string{"example.com/zebrafinch", "example.com/zebrafinch/v2", "example.com/zebrafinch/v3"} {
+				dir := t.TempDir()
+				writePrivateModule(t, dir, path, 1)
+				dirs = append(dirs, dir)
+			}
+			return dirs
+		}, 6},
+		{"three modules in one Git repository", func(t *testing.T) []string {
+			repository := t.TempDir()
+			var dirs []string
+			for n := 1; n <= 3; n++ {
+				dir := filepath.Join(repository, fmt.Sprintf("service%d", n))
+				writePrivateModule(t, dir, fmt.Sprintf("example.com/zebrafinch-%d-hushhush", n), n)
+				dirs = append(dirs, dir)
+			}
+			commitAll(t, repository)
+			return dirs
+		}, 6},
+		{"one Git repository whose module moved to /v2", func(t *testing.T) []string {
+			dir := privateModule(t, 1)
+			commitAll(t, dir)
+			bumped := cloneRepository(t, dir)
+			writePrivateModule(t, bumped, "example.com/zebrafinch-1-hushhush/v2", 1)
+			return []string{dir, bumped}
+		}, 4},
+		{"two clones of one Git repository", func(t *testing.T) []string {
+			dir := privateModule(t, 1)
+			commitAll(t, dir)
+			return []string{cloneRepository(t, dir), cloneRepository(t, dir)}
+		}, 2},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			run := newLedgerRun(t)
+			others := []string{privateModule(t, 8), privateModule(t, 9)}
+			commitAll(t, others[0])
+			for _, dir := range append(x.layout(t), others...) {
+				code, stderr := run.analyze(dir, "--ledger")
+				require.Equal(t, 1, code, stderr)
+				require.NotContains(t, stderr, "ledger not recorded")
+			}
+			_, document, _ := run.export()
+			require.Contains(t, decodeExport(t, document).Rules, exportRule{Smell: "long-function", Buckets: []exportBucket{
+				{Verdict: "FAIL", Suppressed: false, Excess: "at-limit", Cases: x.cases + 4, Repos: 3},
+				{Verdict: "FAIL", Suppressed: true, Excess: "at-limit", Cases: x.cases + 4, Repos: 3},
+			}}, "the layout is one repository, and the other two are one each")
+		})
 	}
-	_, document, _ := run.export()
-	require.Empty(t, decodeExport(t, document).Rules, "three checkouts of one module are one repository")
+}
+
+func TestLedgerRefusesARepositoryWhoseRootCommitsAreUnknown(t *testing.T) {
+	for _, x := range []struct {
+		name   string
+		layout func(t *testing.T) string
+		reason string
+	}{
+		{"a shallow clone", func(t *testing.T) string {
+			dir := privateModule(t, 1)
+			commitAll(t, dir)
+			gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "second")
+			shallow := filepath.Join(t.TempDir(), "shallow")
+			gitIn(t, dir, "clone", "-q", "--depth", "1", "file://"+filepath.ToSlash(dir), shallow)
+			return shallow
+		}, "shallow clone"},
+		{"a repository with no commit", func(t *testing.T) string {
+			dir := privateModule(t, 1)
+			gitIn(t, dir, "init", "-q")
+			return dir
+		}, "root commits"},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			run := newLedgerRun(t)
+			code, stderr := run.analyze(x.layout(t), "--ledger")
+			require.Equal(t, 1, code, "a refused recording keeps the exit status")
+			require.Contains(t, stderr, "columbo: ledger not recorded: ")
+			require.Contains(t, stderr, x.reason)
+			require.NoFileExists(t, run.ledgerFile())
+		})
+	}
+}
+
+func commitAll(t *testing.T, dir string) {
+	gitIn(t, dir, "init", "-q")
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-q", "-m", "fixture")
+}
+
+func cloneRepository(t *testing.T, dir string) string {
+	clone := filepath.Join(t.TempDir(), "clone")
+	gitIn(t, dir, "clone", "-q", dir, clone)
+	return clone
+}
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git unavailable")
+	}
+	command := exec.Command("git", args...)
+	command.Dir = dir
+	command.Env = fixtureGitEnv()
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "git %v\n%s", args, output)
 }
 
 func TestLedgerExportFloor(t *testing.T) {
