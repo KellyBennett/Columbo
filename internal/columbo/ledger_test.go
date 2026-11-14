@@ -379,3 +379,48 @@ func TestLedgerFailureKeepsTheVerdict(t *testing.T) {
 	require.Equal(t, 1, code)
 	require.Contains(t, stderr, "columbo: ledger not recorded: home directory unknown")
 }
+
+func TestLedgerRefusesLinksAndNonregularPaths(t *testing.T) {
+	elsewhere := t.TempDir()
+	target := filepath.Join(elsewhere, "target.sqlite")
+	for _, x := range []struct {
+		name   string
+		plant  func(run *ledgerRun)
+		reason string
+	}{
+		{"a directory at the ledger path", func(run *ledgerRun) {
+			require.NoError(t, os.MkdirAll(run.ledgerFile(), 0o700))
+		}, "ledger must be a regular non-symlink file"},
+		{"a symbolic link at the ledger path", func(run *ledgerRun) {
+			require.NoError(t, os.WriteFile(target, nil, 0o600))
+			require.NoError(t, os.MkdirAll(filepath.Dir(run.ledgerFile()), 0o700))
+			require.NoError(t, os.Symlink(target, run.ledgerFile()))
+		}, "ledger must be a regular non-symlink file"},
+		{"a file at the ledger directory path", func(run *ledgerRun) {
+			require.NoError(t, os.WriteFile(filepath.Dir(run.ledgerFile()), nil, 0o600))
+		}, "ledger directory must be a non-symlink directory"},
+		{"a symbolic link at the ledger directory path", func(run *ledgerRun) {
+			require.NoError(t, os.Symlink(elsewhere, filepath.Dir(run.ledgerFile())))
+		}, "ledger directory must be a non-symlink directory"},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			run := newLedgerRun(t)
+			x.plant(run)
+			code, stderr := run.analyze(privateModule(t, 1), "--ledger")
+			require.Equal(t, 1, code)
+			require.Contains(t, stderr, "columbo: ledger not recorded: "+x.reason)
+			code, document, stderr := run.export()
+			require.Equal(t, 2, code)
+			require.Empty(t, document)
+			require.Contains(t, stderr, x.reason)
+			entries, err := os.ReadDir(elsewhere)
+			require.NoError(t, err)
+			for _, entry := range entries {
+				info, err := entry.Info()
+				require.NoError(t, err)
+				require.Zero(t, info.Size(), "nothing is written through a link")
+				require.Equal(t, "target.sqlite", entry.Name(), "nothing is created through a link")
+			}
+		})
+	}
+}

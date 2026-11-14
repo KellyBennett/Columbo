@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -122,7 +123,38 @@ func recordShapes(path, repository string, shapes []snapshotdb.CaseShapesRow) er
 	return ledger.Complete()
 }
 
+type ledgerEntry struct {
+	path, rule string
+	valid      func(fs.FileMode) bool
+}
+
+func ledgerExists(path string) (bool, error) {
+	for _, entry := range []ledgerEntry{
+		{filepath.Dir(path), "ledger directory must be a non-symlink directory", fs.FileMode.IsDir},
+		{path, "ledger must be a regular non-symlink file", fs.FileMode.IsRegular},
+	} {
+		if exists, err := entry.exists(); !exists || err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (e ledgerEntry) exists() (bool, error) {
+	info, err := os.Lstat(e.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err == nil && !e.valid(info.Mode()) {
+		err = fmt.Errorf("%s: %s", e.rule, e.path)
+	}
+	return err == nil, err
+}
+
 func openLedgerFile(path string) (*snapshotdb.Ledger, error) {
+	if _, err := ledgerExists(path); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}

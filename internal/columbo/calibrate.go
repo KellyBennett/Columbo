@@ -3,12 +3,10 @@ package columbo
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"math"
-	"os"
 
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
@@ -74,8 +72,8 @@ func (i Invocation) ledgerExport() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("no ledger at %s; record one with columbo --ledger", path)
+	if err = requireLedger(path); err != nil {
+		return nil, err
 	}
 	buckets, err := ledgerBuckets(path)
 	if err != nil {
@@ -83,6 +81,14 @@ func (i Invocation) ledgerExport() ([]byte, error) {
 	}
 	document, err := json.MarshalIndent(newLedgerExport(buckets), "", "  ")
 	return append(document, '\n'), err
+}
+
+func requireLedger(path string) error {
+	exists, err := ledgerExists(path)
+	if err == nil && !exists {
+		err = fmt.Errorf("no ledger at %s; record one with columbo --ledger", path)
+	}
+	return err
 }
 
 func ledgerBuckets(path string) ([]snapshotdb.LedgerBucket, error) {

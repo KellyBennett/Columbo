@@ -240,6 +240,15 @@ module root: `git rev-parse --is-shallow-repository` and
 history evidence and names this exception. `--ledger` is an explicit opt-in, so the
 user who passes it asks for the Git access.
 
+### Refuse links and nonregular files at the ledger path
+
+The snapshot refuses a destination that is a symlink or not a regular file. The
+ledger now applies the same rule to `~/.columbo` and `~/.columbo/ledger.sqlite`.
+Before, a link at either path made Columbo write through it to wherever it pointed,
+and a directory at the ledger path, or a file at `~/.columbo`, reached SQLite, which
+reported `out of memory`. Recording and export both check the two paths with
+`os.Lstat` before SQLite opens anything, and name the path they refuse.
+
 ### Count each case once, with its latest shape
 
 The case key is HMAC-SHA256 of the case ID with the same secret. A run upserts one
@@ -364,7 +373,7 @@ with a message that names the path and the `--ledger` flag.
   findings report. It carries no case, location, or evidence, so the rule that there
   is no JSON export of findings still holds.
 - **A new section, Calibration ledger.** State when Columbo records, the ledger
-  location and identity, the row contents, the repository identity,
+  location and identity, the link rule, the row contents, the repository identity,
   deduplication, the excess definition, the failure rule, the export format, the
   floor.
 - **Configuration.** No change. The section says so, because a configuration key
