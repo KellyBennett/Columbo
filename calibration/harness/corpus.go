@@ -79,7 +79,6 @@ func (e Env) Probe(base string, edit Edit) Probe {
 	return p
 }
 
-// ForEach calls f for every index below n on at most workers goroutines.
 func ForEach(n, workers int, f func(i int)) {
 	if workers <= 0 {
 		workers = 1
