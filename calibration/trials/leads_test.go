@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/KellyBennett/Columbo/calibration/harness"
-	"github.com/KellyBennett/Columbo/calibration/internal/columbotest"
 	"github.com/KellyBennett/Columbo/calibration/operators"
 )
 
@@ -62,11 +61,7 @@ func TestADataClumpThatOnlyChangedItsIDSurvives(t *testing.T) {
 
 func checkFixture(t *testing.T, fixture string) []LeadCheck {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("runs columbo and go test on fixture modules")
-	}
-	columbotest.ResolveTempDir(t)
-	env := harness.Env{Columbo: columbotest.Binary(t), Validity: harness.ValidityTest}
+	env := fixtureEnv(t)
 	src, err := Resolve(fixture, "..")
 	if err != nil {
 		t.Fatal(err)

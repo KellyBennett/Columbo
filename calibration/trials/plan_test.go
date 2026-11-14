@@ -38,3 +38,34 @@ func TestScheduleRepeatsASingleMutantToReachTheTrialCount(t *testing.T) {
 		t.Fatalf("schedule %v, want %v", got, want)
 	}
 }
+
+var complexityRow = PlanRow{Smell: "high-cognitive-complexity", Operator: "inline-function-complexity", Corpus: "fixtures/inline"}
+
+func TestASmellThatPlantsNothingIsNamed(t *testing.T) {
+	pl := &Planter{Env: fixtureEnv(t), PlanDir: "..", Workers: 4}
+	plants, unplanted, err := pl.PlantPlan([]PlanRow{inlineRow, complexityRow}, 5, 0)
+	t.Cleanup(func() { pl.Cleanup(plants) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plants) == 0 || fmt.Sprint(unplanted) != "[high-cognitive-complexity]" {
+		t.Fatalf("%d plants, unplanted %v; want long-function planted and high-cognitive-complexity named", len(plants), unplanted)
+	}
+}
+
+func TestALimitStopsPlantingOnceTheScheduleIsFull(t *testing.T) {
+	pl := &Planter{Env: fixtureEnv(t), PlanDir: "..", Workers: 4}
+	plants, unplanted, err := pl.PlantPlan([]PlanRow{inlineRow, complexityRow}, 1, 1)
+	t.Cleanup(func() { pl.Cleanup(plants) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unplanted) != 0 || len(plants) == 0 {
+		t.Fatalf("%d plants, unplanted %v; want only long-function probed", len(plants), unplanted)
+	}
+	for _, p := range plants {
+		if p.Smell != inlineRow.Smell {
+			t.Fatalf("planted %s past a limit the first smell already filled", p.Smell)
+		}
+	}
+}

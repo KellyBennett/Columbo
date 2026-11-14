@@ -25,6 +25,7 @@ duplicate-code	duplicate-block	fixtures/extract
 duplicate-code	duplicate-block	fixtures/cosmetic
 duplicate-code	duplicate-block	fixtures/deps
 repeated-variant-decision	repeat-variant-decision	fixtures/variants
+selection-use-coupling	select-then-use	fixtures/selection
 prose-comment	add-prose-comment	fixtures/inline
 prose-comment	add-prose-comment	fixtures/clump
 prose-comment	add-prose-comment	fixtures/deps

@@ -24,23 +24,35 @@ func (f fakeAgent) Fix(_ context.Context, dir, _ string) AgentRun {
 	return AgentRun{Stop: "success", Turns: 1}
 }
 
-func plantInline(t *testing.T) (harness.Env, []*Plant) {
+func fixtureEnv(t *testing.T) harness.Env {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("runs columbo and go test on fixture modules")
 	}
 	columbotest.ResolveTempDir(t)
-	env := harness.Env{Columbo: columbotest.Binary(t), Validity: harness.ValidityTest}
+	return harness.Env{Columbo: columbotest.Binary(t), Validity: harness.ValidityTest}
+}
+
+var inlineRow = PlanRow{Smell: "long-function", Operator: "inline-function", Corpus: "fixtures/inline"}
+
+func plantRows(t *testing.T, rows ...PlanRow) (harness.Env, []*Plant) {
+	t.Helper()
+	env := fixtureEnv(t)
 	pl := &Planter{Env: env, PlanDir: "..", Workers: 4}
-	plants, err := pl.Plant([]PlanRow{{Smell: "long-function", Operator: "inline-function", Corpus: "fixtures/inline"}})
+	plants, err := pl.Plant(rows)
 	t.Cleanup(func() { pl.Cleanup(plants) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plants) == 0 {
-		t.Fatal("inline-function planted nothing on fixtures/inline")
+		t.Fatalf("%v planted nothing", rows)
 	}
 	return env, plants
+}
+
+func plantInline(t *testing.T) (harness.Env, []*Plant) {
+	t.Helper()
+	return plantRows(t, inlineRow)
 }
 
 func copyFile(t *testing.T, from, to string) {

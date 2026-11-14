@@ -90,11 +90,18 @@ func trialsRun(args []string) error {
 	env := harness.Env{Columbo: bin, Validity: harness.ValidityTest, Timeout: 15 * time.Minute}
 	logf := func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) }
 	planter := &trials.Planter{Env: env, PlanDir: filepath.Dir(*plan), Workers: *probes, Log: logf}
-	plants, err := planter.Plant(rows)
+	plants, unplanted, err := planter.PlantPlan(rows, *perSmell, *limit)
 	defer planter.Cleanup(plants)
 	if err != nil {
 		return err
 	}
+	warnUnplanted := func() {
+		for _, smell := range unplanted {
+			logf("WARNING: %s planted no killed mutant, so it gets no trials. Check its rows in %s.", smell, *plan)
+		}
+	}
+	warnUnplanted()
+	defer warnUnplanted()
 	scheduled := trials.Schedule(plants, *perSmell)
 	if *limit > 0 && len(scheduled) > *limit {
 		scheduled = scheduled[:*limit]

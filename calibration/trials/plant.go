@@ -44,6 +44,33 @@ type plantJob struct {
 	applied harness.Applied
 }
 
+// PlantPlan plants one smell at a time in plan order. With limit > 0 it stops once the schedule would hold limit trials,
+// so a pilot probes only the smells it runs. Unplanted lists the smells whose rows killed no mutant.
+func (pl *Planter) PlantPlan(rows []PlanRow, perSmell, limit int) (plants []*Plant, unplanted []string, err error) {
+	var smells []string
+	bySmell := map[string][]PlanRow{}
+	for _, row := range rows {
+		if _, seen := bySmell[row.Smell]; !seen {
+			smells = append(smells, row.Smell)
+		}
+		bySmell[row.Smell] = append(bySmell[row.Smell], row)
+	}
+	for _, smell := range smells {
+		if limit > 0 && len(Schedule(plants, perSmell)) >= limit {
+			break
+		}
+		got, err := pl.Plant(bySmell[smell])
+		plants = append(plants, got...)
+		if err != nil {
+			return plants, unplanted, err
+		}
+		if len(got) == 0 {
+			unplanted = append(unplanted, smell)
+		}
+	}
+	return plants, unplanted, nil
+}
+
 // Plant returns killed mutants in plan order, then site order, then dose order.
 func (pl *Planter) Plant(rows []PlanRow) ([]*Plant, error) {
 	var jobs []plantJob
