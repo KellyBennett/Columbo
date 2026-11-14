@@ -8,7 +8,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"sync"
 )
 
 type Runner struct {
@@ -49,35 +48,15 @@ func (r *Runner) logf(format string, args ...any) {
 }
 
 func (r *Runner) Prepare() error {
-	base, err := TempDir("calibration-base-")
+	c, err := r.Env.PrepareCorpus(r.Source, r.Config, r.Info.Module, r.Info.Version)
 	if err != nil {
 		return err
 	}
-	r.base = base
-	if err := CopyModule(r.Source, base); err != nil {
-		return err
-	}
-	if r.Config != nil {
-		if err := os.WriteFile(filepath.Join(base, ".columbo.yml"), r.Config, 0o644); err != nil {
-			return err
-		}
-	}
-	if why := r.Env.Check(base, nil); why != "" {
-		return fmt.Errorf("unmutated corpus is not valid: %s", why)
-	}
-	snap, err := r.Env.Analyze(base)
-	if err != nil {
-		return err
-	}
-	pkgs, err := LoadPackages(base)
-	if err != nil {
-		return err
-	}
-	r.corpus = &Corpus{Root: base, Module: r.Info.Module, Version: r.Info.Version, Packages: pkgs, Baseline: snap}
-	r.Info.Columbo = snap.Version + "+sha256:" + fileHash(r.Env.Columbo)
-	r.Info.ConfigHash = configHash(base)
-	r.run, err = r.Store.BeginRun(r.Info, snap.Findings)
-	r.logf("baseline: %d findings, columbo %s", len(snap.Findings), snap.Version)
+	r.corpus, r.base = c, c.Root
+	r.Info.Columbo = r.Env.Build(c.Baseline)
+	r.Info.ConfigHash = ConfigHash(c.Root)
+	r.run, err = r.Store.BeginRun(r.Info, c.Baseline.Findings)
+	r.logf("baseline: %d findings, columbo %s", len(c.Baseline.Findings), c.Baseline.Version)
 	return err
 }
 
@@ -180,26 +159,7 @@ func sample(sites []Site, max int) []Site {
 
 func (r *Runner) execute(jobs []job) []*result {
 	results := make([]*result, len(jobs))
-	workers := r.Workers
-	if workers <= 0 {
-		workers = 1
-	}
-	var wg sync.WaitGroup
-	ch := make(chan int)
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range ch {
-				results[i] = r.evaluate(jobs[i])
-			}
-		}()
-	}
-	for i := range jobs {
-		ch <- i
-	}
-	close(ch)
-	wg.Wait()
+	ForEach(len(jobs), r.Workers, func(i int) { results[i] = r.evaluate(jobs[i]) })
 	for _, res := range results {
 		var parentID int64
 		if res.job.parent != nil {
@@ -230,41 +190,24 @@ func (r *Runner) evaluate(j job) *result {
 		return res
 	}
 	res.outcome.Mutant.Patch, res.outcome.Mutant.Size = patch, size
-	dir, err := TempDir("calibration-mutant-")
-	if err != nil {
-		res.outcome.Status, res.outcome.Reason = Invalid, err.Error()
-		return res
-	}
-	res.dir = dir
+	p := r.Env.Probe(r.base, edit)
+	res.dir = p.Dir
 	keep := false
 	defer func() {
 		if !keep {
-			_ = os.RemoveAll(dir)
+			_ = os.RemoveAll(p.Dir)
 			res.dir = ""
 		}
 	}()
-	if err := CopyModule(r.base, dir); err != nil {
-		res.outcome.Status, res.outcome.Reason = Invalid, err.Error()
-		return res
-	}
-	if err := WriteEdit(dir, edit); err != nil {
-		res.outcome.Status, res.outcome.Reason = Invalid, err.Error()
-		return res
-	}
-	if why := r.Env.Check(dir, editedPackages(edit)); why != "" {
-		res.outcome.Status, res.outcome.Reason = Invalid, why
-		return res
-	}
-	snap, err := r.Env.Analyze(dir)
-	if err != nil {
-		res.outcome.Status, res.outcome.Reason = Invalid, err.Error()
+	if p.Invalid != "" {
+		res.outcome.Status, res.outcome.Reason = Invalid, p.Invalid
 		return res
 	}
 	exp := j.applied.Expectation
 	if j.parent != nil {
 		exp.Touched = append(append([]string{}, exp.Touched...), j.parent.job.applied.Touched...)
 	}
-	Score(&res.outcome, exp, r.corpus.Baseline.Findings, snap.Findings)
+	Score(&res.outcome, exp, r.corpus.Baseline.Findings, p.Snapshot.Findings)
 	keep = j.parent == nil && res.outcome.Status == Killed
 	return res
 }
@@ -303,7 +246,10 @@ func fileHash(path string) string {
 	return hex.EncodeToString(h[:8])
 }
 
-func configHash(root string) string {
+// Build names the Columbo binary that produced snap, so a number traces to the exact build.
+func (e Env) Build(snap Snapshot) string { return snap.Version + "+sha256:" + fileHash(e.Columbo) }
+
+func ConfigHash(root string) string {
 	data, err := os.ReadFile(filepath.Join(root, ".columbo.yml"))
 	if err != nil {
 		return "default"
