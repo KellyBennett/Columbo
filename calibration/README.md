@@ -82,3 +82,12 @@ Columbo notices one, so a closed blind spot is retired on purpose.
 ## Decision trail
 
 `decisions.tsv` logs each decision with its evidence, one row per decision.
+
+## Reports
+
+Each file in `reports/` is the output of `calibrate report` for one full run, made with
+`calibrate.sh <db> all 25` and `REDTEAM=1`. `reports/canonical.md` is the run that
+`docs/calibration-tuning-proposals.md` cites, so it stays as it was. `reports/main-6440c9d.md`
+is the same command on main after the tuning, prose-comment, generated-exclusion and
+function-literal changes merged. The two compare row for row. Their mutant counts differ
+slightly because the code under test changed.

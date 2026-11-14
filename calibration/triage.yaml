@@ -50,6 +50,14 @@
     header still hides a whole file, now with a generated-exclusion warning. The //nolint: prefix
     on prose is closed (text after the directive's second // is prose), and a function literal in
     a package-level var is a finding subject under FS-001.
+- operator: inline-parameter-object
+  symbol: github.com/KellyBennett/Columbo/internal/columbo.Suppression
+  dose: 1
+  status: equivalent
+  reason: >-
+    The expanded {file, smell, symbol} parameters join a clump Columbo already reports, anchored
+    at the Case struct, whose fields Suppression shares. One case per clump family means no new
+    case appears, and the operator's prediction does not check the baseline for an existing family.
 - operator: pack-anonymous-struct
   symbol: "*"
   dose: 0

@@ -266,16 +266,19 @@ the self-check case count. The harness never edits configuration or rules.
 - Measuring false positives on natural code. The work ledger (phase 9) and the
   self-check adjudication ledger cover that.
 
-## Open decisions
+## Resolved decisions
 
-- **Where the harness lives.** The recommendation is a nested module at
-  `calibration/` with its own `go.mod`. That keeps product dependencies and the
-  release build unchanged. The cost is that `columbo ./...` on the root module
-  doesn't analyze the harness code. An in-tree `internal/calibration` package
-  would dogfood the harness, at the price of a heavier product module.
-- **Cost of the validity check.** A full `go test ./...` for every mutant of
-  Columbo's own module is slow. One option runs only the mutated package's
-  tests. Another runs build-only for operators that preserve behavior by
-  construction, and samples full test runs. Measure one before choosing.
-- **When the survivor gate blocks CI.** The recommendation is to warn until
-  phase 5's triage file covers the existing survivors, and then fail.
+The build settled the three questions this plan left open.
+
+- **Where the harness lives.** It is a nested module at `calibration/` with its
+  own `go.mod`, as recommended. Product dependencies and the release build are
+  unchanged, and `columbo ./...` on the root module does not analyze the harness.
+- **Cost of the validity check.** Both options were built. Columbo's own module
+  runs `go vet` plus the tests of the mutated packages only. External corpora
+  use `--validity build`, which runs `go vet` alone, so no downloaded code is
+  executed. On Columbo's own module, build and full-test validity agreed on all
+  16 mutants compared (see `docs/calibration-tuning-proposals.md`).
+- **When the survivor gate blocks CI.** It warns. The calibration job on pushes
+  to main publishes untriaged survivors as a workflow warning, and
+  `calibration/triage.yaml` covers the existing survivors. Pull requests run
+  only the operator fixture tests, which fail on a broken kill.
