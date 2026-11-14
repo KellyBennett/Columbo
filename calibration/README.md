@@ -88,6 +88,17 @@ limited clue divided by the smallest value that triggers it. `OpenStore` adds th
 `calibration.sqlite`. Findings recorded before that have no ratio, so their mutants land in
 `unmeasured` until you rerun them.
 
+`ledger-sample.sh` builds a reproducible export from public code only. It records Columbo's
+own module and every module in `corpus.txt` into a throwaway ledger under a temporary HOME,
+then exports it. It never reads or writes your real `~/.columbo`.
+
+```sh
+./ledger-sample.sh reports/ledger-export-sample.json
+```
+
+`reports/ledger-export-sample.json` is that export, and `reports/weighted-sample.md` is the
+weighted report it produces against a `calibrate.sh <db> all 8` run over the same modules.
+
 ## Chains
 
 A chain applies several operators in a row, rereading the code after each step, and checks

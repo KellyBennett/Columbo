@@ -1,0 +1,188 @@
+{
+  "format": "columbo-ledger-export",
+  "version": 1,
+  "floor": {
+    "cases": 5,
+    "repos": 3
+  },
+  "excess": [
+    {
+      "name": "at-limit",
+      "max_ratio": 1
+    },
+    {
+      "name": "near",
+      "max_ratio": 1.25
+    },
+    {
+      "name": "over",
+      "max_ratio": 2
+    },
+    {
+      "name": "far"
+    }
+  ],
+  "rules": [
+    {
+      "smell": "data-clump",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "at-limit",
+          "cases": 8,
+          "repos": 4
+        }
+      ]
+    },
+    {
+      "smell": "duplicate-code",
+      "buckets": [
+        {
+          "verdict": "WARN",
+          "suppressed": false,
+          "excess": "near",
+          "cases": 15,
+          "repos": 5
+        },
+        {
+          "verdict": "WARN",
+          "suppressed": false,
+          "excess": "over",
+          "cases": 11,
+          "repos": 4
+        }
+      ]
+    },
+    {
+      "smell": "excessive-dependencies",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "at-limit",
+          "cases": 10,
+          "repos": 4
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "near",
+          "cases": 9,
+          "repos": 4
+        }
+      ]
+    },
+    {
+      "smell": "feature-envy",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "at-limit",
+          "cases": 13,
+          "repos": 3
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "near",
+          "cases": 11,
+          "repos": 3
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "over",
+          "cases": 11,
+          "repos": 3
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "far",
+          "cases": 13,
+          "repos": 3
+        }
+      ]
+    },
+    {
+      "smell": "high-cognitive-complexity",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "at-limit",
+          "cases": 18,
+          "repos": 4
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "near",
+          "cases": 26,
+          "repos": 5
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "over",
+          "cases": 51,
+          "repos": 5
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "far",
+          "cases": 29,
+          "repos": 4
+        }
+      ]
+    },
+    {
+      "smell": "long-function",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "at-limit",
+          "cases": 18,
+          "repos": 4
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "near",
+          "cases": 33,
+          "repos": 5
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "over",
+          "cases": 85,
+          "repos": 5
+        },
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "far",
+          "cases": 76,
+          "repos": 5
+        }
+      ]
+    },
+    {
+      "smell": "prose-comment",
+      "buckets": [
+        {
+          "verdict": "FAIL",
+          "suppressed": false,
+          "excess": "far",
+          "cases": 79,
+          "repos": 4
+        }
+      ]
+    }
+  ]
+}
