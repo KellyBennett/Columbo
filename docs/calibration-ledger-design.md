@@ -212,8 +212,9 @@ secret. In a Git work tree, the identity is every root commit reachable from `HE
 from `git rev-list --max-parents=0 HEAD`, sorted. Every clone and worktree of a
 repository has the same root commits, and so does every module and major version in
 it. Unrelated repositories have different ones. A fork shares its upstream's root
-commits and counts as the same repository. That errs toward fewer repositories,
-which makes the floor drop more buckets, not fewer.
+commits and counts as the same repository. So does an untracked module inside some
+other work tree, such as a project under a home directory kept in Git. Both err
+toward fewer repositories, which makes the floor drop more buckets, not fewer.
 
 Two Git states have no usable identity, and recording refuses both with the usual
 warning. A shallow clone reports its shallow boundary as its root commits, so its
