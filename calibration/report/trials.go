@@ -1,0 +1,107 @@
+package report
+
+import (
+	"database/sql"
+	"fmt"
+	"io"
+)
+
+// scored keeps trials where the agent got to work; an infrastructure failure is retried, never scored.
+const scored = `t AS (SELECT * FROM trials WHERE infra_error = '')`
+
+// latestLeads reads the newest lead-check batch per corpus, as the canonical report reads the newest run per operator.
+const latestLeads = `latest AS (SELECT corpus_module, max(batch) AS batch FROM lead_checks GROUP BY corpus_module),
+l AS (SELECT c.* FROM lead_checks c JOIN latest USING (corpus_module, batch))`
+
+var trialSections = []section{
+	{
+		title: "Setup",
+		note:  "Each agent got a fresh copy of one killed inject mutant and Columbo's output for the cases the mutant added, and nothing about how the mutant was made. A different model is a flag change (`--model`), and its trials report separately.",
+		query: `WITH ` + scored + `
+SELECT model, model_id, prompt_version, count(*) AS trials, group_concat(DISTINCT columbo_version) AS columbo, group_concat(DISTINCT validity) AS validity, agent_command
+FROM t GROUP BY model, model_id, prompt_version, agent_command ORDER BY model, prompt_version`,
+	},
+	{
+		title: "Outcomes by smell",
+		note: "Counts read k/n over the smell's n trials. Cleared: Columbo no longer reports the planted smell anywhere beyond the unmutated baseline, with no new suppression or generated-code marker. " +
+			"Changed out of scope: the fix removed or moved a case the prompt said to leave alone. " +
+			"Green: cleared, vet and tests pass, the mutant's other cases are gone, and no case appeared that neither the baseline nor the mutant had. " +
+			"Fix distance is token edits from the fix to the original divided by token edits from the mutant to the original: 0 restored the original, 1 got no closer, above 1 moved further away. Quartiles use the nearest rank.",
+		query: `WITH ` + scored + `,
+q AS (SELECT model, prompt_version, smell, fix_distance,
+ row_number() OVER (PARTITION BY model, prompt_version, smell ORDER BY fix_distance) AS rn,
+ count(*) OVER (PARTITION BY model, prompt_version, smell) AS n FROM t),
+d AS (SELECT model, prompt_version, smell, min(fix_distance) AS lo,
+ max(CASE WHEN rn = (n + 3) / 4 THEN fix_distance END) AS p25,
+ avg(CASE WHEN rn IN ((n + 1) / 2, (n + 2) / 2) THEN fix_distance END) AS med,
+ max(CASE WHEN rn = (3 * n + 3) / 4 THEN fix_distance END) AS p75,
+ max(fix_distance) AS hi
+ FROM q GROUP BY model, prompt_version, smell)
+SELECT t.smell, t.model, count(*) AS n, count(DISTINCT t.corpus_module || ' ' || t.site_symbol) AS sites,
+ printf('%d/%d', sum(t.cleared), count(*)) AS cleared,
+ printf('%d/%d', sum(t.vet_pass = 1 AND t.tests_pass = 1), count(*)) AS vet_and_tests_pass,
+ printf('%d/%d', sum(t.introduced > 0), count(*)) AS introduced_new_cases,
+ printf('%d/%d', sum(t.out_of_scope_gone > 0), count(*)) AS changed_out_of_scope,
+ printf('%d/%d', sum(t.cleared AND t.vet_pass = 1 AND t.tests_pass = 1 AND t.introduced = 0 AND t.other_remaining = 0), count(*)) AS green,
+ printf('%.2f', d.lo) AS distance_min, printf('%.2f', d.p25) AS p25, printf('%.2f', d.med) AS median, printf('%.2f', d.p75) AS p75, printf('%.2f', d.hi) AS distance_max
+FROM t JOIN d ON d.model = t.model AND d.prompt_version = t.prompt_version AND d.smell = t.smell
+GROUP BY t.model, t.prompt_version, t.smell ORDER BY t.model, t.prompt_version, t.smell`,
+	},
+	{
+		title: "Agent runs",
+		note:  "Wall time is per agent run, summed; runs overlapped, so elapsed time was shorter. Infrastructure errors are runs where the agent never started work; a rerun retries them and they are not scored.",
+		query: `SELECT model, count(*) AS runs, sum(infra_error <> '') AS infra_errors, sum(infra_error = '' AND timed_out) AS timeouts,
+ sum(agent_stop = 'error_max_turns') AS turn_cap_stops, sum(infra_error = '' AND agent_exit <> 0) AS nonzero_exits,
+ printf('%.1f', sum(wall_ms) / 60000.0) AS agent_minutes, printf('%.2f', sum(cost_usd)) AS cost_usd,
+ min(turns) AS min_turns, max(turns) AS max_turns
+FROM trials GROUP BY model ORDER BY model`,
+	},
+	{
+		title: "Trials",
+		note:  "One row per scored trial. Distances are raw token edits; flags name anything the agent did to Columbo's inputs rather than the code (config is restored before scoring).",
+		query: `WITH ` + scored + `
+SELECT smell, corpus_module AS corpus, site_symbol AS site, dose, repeat, agent_stop AS stop, turns,
+ cleared, vet_pass AS vet, tests_pass AS tests, introduced_cases, other_remaining, out_of_scope_gone_cases,
+ distance_fixed, distance_mutant, printf('%.2f', fix_distance) AS fix_distance, files_changed, test_files_changed, flags,
+ printf('%.0f', wall_ms / 1000.0) AS wall_s, printf('%.2f', cost_usd) AS cost_usd
+FROM t ORDER BY smell, corpus_module, site_symbol, dose, repeat`,
+	},
+	{
+		title: "Leads by smell",
+		note: "Each lead Columbo wrote on a natural case in the corpora, and what applying the refactoring it names did to that same case, with no model involved. " +
+			"Cleared: the cure removed the case and added nothing. Conflict: removed it but set off another rule. Survived: the case remains. " +
+			"Not applicable: the cure has no mechanical application at that case. A lead that asks a question or says what to inspect names no refactoring.",
+		query: `WITH ` + latestLeads + `
+SELECT smell, lead,
+ CASE WHEN refactoring = '' THEN 'names no refactoring' ELSE refactoring END AS refactoring,
+ CASE WHEN refactoring <> '' AND operator = '' THEN 'no cure operator' ELSE operator END AS cure,
+ count(*) AS cases, sum(outcome = 'cleared') AS cleared, sum(outcome = 'conflict') AS conflict, sum(outcome = 'survived') AS survived,
+ sum(outcome = 'invalid') AS invalid, sum(outcome = 'not-applicable') AS not_applicable
+FROM l GROUP BY smell, lead ORDER BY smell, min(lead_ordinal), lead`,
+	},
+	{
+		title: "Leads by corpus",
+		query: `WITH ` + latestLeads + `
+SELECT corpus_module, corpus_version, validity, count(DISTINCT case_id) AS cases, count(*) AS leads,
+ sum(operator <> '') AS leads_with_cure, sum(outcome = 'cleared') AS cleared, sum(outcome = 'conflict') AS conflict,
+ sum(outcome = 'survived') AS survived, sum(outcome = 'invalid') AS invalid, sum(outcome = 'not-applicable') AS not_applicable
+FROM l GROUP BY corpus_module ORDER BY corpus_module`,
+	},
+	{
+		title: "Unclassified leads",
+		note:  "Lead text the harness's lead table does not know. Each one needs a row in trials/leads.go before its check means anything.",
+		query: `WITH ` + latestLeads + `
+SELECT smell, lead, count(*) AS cases FROM l WHERE outcome = 'unclassified' GROUP BY smell, lead ORDER BY smell, lead`,
+	},
+}
+
+// WriteTrials renders the phase 8 report from the trials and lead_checks tables alone.
+func WriteTrials(w io.Writer, db *sql.DB) error {
+	fmt.Fprintln(w, "# Agent trials and lead checks")
+	for _, s := range trialSections {
+		if _, err := writeSection(w, db, s); err != nil {
+			return fmt.Errorf("%s: %w", s.title, err)
+		}
+	}
+	return nil
+}

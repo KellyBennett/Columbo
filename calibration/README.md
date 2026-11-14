@@ -79,6 +79,81 @@ the repository's database-boundary check rejects new `testdata` directories. Sav
 chain under `chains/` instead. `TestSavedChainsStillViolate` replays every saved chain and fails once
 Columbo notices one, so a closed blind spot is retired on purpose.
 
+## Agent trials and lead checks
+
+Plan phase 8 asks two questions outside CI. Does an agent handed Columbo's output fix the
+problem Columbo reports? Does each lead that names a refactoring clear its own case when that
+refactoring is applied? `agent-trials.sh` answers both and writes
+[reports/agent-trials.md](reports/agent-trials.md):
+
+```sh
+./agent-trials.sh calibration.sqlite all
+```
+
+The `leads` step runs no model. The `trials` step runs the `claude` CLI and costs money. A
+rerun skips trials the database already holds, keyed by mutant, repeat, agent command, model,
+and prompt version, and retries rows where the agent never started. `WORKERS` sets how many
+agents run at once (default 4). `OUT` keeps each trial's prompt, transcript, and patches.
+
+### How a trial runs
+
+`calibrate trials run` reads `trials.tsv`, applies each listed inject operator on its corpus,
+and keeps the mutants Columbo kills that still pass `go vet` and the tests. Each smell gets
+`--per-smell` trials (default 5). They take one mutant per corpus before any corpus gives a
+second site or dose, and repeat mutants when a smell has fewer than five, because agent
+nondeterminism is part of the spread. No fixture gives `inline-function-complexity` a kill, so
+`high-cognitive-complexity` trials use cobra v1.9.1 from `corpus.txt`. Trials run every
+corpus's tests, cobra's included. `calibrate.sh` avoids running downloaded code, but whether
+the tests still pass is half of what a trial measures.
+
+The agent works in a fresh copy of the mutant. The prompt (`trials/prompt.go`, versioned by
+`PromptVersion`) holds Columbo's `--staged=false` output for the cases the mutant added, and
+each case's why, diagnosis, leads, and avoid guidance from the snapshot. It never says how the
+code changed. The default command is `claude -p --model sonnet` with `--safe-mode` and
+`--restricted`, so the user's settings, `CLAUDE.md`, plugins, and MCP servers stay out. File
+tools stay inside the workspace. Bash allows `go build`, `go vet`, `go test`, and `columbo`,
+plus the read-only commands Claude Code always allows. The run stops at 40 turns or 20 minutes.
+`--model` runs a different model, and `--agent` replaces the whole command.
+
+### How a trial is scored
+
+After the agent stops, the harness diffs the workspace against the mutant, runs `go vet` and
+the tests, and runs Columbo again. It compares the result with the unmutated baseline:
+
+- **Cleared.** No case of the planted smell appears beyond the baseline, anywhere in the module.
+- **Other remaining.** The mutant's other added cases that Columbo still reports.
+- **Introduced.** Cases that neither the baseline nor the mutant had.
+- **Out of scope gone.** Cases the prompt said to leave alone that the fix removed or moved.
+- **Gamed.** A new suppression or generated-code marker. A gamed trial never counts as cleared.
+  A changed `.columbo.yml` is restored before scoring and flagged as `config`.
+
+Fix distance compares token sequences from `go/scanner` over every Go file that the original,
+the mutant, or the fix changed. Comments count as tokens, because a `prose-comment` mutant
+changes nothing else. All semicolons fold into one token, so line breaks inside an expression
+cost nothing. The normalized distance is the token edits from the fix to the original divided
+by the token edits from the mutant to the original. A fix at 0 restored the original. A fix
+at 1 got no closer than the mutant. A fix above 1 moved further away.
+
+Distance measures closeness to the code that existed before the mutation, not design
+quality. A different good refactoring scores above 0, and above 1 when it restructures more
+than the mutant changed. Moving a function to another file counts as a deletion plus an
+insertion. Read the distance beside the cleared, tests, and introduced columns, never alone.
+For `inline-function` mutants the inlined helper stays in the file, so calling it again
+restores the original at distance 0.
+
+### How a lead check runs
+
+`calibrate trials leads` reads every lead Columbo wrote on each natural case of a corpus and
+looks it up in `leadRefactorings` in `trials/leads.go`. A lead names a refactoring only when
+its text tells the reader to perform one. A question or an instruction to inspect names none.
+For a lead that names a refactoring with a cure operator, the checker applies that operator at
+every site and dose aimed at the case, meaning it rewrites one of the case's declarations in
+one of its files. It scores each application against the lead's own case, which may be a
+different smell from the one the operator targets. The best application decides the outcome:
+`cleared`, `conflict` (cleared but another rule fired), `survived`, or `invalid`. A lead whose
+operator has no site at the case is `not-applicable`. A lead whose refactoring has no operator
+is `no-operator`. Lead text missing from the table is `unclassified`, and the report lists it.
+
 ## Decision trail
 
 `decisions.tsv` logs each decision with its evidence, one row per decision.
