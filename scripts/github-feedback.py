@@ -566,7 +566,8 @@ class Report:
         if self.skipped:
             return f"Columbo feedback skipped: {self.skipped}"
         counts = ", ".join(f"{count} {name}" for name, count in self.outcomes.items())
-        return f"Columbo feedback: {self.findings} findings introduced or made worse; {counts}."
+        noun = "finding" if self.findings == 1 else "findings"
+        return f"Columbo feedback: {self.findings} {noun} introduced or made worse; {counts}."
 
 
 def publish(arguments, environment, open_pull_request):
