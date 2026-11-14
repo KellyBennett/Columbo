@@ -78,10 +78,12 @@ bands and the formula.
 | evade | the target-smell case the parent inject added |
 | cure | the target-smell case on the site symbol in the baseline |
 
-A mutant with no subject case is `unshaped` and counts in neither rate. A frozen red-team
-evade has no parent, so it is always unshaped. A band with real cases and no scored mutant
-shows `uncovered`. `covered` is the share of real cases in the bands that the weighted rate
-includes.
+A mutant with no subject case is `unshaped`. Every surviving inject is unshaped, and so is
+a frozen red-team evade, which has no parent. A row with any unshaped mutant shows its
+`kill rate` but a `withheld` weighted rate, because its shaped mutants are not the population
+the kill rate counts. A band with exported cases and no scored mutant shows `uncovered`.
+`covered` is the share of exported cases in the bands that the weighted rate includes. A
+band whose cases the export's floor dropped shows blank.
 
 The harness stores a `ratio` with each finding. The ratio is the value of the case's first
 limited clue divided by the smallest value that triggers it. `calibrate run` adds the column

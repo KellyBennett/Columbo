@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -178,10 +179,29 @@ func ratioColumn(db *sql.DB, table, column string) (string, error) {
 
 type tally struct{ killed, scored int }
 
+func (t *tally) add(killed bool) {
+	t.scored++
+	if killed {
+		t.killed++
+	}
+}
+
+func (t tally) rate() float64 { return float64(t.killed) / float64(t.scored) }
+
 type rateGroup struct {
 	class, target, operator string
-	unshaped                int
-	bands                   map[string]tally
+	// all counts every scored mutant, the population of the kill rate in Outcomes by operator.
+	all tally
+	// bands counts only shaped mutants, by their subject case's band.
+	bands map[string]tally
+}
+
+func (g *rateGroup) unshaped() int {
+	n := g.all.scored
+	for _, t := range g.bands {
+		n -= t.scored
+	}
+	return n
 }
 
 func readGroups(db *sql.DB, weights *Weights) ([]*rateGroup, error) {
@@ -213,16 +233,13 @@ func readGroups(db *sql.DB, weights *Weights) ([]*rateGroup, error) {
 				g = &rateGroup{class: class, target: target, operator: op, bands: map[string]tally{}}
 				groups[key] = g
 			}
+			g.all.add(killed)
 			if !shaped {
-				g.unshaped++
 				continue
 			}
 			b := weights.bandOf(ratio)
 			t := g.bands[b]
-			t.scored++
-			if killed {
-				t.killed++
-			}
+			t.add(killed)
 			g.bands[b] = t
 		}
 	}
@@ -242,22 +259,35 @@ func readGroups(db *sql.DB, weights *Weights) ([]*rateGroup, error) {
 }
 
 func (g *rateGroup) cells(weights *Weights) []string {
+	unshaped := g.unshaped()
+	row := []string{g.class, g.operator, g.target, strconv.Itoa(g.all.scored), strconv.Itoa(unshaped), percent(g.all.rate())}
+	columns := weights.columns()
+	if unshaped > 0 {
+		return append(row, append([]string{"withheld", ""}, make([]string, len(columns))...)...)
+	}
 	cases := weights.cases[g.target]
+	weighted, covered, bands := g.weigh(cases, columns)
+	weightedCell, coveredCell := "no exported cases", ""
+	if sum(cases) > 0 {
+		weightedCell, coveredCell = "", percent(covered)
+		if covered > 0 {
+			weightedCell = percent(weighted / covered)
+		}
+	}
+	return append(append(row, weightedCell, coveredCell), bands...)
+}
+
+func (g *rateGroup) weigh(cases map[string]int, columns []string) (weighted, covered float64, bands []string) {
 	total := sum(cases)
-	shaped, killed := 0, 0
-	var weighted, covered float64
-	var bands []string
-	for _, name := range weights.columns() {
+	for _, name := range columns {
 		t := g.bands[name]
-		shaped += t.scored
-		killed += t.killed
 		share := 0.0
 		if total > 0 {
 			share = float64(cases[name]) / float64(total)
 		}
 		switch {
 		case t.scored > 0:
-			weighted += share * float64(t.killed) / float64(t.scored)
+			weighted += share * t.rate()
 			covered += share
 			bands = append(bands, fmt.Sprintf("%d/%d", t.killed, t.scored))
 		case share > 0:
@@ -266,18 +296,7 @@ func (g *rateGroup) cells(weights *Weights) []string {
 			bands = append(bands, "")
 		}
 	}
-	unweightedCell, weightedCell, coveredCell := "", "no real cases", ""
-	if shaped > 0 {
-		unweightedCell = percent(float64(killed) / float64(shaped))
-	}
-	if total > 0 {
-		weightedCell, coveredCell = "", percent(covered)
-		if covered > 0 {
-			weightedCell = percent(weighted / covered)
-		}
-	}
-	return append([]string{g.class, g.operator, g.target, strconv.Itoa(shaped), strconv.Itoa(g.unshaped),
-		unweightedCell, weightedCell, coveredCell}, bands...)
+	return weighted, covered, bands
 }
 
 func sum(counts map[string]int) int {
@@ -288,7 +307,8 @@ func sum(counts map[string]int) int {
 	return total
 }
 
-func percent(share float64) string { return fmt.Sprintf("%.0f%%", 100*share) }
+// percent rounds half up, as SQLite's printf does for the kill rate in Outcomes by operator.
+func percent(share float64) string { return fmt.Sprintf("%.0f%%", math.Round(100*share)) }
 
 // WriteWeighted renders the export's real case shapes and each operator's kill rate weighted by them.
 func WriteWeighted(w io.Writer, db *sql.DB, weights *Weights) error {
@@ -308,8 +328,10 @@ func WriteWeighted(w io.Writer, db *sql.DB, weights *Weights) error {
 		shapes = append(shapes, row)
 	}
 	writeTable(w, "Real case shapes",
-		fmt.Sprintf("Each band cell is that band's share of the smell's exported cases, then its count, from buckets with at least %d cases in at least %d repositories.", weights.floor.Cases, weights.floor.Repos),
-		append([]string{"smell", "cases"}, columns...), shapes)
+		fmt.Sprintf("Each band cell is that band's share of the smell's exported cases, then its count. "+
+			"Exported cases come only from buckets with at least %d cases in at least %d repositories, "+
+			"so a blank band can still hold real cases that the floor dropped.", weights.floor.Cases, weights.floor.Repos),
+		append([]string{"smell", "exported cases"}, columns...), shapes)
 
 	groups, err := readGroups(db, weights)
 	if err != nil {
@@ -320,13 +342,17 @@ func WriteWeighted(w io.Writer, db *sql.DB, weights *Weights) error {
 		rates = append(rates, g.cells(weights))
 	}
 	writeTable(w, "Weighted kill rate",
-		"Each row counts scored inject, evade, and cure mutants by the excess band of their subject case. "+
-			"Unweighted is killed over scored. "+
-			"Weighted averages each band's kill rate by that band's share of the target smell's real cases, over the bands that have scored mutants. "+
-			"Covered is the share of real cases those bands hold. "+
-			"A band cell shows killed over scored, and uncovered marks a band that holds real cases but no scored mutant. "+
-			"An unshaped mutant has no subject case, such as an inject that added nothing, and counts in neither rate.",
-		append([]string{"class", "operator", "target", "shaped", "unshaped", "unweighted", "weighted", "covered"}, columns...), rates)
+		"Each row counts the scored inject, evade, and cure mutants of one operator, or of every operator under (all), that target one smell. "+
+			"Kill rate is killed over scored, the same rate as Outcomes by operator. "+
+			"A mutant's subject is the case it acts on, and its band is that case's excess band. "+
+			"A mutant with no subject case is unshaped, and a subject recorded before the harness stored ratios is unmeasured. "+
+			"Weighted averages each band's kill rate by that band's share of the target smell's exported cases, over the bands that hold scored mutants. "+
+			"Covered is the share of exported cases in those bands. "+
+			"A row with any unshaped mutant shows weighted as withheld, because its shaped mutants are not the population its kill rate counts. "+
+			"An inject's subject is the case it added, so every surviving inject is unshaped. "+
+			"A band cell shows killed over scored, and uncovered marks a band that holds exported cases but no scored mutant. "+
+			"A band whose real cases the export's floor dropped holds no exported cases, so it shows blank, not uncovered.",
+		append([]string{"class", "operator", "target", "scored", "unshaped", "kill rate", "weighted", "covered"}, columns...), rates)
 	return nil
 }
 

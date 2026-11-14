@@ -2,6 +2,7 @@ package report_test
 
 import (
 	"bytes"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +91,8 @@ func TestWeightedKillRateWeighsEachBandByItsShareOfRealCases(t *testing.T) {
 	r.evade(1.25, true)
 	r.evade(1.1, true)
 	r.evade(2.5, true)
-	r.record(0, harness.Outcome{Class: harness.Evade, Target: longFunction, Status: harness.Killed}, "split-long-function")
+	r.record(0, harness.Outcome{Class: harness.Evade, Target: longFunction, Status: harness.Killed}, "redteam-replay")
+	r.record(0, harness.Outcome{Class: harness.Inject, Target: longFunction, Status: harness.Survived}, "inline-function")
 	cure := harness.Outcome{Class: harness.Cure, Target: "feature-envy", Status: harness.Killed}
 	cure.Mutant.Chain = []harness.Step{{Operator: "move-method", Site: harness.Site{Package: "example.com/m", Symbol: "example.com/m.Envious"}, Dose: 1}}
 	r.record(0, cure)
@@ -102,12 +104,12 @@ func TestWeightedKillRateWeighsEachBandByItsShareOfRealCases(t *testing.T) {
 	t.Log("\n" + out.String())
 
 	shapes := table(t, out.String(), "Real case shapes")
-	wantShapes := map[string]string{"smell": longFunction, "cases": "10", "at-limit": "60% (6)", "near": "30% (3)", "over": "10% (1)", "far": "", "unmeasured": ""}
+	wantShapes := map[string]string{"smell": longFunction, "exported cases": "10", "at-limit": "60% (6)", "near": "30% (3)", "over": "10% (1)", "far": "", "unmeasured": ""}
 	if len(shapes) != 1 {
 		t.Fatalf("real case shapes has %d rows, want 1", len(shapes))
 	}
 	check(t, "real case shapes", shapes[0], wantShapes)
-	if !strings.Contains(out.String(), "at least 5 cases in at least 3 repositories") {
+	if !strings.Contains(out.String(), "at least 5 cases in at least 3 repositories, so a blank band can still hold real cases that the floor dropped") {
 		t.Error("the real case shapes note does not name the export's floor")
 	}
 
@@ -120,18 +122,25 @@ func TestWeightedKillRateWeighsEachBandByItsShareOfRealCases(t *testing.T) {
 			evades = append(evades, row)
 		}
 	}
-	if len(evades) != 2 || evades[0]["operator"] != "(all)" || evades[1]["operator"] != "split-long-function" {
-		t.Fatalf("evade rows %v, want the (all) row and then split-long-function", evades)
+	if len(evades) != 3 || evades[0]["operator"] != "(all)" || evades[1]["operator"] != "redteam-replay" || evades[2]["operator"] != "split-long-function" {
+		t.Fatalf("evade rows %v, want the (all) row and then each operator", evades)
 	}
-	wantEvade := map[string]string{"shaped": "8", "unshaped": "1", "unweighted": "75%", "weighted": "67%", "covered": "90%",
-		"at-limit": "2/4", "near": "3/3", "over": "uncovered", "far": "1/1", "unmeasured": ""}
-	for _, row := range evades {
-		check(t, "evade "+row["operator"], row, wantEvade)
+	check(t, "evade split-long-function", evades[2], map[string]string{"scored": "8", "unshaped": "0", "kill rate": "75%", "weighted": "67%", "covered": "90%",
+		"at-limit": "2/4", "near": "3/3", "over": "uncovered", "far": "1/1", "unmeasured": ""})
+	withheld := map[string]string{"weighted": "withheld", "covered": "", "at-limit": "", "near": "", "over": "", "far": "", "unmeasured": ""}
+	check(t, "evade (all)", evades[0], merge(withheld, map[string]string{"scored": "9", "unshaped": "1", "kill rate": "78%"}))
+	check(t, "evade redteam-replay", evades[1], merge(withheld, map[string]string{"scored": "1", "unshaped": "1", "kill rate": "100%"}))
+	check(t, "inject (all)", byKey["inject (all) long-function"], merge(withheld, map[string]string{"scored": "9", "unshaped": "1", "kill rate": "89%"}))
+	check(t, "cure move-method", byKey["cure move-method feature-envy"], map[string]string{"scored": "1", "unshaped": "0",
+		"kill rate": "100%", "weighted": "no exported cases", "covered": "", "at-limit": "1/1", "near": ""})
+}
+
+func merge(rows ...map[string]string) map[string]string {
+	out := map[string]string{}
+	for _, row := range rows {
+		maps.Copy(out, row)
 	}
-	check(t, "inject (all)", byKey["inject (all) long-function"], map[string]string{"shaped": "8", "unshaped": "0",
-		"unweighted": "100%", "weighted": "100%", "covered": "90%", "at-limit": "4/4", "near": "3/3", "over": "uncovered", "far": "1/1"})
-	check(t, "cure move-method", byKey["cure move-method feature-envy"], map[string]string{"shaped": "1", "unshaped": "0",
-		"unweighted": "100%", "weighted": "no real cases", "covered": "", "at-limit": "1/1", "near": ""})
+	return out
 }
 
 func check(t *testing.T, name string, row, want map[string]string) {

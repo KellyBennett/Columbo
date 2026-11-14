@@ -111,27 +111,43 @@ shape of its subject case, which is the case the mutant acts on.
 | cure | the target-smell case on the site symbol in the unmutated baseline |
 
 The harness stores each finding's ratio with the finding. The report assigns the
-band with the bounds from the export. A mutant with no subject case, such as an
-inject that survived, is `unshaped`. The report counts unshaped mutants but leaves
-them out of both rates.
+band with the bounds from the export. A mutant with no subject case is `unshaped`.
+Every inject that survived is unshaped, because its subject is the case it failed to
+add. A cure whose site symbol has no target case in the baseline is unshaped, and so
+is a frozen red-team evade, which has no parent inject.
 
 ### Weighted kill rate
 
 For a target smell `s`, let `w_b` be the export's case count in band `b`, summed over
 verdict and suppressed, and let `p_b = w_b / sum(w)`. For a group of mutants of one
-class that target `s`, let `n_b` be the scored mutants in band `b` (killed, survived,
-or conflict, the same population as the existing `kill_rate`), and `k_b` the killed
-share of them.
+class and operator that target `s`, a mutant is scored when it was killed, survived,
+or reached a conflict. Let `n_b` be the shaped scored mutants in band `b`, and `k_b`
+the killed share of them.
 
 ```text
-unweighted = sum(killed_b) / sum(n_b)
-weighted   = sum(p_b * k_b for n_b > 0) / sum(p_b for n_b > 0)
-covered    = sum(p_b for n_b > 0)
+kill rate = killed / scored, over every scored mutant
+weighted  = sum(p_b * k_b for n_b > 0) / sum(p_b for n_b > 0)
+covered   = sum(p_b for n_b > 0)
 ```
 
+The kill rate is the one in the report's Outcomes by operator table. `weighted`
+reweights the same mutants only when every scored mutant is shaped, so the report
+shows it only then. When any mutant in the group is unshaped, the shaped ones are a
+subset of the kill rate's population, and the report shows `withheld`.
+
+The subset can be badly skewed. An inject's subject is the case it added, so its
+shaped mutants are exactly its killed ones, and a rate over them is 100% by
+construction. The first version of this report showed that rate anyway, and
+`split-long-function`, which kills 18% of its scored mutants in
+`calibration/reports/canonical.md`, read 100% weighted. An inject group now gets a
+weighted rate only when every inject in it was killed, and then the rate is the
+true 100%.
+
 A band with `p_b > 0` and `n_b = 0` is uncovered. The report names it and shows the
-real weight it carries, so the weighted rate never hides that it covers only part
-of the real distribution.
+weight it carries, so the weighted rate never hides that it covers only part of the
+exported distribution. `p_b` comes from exported cases only. A band whose buckets
+the export's floor dropped has `w_b = 0`, so it shows blank, not uncovered, and
+`covered` is a share of exported cases rather than of every real case.
 
 ## Decisions
 
@@ -349,9 +365,10 @@ across operators.
 
 The weighted rate is most informative for evade and cure operators. An inject kill
 follows from the metric crossing its limit, and in `calibration/reports/canonical.md`
-every inject operator but one kills 100% of its scored mutants. Evade and cure rates
-range from 0% to 100%, and the weighting asks how much of that range depends on
-shape.
+every inject operator but one kills 100% of its scored mutants. For those, the
+weighted rate is 100% too, and for the one that does not, it is withheld. Evade and
+cure rates range from 0% to 100%, and the weighting asks how much of that range
+depends on shape.
 
 ### Record each finding's ratio in the harness
 
