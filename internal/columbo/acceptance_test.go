@@ -354,7 +354,7 @@ func (t *testHarness) complexityDeclaration(source string) *ast.FuncDecl {
 }
 func (t *testHarness) pinnedComplexity(source string) int {
 	fn := t.complexityDeclaration(source)
-	got := scanComplexity(fn)
+	got := scanComplexity(funcSubject(fn))
 	expected := gocognit.ScanComplexity(fn, true)
 	require.Equal(t.T, expected.Complexity, got.complexity, "pinned complexity mismatch: %s", source)
 	require.Len(t.T, got.diagnostics, len(expected.Diagnostics), "pinned diagnostics mismatch: %s", source)

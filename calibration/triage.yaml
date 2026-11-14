@@ -45,11 +45,11 @@
   dose: 0
   status: blind-spot
   reason: >-
-    12 of 14 frozen agent evasions silence their case without improving the design (see
-    calibration/redteam/*/meta.yaml technique). Two techniques silence any rule: a hand-written
-    "Code generated ... DO NOT EDIT." header hides a whole file; a function literal in a
-    package-level var is never a finding subject. The //nolint: prefix on prose (chi-prose-comment)
-    is closed: text after the directive's second // is prose.
+    10 of 14 frozen agent evasions silence their case without improving the design (see
+    calibration/redteam/*/meta.yaml technique). A hand-written "Code generated ... DO NOT EDIT."
+    header still hides a whole file, now with a generated-exclusion warning. The //nolint: prefix
+    on prose is closed (text after the directive's second // is prose), and a function literal in
+    a package-level var is a finding subject under FS-001.
 - operator: pack-anonymous-struct
   symbol: "*"
   dose: 0

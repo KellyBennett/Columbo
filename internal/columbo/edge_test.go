@@ -159,7 +159,7 @@ func (t *testHarness) TestInterfaceDispatchNotCandidate() {
 	a, e := load(dir, []string{"./..."}, quiet())
 	t.require(e == nil, e)
 	for _, d := range a.declarations {
-		t.require(d.fn.Name.Name != "work" || !(d.candidate), "interface dispatch resolved statically")
+		t.require(d.syntax.name.Name != "work" || !(d.candidate), "interface dispatch resolved statically")
 	}
 }
 func TestInterfaceDispatchNotCandidate(t *testing.T) {

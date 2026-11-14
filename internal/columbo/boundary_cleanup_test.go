@@ -23,7 +23,7 @@ func TestBoundaryCleanupPhysicalReceipts(t *testing.T) {
 				require.NoError(t, err)
 				fn := parsed.Decls[0].(*ast.FuncDecl)
 				expr := fn.Body.List[0].(*ast.AssignStmt).Rhs[0]
-				owner := &declaration{file: &file{fset: fset, tf: fset.File(parsed.Pos()), data: []byte(text), rel: "physical.go"}, symbol: "fixture.inspect", fn: fn}
+				owner := &declaration{file: &file{fset: fset, tf: fset.File(parsed.Pos()), data: []byte(text), rel: "physical.go"}, symbol: "fixture.inspect", syntax: funcSubject(fn)}
 				begin := strings.Index(text, "_ = ") + 4
 				spelling := strings.ReplaceAll(expression, "\n", newline)
 				end := begin + len(spelling)

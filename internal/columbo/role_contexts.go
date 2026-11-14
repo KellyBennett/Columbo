@@ -156,7 +156,7 @@ type branchRoleScan struct {
 
 func (a *engine) branchRoles(d *declaration) {
 	scan := branchRoleScan{engine: a, owner: d}
-	ast.Inspect(d.fn.Body, scan.visit)
+	ast.Inspect(d.syntax.body, scan.visit)
 }
 func (s *branchRoleScan) visit(node ast.Node) bool {
 	if _, closure := node.(*ast.FuncLit); closure {

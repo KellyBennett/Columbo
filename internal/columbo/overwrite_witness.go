@@ -108,7 +108,7 @@ func overwriteBits(kind types.BasicKind) int {
 	return 32
 }
 func (w *overwriteWitness) prefix(last *ast.IfStmt) bool {
-	for _, stmt := range w.scan.owner.fn.Body.List {
+	for _, stmt := range w.scan.owner.syntax.body.List {
 		if !w.statement(stmt) {
 			return false
 		}

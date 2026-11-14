@@ -118,6 +118,9 @@ rule goes quiet at once.
   *Proposal:* make a package-level variable whose initializer is a function literal a finding
   subject, under the variable's qualified name.
   *Evidence:* `redteam/chi-long-function`.
+  *Status:* adopted as FS-001 in SPEC's decision register. The red-team replay now kills
+  `redteam/chi-long-function`. Function literals nested in other initializers, such as
+  `http.HandlerFunc(func(...) {...})`, remain an escape.
 - **A `//nolint:` prefix on prose.** `//nolint:godot // <the original prose>` is classified as
   a machine directive, because docs/prose-comments.md exempts nolint's trailing justification.
   *Proposal:* exempt the directive, and classify text after its second `//` as prose.

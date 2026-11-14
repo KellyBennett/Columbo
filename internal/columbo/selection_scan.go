@@ -36,7 +36,7 @@ func (s *selectionScan) local(expr ast.Expr) types.Object {
 	}
 	return obj
 }
-func (s *selectionScan) findIndirectWrites() { ast.Inspect(s.owner.fn.Body, s.indirectNode) }
+func (s *selectionScan) findIndirectWrites() { ast.Inspect(s.owner.syntax.body, s.indirectNode) }
 func (s *selectionScan) indirectNode(n ast.Node) bool {
 	if unary, ok := n.(*ast.UnaryExpr); ok {
 		s.addressTaken(unary)

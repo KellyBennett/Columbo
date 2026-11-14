@@ -381,9 +381,9 @@ func (d *declaration) scoreDependencies() {
 }
 func (d *declaration) measure(a *engine) {
 	scan := d.dependencyScan(a)
-	ast.Inspect(d.fn, scan.visit)
+	d.syntax.inspect(scan.visit)
 	scan.finish()
-	if d.fn.Body != nil {
+	if d.syntax.body != nil {
 		d.measureBody()
 	}
 }
@@ -393,7 +393,7 @@ func (d *declaration) measureBody() {
 	d.measureComplexity()
 }
 func (d *declaration) measureComplexity() {
-	v := scanComplexity(d.fn)
+	v := scanComplexity(d.syntax)
 	d.complexity = v.complexity
 	d.complexityReceipts = []Source{}
 	for _, ev := range v.diagnostics {
@@ -460,7 +460,7 @@ type metricCheck struct {
 
 func (d *declaration) ordinaryChecks() []metricCheck {
 	checks := []metricCheck{{"long-parameter-list", "parameters", len(d.params), nil}}
-	if d.fn.Body == nil {
+	if d.syntax.body == nil {
 		return checks
 	}
 	return append(checks,

@@ -83,6 +83,6 @@ func (p coordinationPair) description(key, location string) []string {
 }
 func (p coordinationPair) uncertainty(key string) string {
 	u := coordinationUncertainty{info: p.scan.info, left: p.left, right: p.right, location: key}
-	ast.Inspect(p.scan.owner.fn.Body, u.visit)
+	ast.Inspect(p.scan.owner.syntax.body, u.visit)
 	return u.text()
 }

@@ -289,7 +289,7 @@ type cosmeticInvestigation struct {
 
 func (a *engine) cosmetic() error {
 	for _, d := range a.declarations {
-		if d.file.included && d.fn.Body != nil {
+		if d.file.included && d.syntax.body != nil {
 			if e := a.cosmeticParent(d); e != nil {
 				return e
 			}
@@ -318,7 +318,7 @@ func (i *cosmeticInvestigation) discover(d *declaration) {
 	}
 	i.seen[d] = true
 	i.clusters = append(i.clusters, i.engine.clusters(d)...)
-	ast.Inspect(d.fn.Body, i.discoverCall)
+	ast.Inspect(d.syntax.body, i.discoverCall)
 }
 func (i *cosmeticInvestigation) discoverCall(n ast.Node) bool {
 	if c, ok := n.(*ast.CallExpr); ok {

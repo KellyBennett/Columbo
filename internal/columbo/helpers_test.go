@@ -263,7 +263,7 @@ func (t *testHarness) TestGenericHelperInterface() {
 		a, e := load(dir, []string{"./..."}, quiet())
 		t.require(e == nil, e)
 		for _, d := range a.declarations {
-			t.require(d.fn.Name.Name != "process" || d.candidate == x.candidate, x, d.candidate)
+			t.require(d.syntax.name.Name != "process" || d.candidate == x.candidate, x, d.candidate)
 		}
 	}
 }

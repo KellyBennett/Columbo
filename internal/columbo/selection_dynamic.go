@@ -5,7 +5,7 @@ import "go/ast"
 func (s *selectionScan) findDynamicLocals() {
 	for {
 		before := len(s.dynamicLocals)
-		ast.Inspect(s.owner.fn.Body, s.dynamicNode)
+		ast.Inspect(s.owner.syntax.body, s.dynamicNode)
 		if before == len(s.dynamicLocals) {
 			return
 		}
