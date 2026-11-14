@@ -76,11 +76,17 @@ func parseWeights(data []byte) (*Weights, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return nil, err
 	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("the export has content after its JSON document")
+	}
 	if doc.Format != exportFormat {
 		return nil, fmt.Errorf("format is %q, want %q", doc.Format, exportFormat)
 	}
 	if doc.Version != 1 {
 		return nil, fmt.Errorf("export version %d is not supported, only version 1", doc.Version)
+	}
+	if doc.Floor.Cases < 0 || doc.Floor.Repos < 0 {
+		return nil, fmt.Errorf("the floor has a negative count")
 	}
 	if err := checkBands(doc.Excess); err != nil {
 		return nil, err
@@ -94,6 +100,9 @@ func parseWeights(data []byte) (*Weights, error) {
 		for _, b := range r.Buckets {
 			if !slices.Contains(columns, b.Excess) {
 				return nil, fmt.Errorf("%s: bucket excess %q is not a listed band or %s", r.Smell, b.Excess, unmeasured)
+			}
+			if b.Cases < 0 || b.Repos < 0 {
+				return nil, fmt.Errorf("%s: a %s bucket has a negative count", r.Smell, b.Excess)
 			}
 			w.cases[r.Smell][b.Excess] += b.Cases
 		}

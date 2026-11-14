@@ -180,12 +180,16 @@ func TestLoadWeightsRejectsDocumentsItCannotTrust(t *testing.T) {
 		t.Fatalf("the valid export: %v", err)
 	}
 	for name, edit := range map[string][2]string{
-		"version 2":           {`"version":1`, `"version":2`},
-		"another format":      {`"columbo-ledger-export"`, `"columbo-ledger-summary"`},
-		"an unknown field":    {`"floor":`, `"total":10,"floor":`},
-		"a case key":          {`"repos":2}`, `"repos":2,"case_key":"C-1"}`},
-		"an unknown band":     {`"excess":"near"`, `"excess":"huge"`},
-		"an unbounded middle": {`{"name":"near","max_ratio":1.25}`, `{"name":"near"}`},
+		"version 2":             {`"version":1`, `"version":2`},
+		"another format":        {`"columbo-ledger-export"`, `"columbo-ledger-summary"`},
+		"an unknown field":      {`"floor":`, `"total":10,"floor":`},
+		"a case key":            {`"repos":2}`, `"repos":2,"case_key":"C-1"}`},
+		"an unknown band":       {`"excess":"near"`, `"excess":"huge"`},
+		"an unbounded middle":   {`{"name":"near","max_ratio":1.25}`, `{"name":"near"}`},
+		"a negative case count": {`"cases":4,`, `"cases":-4,`},
+		"a negative repo count": {`"repos":2}`, `"repos":-2}`},
+		"a negative floor":      {`"floor":{"cases":5`, `"floor":{"cases":-5`},
+		"trailing content":      {`}]}]}`, `}]}]} {}`},
 	} {
 		body := strings.Replace(export, edit[0], edit[1], 1)
 		if body == export {
