@@ -137,11 +137,11 @@ subset of the kill rate's population, and the report shows `withheld`.
 
 The subset can be badly skewed. An inject's subject is the case it added, so its
 shaped mutants are exactly its killed ones, and a rate over them is 100% by
-construction. The first version of this report showed that rate anyway, and
-`split-long-function`, which kills 18% of its scored mutants in
-`calibration/reports/canonical.md`, read 100% weighted. An inject group now gets a
-weighted rate only when every inject in it was killed, and then the rate is the
-true 100%.
+construction. The first version of this report showed that rate anyway. In
+`calibration/reports/weighted-sample.md`, `split-long-function` read 100% weighted
+over its 24 killed injects, while it killed 24 of its 56 scored injects, or 43%. An
+inject group now gets a weighted rate only when every inject in it was killed, and
+then the rate is the true 100%.
 
 A band with `p_b > 0` and `n_b = 0` is uncovered. The report names it and shows the
 weight it carries, so the weighted rate never hides that it covers only part of the
