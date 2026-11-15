@@ -56,6 +56,7 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/columbo
+      - run: go build ./cmd/columbo-feedback
       - name: Run diagnostic SQLite queries against all seven smells
         shell: bash
         run: |

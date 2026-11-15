@@ -98,6 +98,29 @@ GitHub lets the workflow token resolve threads only when the job also has `conte
 
 Feedback is advisory. It never changes the check or fails the job. Pull requests from forks are skipped with a warning, because their token can't comment. If the base commit can't be analyzed, nothing is posted and the check summary says so.
 
+#### Reading the feedback
+
+`columbo-feedback` gathers your team's reactions and replies into a SQLite file on your machine, then tells you which rules are right and which are noise. It only reads from GitHub and sends nothing anywhere else.
+
+```bash
+go install github.com/KellyBennett/Columbo/cmd/columbo-feedback@latest
+columbo-feedback collect --repo your-org/your-repo
+columbo-feedback status
+```
+
+```text
+rule                 👍  👎  missed
+feature-envy          0   0       1
+long-parameter-list   4   1       0
+no rule               0   0       2
+```
+
+`collect` saves every pull request Columbo has commented on, with its comments, the reactions on Columbo's comments, later commits, and `columbo:ignore` lines the pull request added. Run it again whenever you like. It picks up new pull requests and changed reactions, and it keeps the store matching GitHub. Repeat `--repo` for more repositories. The store defaults to `~/.columbo/feedback.sqlite`; choose another with `--store`. For GitHub Enterprise, pass `--api-url` or set `GITHUB_API_URL`.
+
+`collect` needs a token that can read the repository's pull requests. It uses `GH_TOKEN` if set, otherwise `gh auth token`.
+
+`status` counts 👍 and 👎 per rule on Columbo's finding comments. To tell Columbo it missed something, start a pull request comment with `Columbo missed:` and name the rule, for example `Columbo missed: feature-envy in Parse`. Misses that name no rule are counted under "no rule".
+
 ## Supported Languages
 
 - Go
