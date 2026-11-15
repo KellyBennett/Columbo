@@ -44,8 +44,9 @@ def edit(path, *statements):
 class FakePullRequest:
     """Stores comments and threads the way GitHub reports them back."""
 
-    def __init__(self, files, forbid_writes=False, reject_lines=False):
+    def __init__(self, files, forbid_writes=False, reject_lines=False, forbid_resolve=False):
         self.changed_files = files
+        self.forbid_resolve = forbid_resolve
         self.forbid_writes, self.reject_lines = forbid_writes, reject_lines
         self.review, self.issue, self.threads = {}, {}, {}
         self.writes = []
@@ -94,6 +95,8 @@ class FakePullRequest:
         next(thread for thread in self.threads.values() if comment_id in thread["comments"])["comments"].append(reply)
 
     def set_thread_resolved(self, thread_id, resolved):
+        if self.forbid_resolve:
+            raise feedback.PermissionDenied("GraphQL request was forbidden")
         self.write("resolve" if resolved else "unresolve", thread_id)
         self.threads[thread_id]["resolved"] = resolved
 
@@ -299,6 +302,22 @@ class FeedbackTests(unittest.TestCase):
         self.assertEqual([f"Cleared in {'d' * 40}."], pull_request.replies_to(comment_id))
         self.assertTrue(pull_request.thread_of(comment_id)["resolved"])
         self.assertEqual(1, self.evidence["outcomes"]["cleared"])
+        pull_request.writes.clear()
+        self.run_feedback(pull_request, head=later, sha="d" * 40)
+        self.assertEqual([], pull_request.writes)
+
+    def test_a_token_that_cannot_resolve_threads_still_clears_once(self):
+        pull_request = FakePullRequest([dict(filename="all.go", patch=patch_adding(26))], forbid_resolve=True)
+        self.run_feedback(pull_request)
+        _, comment_id, _, _ = pull_request.finding(PARAMETERS)
+        later = self.root / "later.sqlite"
+        shutil.copyfile(self.head, later)
+        rename_case(later, PARAMETERS, "C-0000000002")
+        output = self.run_feedback(pull_request, head=later, sha="d" * 40)
+        self.assertEqual(feedback.State.CLEARED, pull_request.finding(PARAMETERS)[3])
+        self.assertEqual([f"Cleared in {'d' * 40}."], pull_request.replies_to(comment_id))
+        self.assertFalse(pull_request.thread_of(comment_id)["resolved"])
+        self.assertIn("contents: write", output)
         pull_request.writes.clear()
         self.run_feedback(pull_request, head=later, sha="d" * 40)
         self.assertEqual([], pull_request.writes)

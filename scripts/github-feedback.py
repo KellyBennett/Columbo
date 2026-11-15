@@ -510,7 +510,13 @@ class PullRequest:
         self.client.graphql(RESOLVE if resolved else UNRESOLVE, {"id": thread_id}, write=True)
 
 
+UNRESOLVABLE = ("Columbo feedback could not resolve or reopen review threads. "
+               "Grant the job contents: write to let it; comments and their cleared state are still kept.")
+
+
 def execute(actions, pull_request):
+    """Carry out the plan; return a warning when the token may not resolve threads."""
+    warning = None
     for action in actions:
         if isinstance(action, Create):
             create(action, pull_request)
@@ -519,7 +525,13 @@ def execute(actions, pull_request):
         elif isinstance(action, Reply):
             pull_request.reply(action.comment.id, action.body)
         elif isinstance(action, (Resolve, Unresolve)):
-            pull_request.set_thread_resolved(action.thread.id, isinstance(action, Resolve))
+            # The workflow token may comment yet still be refused thread resolution;
+            # the marker edit that follows must still land, or every push would reply again.
+            try:
+                pull_request.set_thread_resolved(action.thread.id, isinstance(action, Resolve))
+            except PermissionDenied:
+                warning = UNRESOLVABLE
+    return warning
 
 
 def create(action, pull_request):
@@ -592,7 +604,7 @@ def publish(arguments, environment, open_pull_request):
     pull_request = open_pull_request(repository, event)
     posted = collect_posted(pull_request.review_comments(), pull_request.issue_comments(), pull_request.review_threads())
     result = plan(findings, pull_request_diff(pull_request.files()), posted, head, event.head_sha)
-    execute(result.actions, pull_request)
+    report.warning = execute(result.actions, pull_request)
     report.outcomes = result.counts()
     return report
 
