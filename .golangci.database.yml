@@ -51,12 +51,15 @@ linters:
         - pattern: '^snapshotdb\.(DBTX|Queries|New)$|^snapshotdb\.Queries\.WithTx$'
           pkg: '^github\.com/KellyBennett/Columbo/internal/snapshotdb$'
           msg: Use snapshotdb Open/Create and the generated Querier; raw handles must stay private
+        - pattern: '^feedbackdb\.(DBTX|Queries|New)$|^feedbackdb\.Queries\.WithTx$'
+          pkg: '^github\.com/KellyBennett/Columbo/internal/feedbackdb$'
+          msg: Use feedbackdb Open/Update and the generated Querier; raw handles must stay private
   exclusions:
     # Fake generated comments must never bypass these checks.
     generated: disable
     presets: []
     rules:
-      - path: '^internal/snapshotdb/(lifecycle|db|models|queries\.sql|querier)\.go$'
+      - path: '^internal/(snapshotdb|feedbackdb)/(lifecycle|db|models|queries\.sql|querier)\.go$'
         linters: [depguard, forbidigo]
       # Independent database oracles and adversarial malformed/constraint tests.
       # No runtime file, future test, or directory-wide exception is allowed.

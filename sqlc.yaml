@@ -11,3 +11,14 @@ sql:
         emit_interface: true
         emit_pointers_for_null_types: true
         query_parameter_limit: 0
+  - engine: sqlite
+    schema: internal/feedbackdb/schema.sql
+    queries: internal/feedbackdb/queries.sql
+    gen:
+      go:
+        package: feedbackdb
+        out: internal/feedbackdb
+        sql_package: database/sql
+        emit_interface: true
+        emit_pointers_for_null_types: true
+        query_parameter_limit: 0
