@@ -1,7 +1,7 @@
 package feedbackdemo
 
-func Wide(a, b, c, d, e, f int) int {
-	return a + b + c + d + e + f
+func Wide(a, b, c int) int {
+	return a + b + c
 }
 
 func Branchy(a, b, c int) int {
