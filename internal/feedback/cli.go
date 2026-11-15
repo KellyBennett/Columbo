@@ -38,7 +38,7 @@ func DefaultEnvironment() Environment {
 
 func Main(args []string, stdout, stderr io.Writer, env Environment) int {
 	c := cli{stdout: stdout, stderr: stderr, env: env}
-	commands := map[string]func([]string) int{"collect": c.collect}
+	commands := map[string]func([]string) int{"collect": c.collect, "status": c.status}
 	if len(args) == 0 || commands[args[0]] == nil {
 		fmt.Fprintln(stderr, usage)
 		return 2
@@ -99,6 +99,22 @@ func (c cli) collectOptions(args []string) (CollectOptions, error) {
 		fmt.Fprintln(c.stderr, "columbo-feedback:", err)
 	}
 	return options, err
+}
+
+func (c cli) status(args []string) int {
+	flags := flag.NewFlagSet("status", flag.ContinueOnError)
+	flags.SetOutput(c.stderr)
+	store := flags.String("store", defaultStore(), "feedback store path")
+	if err := flags.Parse(args); err != nil || flags.NArg() > 0 {
+		return 2
+	}
+	if _, err := os.Stat(*store); err != nil {
+		return c.fail(2, fmt.Errorf("no feedback store at %s; run columbo-feedback collect first", *store))
+	}
+	if err := Status(context.Background(), *store, c.stdout); err != nil {
+		return c.fail(1, err)
+	}
+	return 0
 }
 
 func resolveToken(apiURL string, env Environment) (string, error) {
