@@ -1,10 +1,15 @@
 {
-  "lifecycle": "internal/snapshotdb/lifecycle.go",
-  "generated": [
-    "internal/snapshotdb/db.go",
-    "internal/snapshotdb/models.go",
-    "internal/snapshotdb/queries.sql.go",
-    "internal/snapshotdb/querier.go"
+  "stores": [
+    {
+      "package": "internal/snapshotdb",
+      "lifecycle": "internal/snapshotdb/lifecycle.go",
+      "generated": [
+        "internal/snapshotdb/db.go",
+        "internal/snapshotdb/models.go",
+        "internal/snapshotdb/queries.sql.go",
+        "internal/snapshotdb/querier.go"
+      ]
+    }
   ],
   "test_exceptions": {
     "internal/columbo/acceptance_test.go": "Independent logical-row oracle over every SQLite table",

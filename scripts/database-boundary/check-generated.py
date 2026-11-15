@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the four claimed sqlc files in a private copy, then byte-compare."""
+"""Regenerate every store's four claimed sqlc files in a private copy, then byte-compare."""
 import argparse
 import json
 import os
@@ -20,6 +20,8 @@ version = next(line.split("=", 1)[1] for line in
                (Path(__file__).parent / "tools.env").read_text().splitlines()
                if line.startswith("SQLC_VERSION="))
 manifest = json.loads((Path(__file__).parent / "manifest.json").read_text())
+stores = manifest["stores"]
+claimed = [name for store in stores for name in store["generated"]]
 try:
     actual = subprocess.check_output([sqlc, "version"], text=True).strip()
 except (OSError, subprocess.CalledProcessError) as error:
@@ -36,21 +38,22 @@ with tempfile.TemporaryDirectory(prefix="columbo-sqlc-check-") as temporary:
         ".git", ".tools", "__pycache__", "*.sqlite", "*.sqlite-*", "columbo"))
     # Never let stale copied outputs count as freshly generated evidence. Config
     # changes that redirect output or stop emitting Querier must fail, too.
-    for name in manifest["generated"]:
+    for name in claimed:
         (copy / name).unlink(missing_ok=True)
     generated = subprocess.run([sqlc, "generate", "-f", "sqlc.yaml"], cwd=copy)
     if generated.returncode:
         raise SystemExit("sqlc generate failed; generated output could not be verified")
     different = []
-    for name in manifest["generated"]:
+    for name in claimed:
         before, after = root / name, copy / name
         if not before.is_file() or not after.is_file() or before.read_bytes() != after.read_bytes():
             different.append(name)
-    expected = {manifest["lifecycle"], *manifest["generated"]}
-    for path in (copy / "internal/snapshotdb").rglob("*.go"):
-        name = path.relative_to(copy).as_posix()
-        if name not in expected:
-            different.append(name)
+    for store in stores:
+        expected = {store["lifecycle"], *store["generated"]}
+        for path in (copy / store["package"]).rglob("*.go"):
+            name = path.relative_to(copy).as_posix()
+            if name not in expected:
+                different.append(name)
     if different:
         for name in sorted(set(different)):
             print(f"{name}: sqlc output differs; regenerate with pinned sqlc v{version}")
