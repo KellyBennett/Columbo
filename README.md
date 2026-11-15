@@ -94,6 +94,8 @@ Reviewers see one comment per finding, on the first changed line of the code it 
 
 When a later push clears a finding, Columbo replies on its thread and resolves it. The comment and its reactions stay. If the finding comes back, the thread reopens.
 
+GitHub lets the workflow token resolve threads only when the job also has `contents: write`. Grant it if you want cleared threads collapsed. Without it, Columbo still replies "Cleared" and marks the comment, and the run logs a warning.
+
 Feedback is advisory. It never changes the check or fails the job. Pull requests from forks are skipped with a warning, because their token can't comment. If the base commit can't be analyzed, nothing is posted and the check summary says so.
 
 ## Supported Languages
