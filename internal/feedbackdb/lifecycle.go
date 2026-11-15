@@ -25,6 +25,10 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	db, err := openDatabase(path)
 	if err != nil {
 		return nil, err

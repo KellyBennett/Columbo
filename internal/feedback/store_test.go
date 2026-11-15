@@ -37,6 +37,17 @@ func TestOpenCreatesAPrivateStoreThatReopens(t *testing.T) {
 	require.Equal(t, []feedbackdb.RowTimesRow{{Tbl: "repository", Record: "o/r", FirstSeen: "2026-01-01T00:00:00Z", LastSeen: "2026-01-01T00:00:00Z"}}, rows)
 }
 
+func TestOpenAcceptsARelativePath(t *testing.T) {
+	directory := t.TempDir()
+	t.Chdir(directory)
+	store := openStore(t, "feedback.sqlite")
+	ctx := context.Background()
+	require.NoError(t, store.Update(ctx, func(q feedbackdb.Querier) error {
+		return q.UpsertRepository(ctx, feedbackdb.UpsertRepositoryParams{Name: "o/r", Seen: "2026-01-01T00:00:00Z"})
+	}))
+	require.FileExists(t, filepath.Join(directory, "feedback.sqlite"))
+}
+
 func TestOpenRefusesAnotherApplicationsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "snapshot.sqlite")
 	writer, err := snapshotdb.Create(path)
