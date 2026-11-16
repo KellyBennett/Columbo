@@ -52,8 +52,14 @@ class ActionRunnerTests(unittest.TestCase):
             self.assertTrue((evidence / 'provenance.txt').exists())
             self.assertTrue((evidence / 'build.txt').exists())
             self.assertEqual((evidence / 'report.sqlite').exists(), build_exit == 0)
+            self.assertFalse((evidence / 'columbo').exists())
             if not build_exit:
                 self.assertIn('analysis completed', (evidence / 'report.txt').read_text())
+                analyzer_output = Path(outputs['analyzer'])
+                self.assertTrue(os.access(analyzer_output, os.X_OK))
+                self.assertNotIn(evidence, analyzer_output.parents)
+            else:
+                self.assertNotIn('analyzer', outputs)
 
     def test_default_staged_mode_is_forwarded(self):
         self.run_case(1)
@@ -67,6 +73,15 @@ class ActionRunnerTests(unittest.TestCase):
     def test_action_declares_staged_default(self):
         action = RUNNER.parent.parent / 'action.yml'
         self.assertRegex(action.read_text(), r"(?m)^  staged:\n    description: [^\n]+\n    default: 'true'$")
+
+    def test_feedback_is_off_by_default_and_cannot_fail_the_job(self):
+        action = (RUNNER.parent.parent / 'action.yml').read_text()
+        self.assertRegex(action, r"(?m)^  feedback:\n    description: [^\n]+\n    default: 'false'$")
+        for step in ('Analyze the pull request base for feedback',
+                     'Comment on findings the pull request introduced or made worse'):
+            block = action.split(f'- name: {step}\n', 1)[1].split('    - ', 1)[0]
+            self.assertIn("inputs.feedback == 'true' && github.event_name == 'pull_request'", block)
+            self.assertIn('continue-on-error: true', block)
 
     def test_clean_analysis(self):
         self.run_case(0)

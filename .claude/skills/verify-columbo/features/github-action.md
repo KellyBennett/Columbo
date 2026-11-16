@@ -4,10 +4,12 @@ Consumers use `KellyBennett/Columbo@main` as a composite action. The action buil
 
 ## Sub-features
 
-- `action-analyze` writes `build.txt`, `provenance.txt`, `report.sqlite`, `report.txt`, and `exit-status.txt` to a fresh evidence dir, and deletes the built binary.
-- `action-outputs` appends `evidence=<dir>` and `exit-code=<0|1|2>` to `GITHUB_OUTPUT`. The script itself exits 0 even when the analysis exits 1.
+- `action-analyze` writes `build.txt`, `provenance.txt`, `report.sqlite`, `report.txt`, and `exit-status.txt` to a fresh evidence dir. It builds the binary in a separate `columbo-analyzer.XXXXXX` dir, so the binary never lands in the evidence.
+- `action-outputs` appends `evidence=<dir>`, `analyzer=<path>` (only when the build succeeds) and `exit-code=<0|1|2>` to `GITHUB_OUTPUT`. The script itself exits 0 even when the analysis exits 1.
 - `action-staged-input` passes `--staged=<true|false>`. Any other value exits 2.
 - `action-publisher-offline` runs the publisher's tests against a real snapshot without network access.
+- `action-base-analysis` (`scripts/run-base-analysis.sh`, only with `feedback: true`) fetches the pull request base by SHA, analyzes it in a temporary worktree with the head's analyzer and config, and appends `base-snapshot=<path>` or `base-status=unavailable`.
+- `action-feedback-offline` runs the pull request feedback publisher's tests (`scripts/github-feedback.py`) against real snapshots and an in-memory pull request.
 
 ## How to get to it (user POV)
 
@@ -21,14 +23,16 @@ Preconditions:
 
 - **Analyze (staged).** From the repo root, run:
   `PATH="$(cat "$RUN/go-bin"):$PATH" RUNNER_TEMP="$RUN/action" GITHUB_OUTPUT="$RUN/action/github-output" GITHUB_SHA=local GITHUB_ACTION_PATH="$PWD" GITHUB_WORKSPACE="$RUN/subjects" COLUMBO_WORKING_DIRECTORY=tangle COLUMBO_STAGED=true COLUMBO_CONFIG= bash scripts/run-action.sh > "$RUN/action/console.txt" 2>&1`
-  The script exits `0`. `github-output` contains `evidence=$RUN/action/columbo-evidence.XXXXXX` and `exit-code=1`. That evidence dir lists `build.txt exit-status.txt provenance.txt report.sqlite report.txt` and has no `columbo` binary.
+  The script exits `0`. `github-output` contains `evidence=$RUN/action/columbo-evidence.XXXXXX`, `analyzer=$RUN/action/columbo-analyzer.XXXXXX/columbo` and `exit-code=1`. That evidence dir lists `build.txt exit-status.txt provenance.txt report.sqlite report.txt` and has no `columbo` binary.
 - **Bad staged input.** Rerun with `COLUMBO_STAGED=maybe`. The script exits `2` and prints `staged must be true or false`.
 - **Publisher offline.** Run `COLUMBO_TEST_SNAPSHOT=<a --staged=false --no-history snapshot from fixture-all> python3 -m unittest discover -s scripts -p test_github_check.py`. Expect `OK` (22 tests at the time of writing).
 - **Runner tests.** Run `python3 -m unittest discover -s scripts -p test_run_action.py`.
+- **Base analysis tests.** Run `python3 -m unittest discover -s scripts -p test_run_base_analysis.py`. They build real Git repositories and need no network.
+- **Feedback publisher offline.** Run `COLUMBO_TEST_SNAPSHOT=<same snapshot> python3 -m unittest discover -s scripts -p test_github_feedback.py`.
 
 ## Gotchas
 
-- Never run `scripts/github-check.py` directly. It POSTs to `api.github.com` with whatever `GH_TOKEN` is in the environment, and it has no dry-run.
+- Never run `scripts/github-check.py` or `scripts/github-feedback.py` directly. They POST to `api.github.com` with whatever `GH_TOKEN` is in the environment, and they have no dry-run.
 - `run-action.sh` rebuilds Columbo from `GITHUB_ACTION_PATH` with `go -C`, so `go` must be on `PATH`. The `$RUN/bin` binary is not used.
 - `run-action.sh` calls `sha256sum`. Recent macOS ships it, but older macOS does not. If it is missing, the script stops (`set -e`) before it writes `exit-code`.
 - Artifact upload, check publication, and final exit enforcement happen in `action.yml` steps that do not run locally. Verifying them requires a real workflow run on GitHub.

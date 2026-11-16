@@ -6,7 +6,6 @@ It requires only Python's standard library and a checks:write workflow token.
 """
 
 import argparse
-import contextlib
 import json
 import os
 from pathlib import Path
@@ -16,44 +15,11 @@ import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
-def limited(text, maximum=65536):
-    encoded = text.encode("utf-8")
-    if len(encoded) <= maximum:
-        return text
-    suffix = "\n[Truncated; full evidence is in the SQLite artifact.]"
-    return encoded[:maximum - len(suffix.encode())].decode("utf-8", errors="ignore") + suffix
+import columbo_snapshot
+from columbo_snapshot import limited
 
 
-def metric_text(row):
-    def number(value):
-        if row["kind"] in ("parameter-overlap", "dependency-overlap", "foreign-own-ratio"):
-            return f"{value:.6f}"
-        return str(value)
-    text = f'{row["kind"]} {row["subject"]}: {number(row["numeric_value"])}'
-    if row["limit_value"] is not None:
-        text += f' (limit {row["operator"]} {number(row["limit_value"])})'
-    return text
-
-
-class Snapshot:
-    def __init__(self, connection):
-        self.db = connection
-        self.db.row_factory = sqlite3.Row
-
-    def validate(self):
-        if self.db.execute("PRAGMA application_id").fetchone()[0] != 0x434C4D42:
-            raise ValueError("not a Columbo snapshot")
-        if self.db.execute("PRAGMA user_version").fetchone()[0] != 9:
-            raise ValueError("unsupported Columbo snapshot schema")
-        reports = self.db.execute("SELECT id,schema_version FROM report").fetchall()
-        if [tuple(row) for row in reports] != [(1, 9)]:
-            raise ValueError("invalid Columbo report metadata")
-        if [tuple(row) for row in self.db.execute("PRAGMA integrity_check")] != [("ok",)]:
-            raise ValueError("snapshot integrity check failed")
-        if self.db.execute("PRAGMA foreign_key_check").fetchall():
-            raise ValueError("snapshot foreign key check failed")
-
+class Snapshot(columbo_snapshot.Snapshot):
     def annotations(self):
         if self.stages():
             return self.stage_annotations()
@@ -74,74 +40,12 @@ class Snapshot:
         return result
 
     def case_annotation(self, row):
-        metrics = [metric_text(metric) for metric in self.db.execute("""
-            SELECT kind,subject,numeric_value,limit_value,operator FROM clues
-            WHERE case_id=? AND numeric_value IS NOT NULL ORDER BY ordinal
-        """, (row["id"],))]
-        policy = []
-        for item in self.db.execute("""
-            SELECT p.* FROM case_policy_reviews cp JOIN policy_reviews p ON p.id=cp.policy_id
-            WHERE cp.case_id=? ORDER BY cp.ordinal
-        """, (row["id"],)):
-            policy.extend([f'Policy {item["id"]}: {item["note"]}', f'Review: {item["review_prompt"]}'])
-        guidance = [f'{item["kind"]}: {item["item"]}' for item in self.db.execute(
-            "SELECT kind,item FROM case_guidance WHERE case_id=? ORDER BY kind,ordinal", (row["id"],))]
         message = "\n".join([f'CASE {row["id"]} {row["symbol"]}: {row["verdict"]}',
-                              row["why"], row["diagnosis"], *metrics, *self.dependency_uses(row["id"]), *self.duplicate_fragments(row["id"]), *self.variant_evidence(row["id"]), *self.selection_evidence(row["id"]), *policy, *guidance])
+                              row["why"], row["diagnosis"], *self.metrics(row["id"]),
+                              *self.supporting_evidence(row["id"]), *self.guidance(row["id"])])
         return dict(path=row["path"], start_line=row["start_line"], end_line=row["end_line"],
                     annotation_level="failure" if row["verdict"] == "FAIL" else "warning",
                     title=limited("Columbo: " + row["smell"], 255), message=limited(message))
-
-    def duplicate_fragments(self, case_id):
-        return [f'Duplicate fragment: {row["path"]}:{row["start_line"]}-{row["end_line"]} (bytes {row["start_offset"]}-{row["end_offset"]})'
-                for row in self.db.execute("""
-                    SELECT f.path,r.start_line,r.end_line,r.start_offset,r.end_offset
-                    FROM source_receipts r JOIN files f ON f.id=r.file_id
-                    WHERE r.case_id=? AND r.kind='duplicate-fragment'
-                    ORDER BY f.path,r.start_offset,r.end_offset
-                """, (case_id,))]
-
-    def selection_evidence(self, case_id):
-        evidence = []
-        for clue in self.db.execute("SELECT id,kind,subject FROM clues WHERE case_id=? AND kind IN ('selected-role','selected-implementation-set','selected-message-set') ORDER BY ordinal", (case_id,)):
-            values = [row[0] for row in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
-            evidence.append(f'{clue["kind"]} {clue["subject"]}: ' + ", ".join(values))
-        for row in self.db.execute("""
-            SELECT r.kind,r.subject,f.path,r.start_line,r.end_line,r.start_offset,r.end_offset
-            FROM source_receipts r JOIN files f ON f.id=r.file_id
-            WHERE r.case_id=? AND r.kind IN ('selection-decision','selection-origin','selection-flow','selected-message')
-            ORDER BY f.path,r.start_offset,r.kind
-        """, (case_id,)):
-            evidence.append(f'{row["kind"]} {row["path"]}:{row["start_line"]}-{row["end_line"]} (bytes {row["start_offset"]}-{row["end_offset"]}): {row["subject"]}')
-        return evidence
-
-    def variant_evidence(self, case_id):
-        evidence = []
-        for clue in self.db.execute("SELECT id,kind,subject FROM clues WHERE case_id=? AND kind IN ('variant-set','repeated-variant-set','variant-shared-write','variant-write-read','variant-state-overlap') ORDER BY ordinal", (case_id,)):
-            values = [row[0] for row in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
-            evidence.append(f'{clue["kind"]} {clue["subject"]}: ' + ", ".join(values))
-        for row in self.db.execute("""
-            SELECT f.path,r.start_line,r.end_line,r.start_offset,r.end_offset,d.symbol
-            FROM source_receipts r JOIN files f ON f.id=r.file_id
-            JOIN declarations d ON d.id=r.source_declaration_id
-            WHERE r.case_id=? AND r.kind='variant-decision' ORDER BY f.path,r.start_offset
-        """, (case_id,)):
-            evidence.append(f'Variant decision: {row["path"]}:{row["start_line"]}-{row["end_line"]} (bytes {row["start_offset"]}-{row["end_offset"]}) in {row["symbol"]}')
-        return evidence
-
-    def dependency_uses(self, case_id):
-        labels = {"declared": "Declared or constructed types", "signature": "Callable signatures",
-                  "signature-only": "Signature only", "supplied": "Supplied arguments",
-                  "consumed": "Consumed results", "discarded": "Discarded results",
-                  "receiver": "Receivers", "value": "Selected values", "package": "Package references"}
-        groups = []
-        for clue in self.db.execute("SELECT id,kind FROM clues WHERE case_id=? AND kind LIKE 'dependency-use-%' ORDER BY ordinal", (case_id,)):
-            values = [item[0] for item in self.db.execute("SELECT value FROM clue_values WHERE clue_id=? ORDER BY ordinal", (clue["id"],))]
-            origin = clue["kind"].removeprefix("dependency-use-")
-            groups.append(labels.get(origin, origin) + ": " + ", ".join(values))
-        if not groups:
-            return []
-        return ["Dependency origins (lists overlap; each identity counts once):", *groups]
 
     def summary(self, exit_code):
         if self.stages():
@@ -214,11 +118,7 @@ class Snapshot:
 def read_snapshot(path, exit_code):
     if exit_code == 2:
         return [], "Analysis failed (exit 2). No finding annotations were published; see the workflow log."
-    uri = Path(path).resolve(strict=True).as_uri() + "?mode=ro"
-    with contextlib.closing(sqlite3.connect(uri, uri=True)) as db:
-        db.execute("PRAGMA query_only=ON")
-        snapshot = Snapshot(db)
-        snapshot.validate()
+    with columbo_snapshot.open_snapshot(path, Snapshot) as snapshot:
         return snapshot.annotations(), snapshot.summary(exit_code)
 
 
@@ -308,10 +208,14 @@ def main():
     parser.add_argument("--name", default="Columbo findings")
     parser.add_argument("--details-url", required=True)
     parser.add_argument("--publication-status", default="")
+    parser.add_argument("--warning", action="append", default=[],
+                        help="Text shown at the top of the check summary; repeatable.")
     args = parser.parse_args()
     publication = None
     try:
         annotations, summary = read_snapshot(args.snapshot, args.exit_code)
+        # Leading, so truncation of a long summary cannot drop the warning.
+        summary = "\n\n".join([*args.warning, summary])
         api = ChecksAPI(os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", ""))
         publication = Publication(api, args.name, args.head_sha, args.details_url, args.exit_code, summary, annotations)
         publication.publish()
