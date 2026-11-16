@@ -314,13 +314,45 @@ class FeedbackTests(unittest.TestCase):
         shutil.copyfile(self.head, later)
         rename_case(later, PARAMETERS, "C-0000000002")
         output = self.run_feedback(pull_request, head=later, sha="d" * 40)
-        self.assertEqual(feedback.State.CLEARED, pull_request.finding(PARAMETERS)[3])
+        self.assertEqual(feedback.State.CLEARING, pull_request.finding(PARAMETERS)[3])
         self.assertEqual([f"Cleared in {'d' * 40}."], pull_request.replies_to(comment_id))
         self.assertFalse(pull_request.thread_of(comment_id)["resolved"])
         self.assertIn("contents: write", output)
         pull_request.writes.clear()
         self.run_feedback(pull_request, head=later, sha="d" * 40)
         self.assertEqual([], pull_request.writes)
+
+    def test_a_thread_left_open_by_a_denied_resolve_closes_once_permission_returns(self):
+        pull_request = FakePullRequest([dict(filename="all.go", patch=patch_adding(26))], forbid_resolve=True)
+        self.run_feedback(pull_request)
+        _, comment_id, _, _ = pull_request.finding(PARAMETERS)
+        later = self.root / "later.sqlite"
+        shutil.copyfile(self.head, later)
+        rename_case(later, PARAMETERS, "C-0000000002")
+        self.run_feedback(pull_request, head=later, sha="d" * 40)
+        pull_request.forbid_resolve = False
+        output = self.run_feedback(pull_request, head=later, sha="e" * 40)
+        self.assertTrue(pull_request.thread_of(comment_id)["resolved"])
+        self.assertEqual([f"Cleared in {'d' * 40}."], pull_request.replies_to(comment_id))
+        self.assertEqual(feedback.State.CLEARED, pull_request.finding(PARAMETERS)[3])
+        self.assertNotIn("contents: write", output)
+        pull_request.writes.clear()
+        self.run_feedback(pull_request, head=later, sha="e" * 40)
+        self.assertEqual([], pull_request.writes)
+
+    def test_a_reviewer_reopening_a_cleared_thread_keeps_it_open(self):
+        pull_request = FakePullRequest([dict(filename="all.go", patch=patch_adding(26))])
+        self.run_feedback(pull_request)
+        _, comment_id, _, _ = pull_request.finding(PARAMETERS)
+        later = self.root / "later.sqlite"
+        shutil.copyfile(self.head, later)
+        rename_case(later, PARAMETERS, "C-0000000002")
+        self.run_feedback(pull_request, head=later, sha="d" * 40)
+        pull_request.thread_of(comment_id)["resolved"] = False
+        pull_request.writes.clear()
+        self.run_feedback(pull_request, head=later, sha="e" * 40)
+        self.assertEqual([], pull_request.writes)
+        self.assertFalse(pull_request.thread_of(comment_id)["resolved"])
 
     def test_a_case_no_longer_made_worse_says_so(self):
         pull_request = FakePullRequest([])

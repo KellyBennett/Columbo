@@ -165,10 +165,12 @@ def repository_path(working_directory, path):
 
 class State(enum.Enum):
     OPEN = "open"
+    # Cleared and replied to, but GitHub refused to resolve the thread; resolving it is still owed.
+    CLEARING = "clearing"
     CLEARED = "cleared"
 
 
-MARKER = re.compile(r"\A<!-- columbo-feedback case=(\S+) role=finding state=(open|cleared) -->")
+MARKER = re.compile(r"\A<!-- columbo-feedback case=(\S+) role=finding state=(open|clearing|cleared) -->")
 
 
 def marker(case_id, state):
@@ -266,7 +268,10 @@ class Reply:
 
 @dataclass(frozen=True)
 class Resolve:
+    """Resolve a cleared finding's thread, then record in its marker whether GitHub allowed it."""
     thread: Thread
+    then: Edit
+    if_denied: Optional[Edit] = None
 
 
 @dataclass(frozen=True)
@@ -317,7 +322,7 @@ def plan(findings, diff, posted, head, sha):
         if existing is None:
             result.actions.append(Create(case_id, body, anchor(finding.case, diff)))
             result.outcomes[case_id] = Outcome.CREATED
-        elif existing.state is State.CLEARED:
+        elif existing.state in (State.CLEARING, State.CLEARED):
             if existing.thread and existing.thread.resolved:
                 result.actions.append(Unresolve(existing.thread))
             if existing.kind is Kind.REVIEW:
@@ -330,17 +335,26 @@ def plan(findings, diff, posted, head, sha):
     for case_id, existing in posted.items():
         if case_id in reported or existing.state is State.CLEARED:
             continue
+        cleared = Edit(existing, with_state(existing.body, State.CLEARED))
+        if existing.state is State.CLEARING:
+            # Only the thread resolution is owed; the reply was posted when the case cleared.
+            result.actions.append(settle(existing, cleared, if_denied=None))
+            continue
         note = clearing_note(head.get(case_id), sha)
-        cleared = with_state(existing.body, State.CLEARED)
         if existing.kind is Kind.REVIEW:
             result.actions.append(Reply(existing, note))
-            if existing.thread and not existing.thread.resolved:
-                result.actions.append(Resolve(existing.thread))
-            result.actions.append(Edit(existing, cleared))
+            result.actions.append(settle(existing, cleared, Edit(existing, with_state(existing.body, State.CLEARING))))
         else:
-            result.actions.append(Edit(existing, cleared.rstrip() + "\n\n" + note))
+            result.actions.append(Edit(existing, cleared.body.rstrip() + "\n\n" + note))
         result.outcomes[case_id] = Outcome.CLEARED
     return result
+
+
+def settle(existing, cleared, if_denied):
+    """Mark a finding cleared, resolving its thread first if it is still open."""
+    if existing.thread and not existing.thread.resolved:
+        return Resolve(existing.thread, cleared, if_denied)
+    return cleared
 
 
 def read_cases(path, working_directory):
@@ -521,17 +535,30 @@ def execute(actions, pull_request):
         if isinstance(action, Create):
             create(action, pull_request)
         elif isinstance(action, Edit):
-            pull_request.edit_comment(action.comment.kind, action.comment.id, action.body)
+            edit_comment(action, pull_request)
         elif isinstance(action, Reply):
             pull_request.reply(action.comment.id, action.body)
-        elif isinstance(action, (Resolve, Unresolve)):
-            # The workflow token may comment yet still be refused thread resolution;
-            # the marker edit that follows must still land, or every push would reply again.
+        elif isinstance(action, Resolve):
+            # The workflow token may comment yet still be refused thread resolution. The marker
+            # must still move past open, or every push would reply again, but only to clearing,
+            # so a later run with the permission resolves the thread.
             try:
-                pull_request.set_thread_resolved(action.thread.id, isinstance(action, Resolve))
+                pull_request.set_thread_resolved(action.thread.id, True)
+                follow_up = action.then
+            except PermissionDenied:
+                warning, follow_up = UNRESOLVABLE, action.if_denied
+            if follow_up:
+                edit_comment(follow_up, pull_request)
+        elif isinstance(action, Unresolve):
+            try:
+                pull_request.set_thread_resolved(action.thread.id, False)
             except PermissionDenied:
                 warning = UNRESOLVABLE
     return warning
+
+
+def edit_comment(action, pull_request):
+    pull_request.edit_comment(action.comment.kind, action.comment.id, action.body)
 
 
 def create(action, pull_request):
