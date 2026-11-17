@@ -13,6 +13,7 @@ printf '%s\\n' "$@" >> "$ANALYZER_LOG"
 for config in .columbo.yml custom/columbo.yml; do
   if [[ -f $config ]]; then printf 'config %s: %s\\n' "$config" "$(cat "$config")" >> "$ANALYZER_LOG"; fi
 done
+printf 'analyzed-sha %s\\n' "$(git rev-parse HEAD)" >> "$ANALYZER_LOG"
 test -f base-only.go || exit 2
 printf snapshot > "$4"
 exit "$ANALYZER_EXIT"
@@ -59,16 +60,33 @@ class BaseAnalysisTests(unittest.TestCase):
         self.analyzer.write_text(ANALYZER)
         self.analyzer.chmod(0o755)
 
+    def checkout_merge(self, message='merge PR'):
+        author = self.root / 'author'
+        pr_head_sha = rev_parse(author)
+        git('branch', 'pr-head', cwd=author)
+        git('reset', '--hard', self.base_sha, cwd=author)
+        (author / 'module' / 'main-only.go').write_text('package module\n')
+        git('add', '.', cwd=author)
+        git('commit', '-qm', 'main advanced', cwd=author)
+        current_base_sha = rev_parse(author)
+        git('merge', '-q', '--no-ff', '-m', message, 'pr-head', cwd=author)
+        git('push', '-q', str(self.root / 'origin.git'), 'main', cwd=author)
+        workspace = self.root / 'workspace'
+        git('fetch', '-q', '--depth=1', 'origin', 'main', cwd=workspace)
+        git('checkout', '-q', '--detach', 'FETCH_HEAD', cwd=workspace)
+        return pr_head_sha, current_base_sha
+
     def tearDown(self):
         self.directory.cleanup()
 
-    def run_base(self, analyzer_exit=1, config='', base_sha=None, working_directory='module'):
+    def run_base(self, analyzer_exit=1, config='', base_sha=None, working_directory='module', pr_head_sha=''):
         outputs = self.root / 'outputs'
         outputs.write_text('')
         env = dict(os.environ, RUNNER_TEMP=str(self.temp), GITHUB_OUTPUT=str(outputs),
                    GITHUB_WORKSPACE=str(self.root / 'workspace'),
                    COLUMBO_WORKING_DIRECTORY=working_directory, COLUMBO_CONFIG=config,
                    COLUMBO_BASE_SHA=self.base_sha if base_sha is None else base_sha,
+                   COLUMBO_PR_HEAD_SHA=pr_head_sha,
                    COLUMBO_ANALYZER=str(self.analyzer), COLUMBO_EVIDENCE=str(self.evidence),
                    ANALYZER_LOG=str(self.root / 'analyzer.log'), ANALYZER_EXIT=str(analyzer_exit))
         result = subprocess.run(['bash', str(RUNNER)], env=env, capture_output=True, text=True)
@@ -115,6 +133,35 @@ class BaseAnalysisTests(unittest.TestCase):
     def test_missing_configured_file_marks_base_unavailable(self):
         outputs, _ = self.run_base(config='absent.yml')
         self.assertEqual({'base-status': 'unavailable'}, outputs)
+
+    def test_merge_checkout_uses_current_base_parent(self):
+        pr_head_sha, current_base_sha = self.checkout_merge()
+        workspace = self.root / 'workspace'
+        shallow_parent = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD^1'],
+                                        cwd=workspace, capture_output=True, text=True)
+        self.assertNotEqual(0, shallow_parent.returncode)
+        outputs, _ = self.run_base(pr_head_sha=pr_head_sha)
+        self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
+        self.assertIn('analyzed-sha ' + current_base_sha, self.analyzer_log())
+
+    def test_commit_message_does_not_count_as_parent(self):
+        pr_head_sha, current_base_sha = self.checkout_merge(
+            'merge PR\n\nparent ' + '0' * 40)
+        outputs, _ = self.run_base(pr_head_sha=pr_head_sha)
+        self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
+        self.assertIn('analyzed-sha ' + current_base_sha, self.analyzer_log())
+
+    def test_unrelated_merge_checkout_keeps_event_base(self):
+        _, _ = self.checkout_merge()
+        outputs, _ = self.run_base(pr_head_sha='0' * 40)
+        self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
+        self.assertIn('analyzed-sha ' + self.base_sha, self.analyzer_log())
+
+    def test_pr_head_checkout_keeps_event_base(self):
+        head_sha = rev_parse(self.root / 'workspace')
+        outputs, _ = self.run_base(pr_head_sha=head_sha)
+        self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
+        self.assertIn('analyzed-sha ' + self.base_sha, self.analyzer_log())
 
     def test_worktree_is_removed_after_analysis(self):
         self.run_base()

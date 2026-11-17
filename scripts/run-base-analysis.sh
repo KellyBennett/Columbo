@@ -17,10 +17,21 @@ config="${COLUMBO_CONFIG:-}"
 head_module="$GITHUB_WORKSPACE/$COLUMBO_WORKING_DIRECTORY"
 log="$COLUMBO_EVIDENCE/base-git.txt"
 prefix=$(git -C "$head_module" rev-parse --show-prefix 2>>"$log") || unavailable "the head checkout is not a Git repository"
-git -C "$head_module" fetch --no-tags --depth=1 origin "$COLUMBO_BASE_SHA" >>"$log" 2>&1 \
+# The default pull_request checkout merges the PR into the current base tip.
+# Read the commit object: a depth-1 checkout cannot resolve HEAD^1.
+base="$COLUMBO_BASE_SHA"
+parents=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] || break
+  if [[ "$line" == parent\ * ]]; then parents+=("${line#parent }"); fi
+done < <(git -C "$head_module" cat-file -p HEAD 2>>"$log")
+if [[ ${#parents[@]} -eq 2 && "${parents[1]}" == "${COLUMBO_PR_HEAD_SHA:-}" ]]; then
+  base="${parents[0]}"
+fi
+git -C "$head_module" fetch --no-tags --depth=1 origin "$base" >>"$log" 2>&1 \
   || unavailable "fetching the base commit failed"
 checkout="$(mktemp -d "$RUNNER_TEMP/columbo-base.XXXXXX")/src"
-git -C "$head_module" worktree add --detach "$checkout" "$COLUMBO_BASE_SHA" >>"$log" 2>&1 \
+git -C "$head_module" worktree add --detach "$checkout" "$base" >>"$log" 2>&1 \
   || unavailable "checking out the base commit failed"
 trap 'git -C "$head_module" worktree remove --force "$checkout" >>"$log" 2>&1' EXIT
 
