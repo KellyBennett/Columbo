@@ -90,7 +90,7 @@ The default checkout is enough. Columbo fetches the base commit by its SHA with 
 
 Columbo analyzes the pull request's base and head with the head's configuration. It comments only on findings the pull request introduced or made worse. Existing findings in code the pull request didn't touch stay quiet.
 
-Reviewers see one comment per finding, on the first changed line of the code it points at. Each comment says what Columbo found and why. React 👍 if the finding is right and 👎 if it's a nitpick.
+Reviewers see one comment per finding, on the first changed line of the code it points at. Each comment says what Columbo found and why, and offers leads as places to start looking rather than a prescribed fix. React 👍 if the finding led to a real design problem, even one the leads didn't name, and 👎 only if the evidence is wrong or there's nothing worth changing underneath it.
 
 When a later push clears a finding, Columbo replies on its thread and resolves it. The comment and its reactions stay. If the finding comes back, the thread reopens.
 

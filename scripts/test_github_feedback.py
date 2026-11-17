@@ -253,8 +253,9 @@ class FeedbackTests(unittest.TestCase):
         self.assertTrue(body.startswith(f"<!-- columbo-feedback case={PARAMETERS} role=finding state=open -->\n"))
         self.assertIn("**Columbo: long-parameter-list** in `fixture.Parameters` (introduced)", body)
         self.assertIn("parameters fixture.Parameters: 5 (limit > 4)", body)
-        self.assertIn("**Leads**", body)
-        self.assertTrue(body.endswith("React 👍 if this finding is right, 👎 if it's a nitpick."))
+        self.assertIn("**Where to start looking**\n_Starting points for the investigation, not the prescribed fix._\n- ", body)
+        self.assertIn("A lead that wouldn't help and code that was already like this are not reasons to dismiss the finding.", body)
+        self.assertTrue(body.endswith("React 👎 only if the evidence is wrong or there's nothing worth changing underneath it."))
         self.assertEqual({"head_sha": HEAD_SHA, "skipped": None, "findings": 2,
                           "outcomes": {"created": 2, "updated": 0, "reopened": 0, "cleared": 0}}, self.evidence)
         self.assertIn("Columbo feedback: 2 findings introduced or made worse; 2 created", output)
@@ -267,7 +268,8 @@ class FeedbackTests(unittest.TestCase):
         body = pull_request.finding(PARAMETERS)[2]["body"]
         self.assertLessEqual(len(body), 65536)
         self.assertIn("Truncated", body)
-        self.assertTrue(body.endswith("nitpick."))
+        self.assertIn(feedback.READING_NOTE, body)
+        self.assertTrue(body.endswith(feedback.REACTION_PROMPT))
 
     # Across runs and pushes
 

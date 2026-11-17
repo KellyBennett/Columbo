@@ -23,7 +23,15 @@ from urllib.request import Request, urlopen
 
 from columbo_snapshot import limited, number_text, open_snapshot
 
-REACTION_PROMPT = "React 👍 if this finding is right, 👎 if it's a nitpick."
+LEADS_TITLE = "Where to start looking"
+LEADS_NOTE = "_Starting points for the investigation, not the prescribed fix._"
+READING_NOTE = ("**How to read this finding.** The evidence marks a place where structure is under pressure. "
+                "If none of the leads fits, don't stop there: look for the problem underneath, which may be a "
+                "different smell nearby or in code this pull request didn't write. Finding that problem is Columbo "
+                "doing its job, even when the fix is out of scope for this pull request. A lead that wouldn't help "
+                "and code that was already like this are not reasons to dismiss the finding.")
+REACTION_PROMPT = ("React 👍 if this finding led you to a real design problem, even one the leads didn't name. "
+                   "React 👎 only if the evidence is wrong or there's nothing worth changing underneath it.")
 WRITE_SPACING_SECONDS = 1.0
 
 
@@ -197,17 +205,17 @@ def render(finding):
     parts = [f"{case.verdict}, case `{case.id}`.", case.why, case.diagnosis]
     if case.metrics:
         parts.append("\n".join(f"- {metric}" for metric in case.metrics))
-    for kind, title in (("lead", "Leads"), ("avoid", "Avoid")):
+    for kind, heading in (("lead", f"**{LEADS_TITLE}**\n{LEADS_NOTE}"), ("avoid", "**Avoid**")):
         items = [item for item_kind, item in case.guidance if item_kind == kind]
         if items:
-            parts.append(f"**{title}**\n" + "\n".join(f"- {item}" for item in items))
+            parts.append(heading + "\n" + "\n".join(f"- {item}" for item in items))
     if case.evidence:
         parts.append("<details><summary>Evidence</summary>\n\n```text\n" + "\n".join(case.evidence) + "\n```\n</details>")
-    # GitHub caps a comment at 65536 characters; the marker and prompt must survive truncation.
+    # GitHub caps a comment at 65536 characters; the marker, reading note and prompt must survive truncation.
     middle = limited("\n\n".join(part for part in parts if part), 60000)
     return "\n".join([marker(case.id, State.OPEN),
                       f"**Columbo: {case.smell}** in `{case.symbol}` ({change})",
-                      "", middle, "", REACTION_PROMPT])
+                      "", middle, "", READING_NOTE, "", REACTION_PROMPT])
 
 
 class Kind(enum.Enum):
