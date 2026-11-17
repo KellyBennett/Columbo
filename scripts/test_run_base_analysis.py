@@ -60,7 +60,7 @@ class BaseAnalysisTests(unittest.TestCase):
         self.analyzer.write_text(ANALYZER)
         self.analyzer.chmod(0o755)
 
-    def checkout_merge(self):
+    def checkout_merge(self, message='merge PR'):
         author = self.root / 'author'
         pr_head_sha = rev_parse(author)
         git('branch', 'pr-head', cwd=author)
@@ -69,7 +69,7 @@ class BaseAnalysisTests(unittest.TestCase):
         git('add', '.', cwd=author)
         git('commit', '-qm', 'main advanced', cwd=author)
         current_base_sha = rev_parse(author)
-        git('merge', '-q', '--no-ff', '-m', 'merge PR', 'pr-head', cwd=author)
+        git('merge', '-q', '--no-ff', '-m', message, 'pr-head', cwd=author)
         git('push', '-q', str(self.root / 'origin.git'), 'main', cwd=author)
         workspace = self.root / 'workspace'
         git('fetch', '-q', '--depth=1', 'origin', 'main', cwd=workspace)
@@ -140,6 +140,13 @@ class BaseAnalysisTests(unittest.TestCase):
         shallow_parent = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD^1'],
                                         cwd=workspace, capture_output=True, text=True)
         self.assertNotEqual(0, shallow_parent.returncode)
+        outputs, _ = self.run_base(pr_head_sha=pr_head_sha)
+        self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
+        self.assertIn('analyzed-sha ' + current_base_sha, self.analyzer_log())
+
+    def test_commit_message_does_not_count_as_parent(self):
+        pr_head_sha, current_base_sha = self.checkout_merge(
+            'merge PR\n\nparent ' + '0' * 40)
         outputs, _ = self.run_base(pr_head_sha=pr_head_sha)
         self.assertEqual(str(self.evidence / 'base.sqlite'), outputs['base-snapshot'])
         self.assertIn('analyzed-sha ' + current_base_sha, self.analyzer_log())

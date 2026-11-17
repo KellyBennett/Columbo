@@ -22,6 +22,7 @@ prefix=$(git -C "$head_module" rev-parse --show-prefix 2>>"$log") || unavailable
 base="$COLUMBO_BASE_SHA"
 parents=()
 while IFS= read -r line; do
+  [[ -n "$line" ]] || break
   if [[ "$line" == parent\ * ]]; then parents+=("${line#parent }"); fi
 done < <(git -C "$head_module" cat-file -p HEAD 2>>"$log")
 if [[ ${#parents[@]} -eq 2 && "${parents[1]}" == "${COLUMBO_PR_HEAD_SHA:-}" ]]; then
