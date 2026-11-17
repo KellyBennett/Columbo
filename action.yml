@@ -65,6 +65,7 @@ runs:
         COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         COLUMBO_CONFIG: ${{ inputs.config }}
         COLUMBO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        COLUMBO_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run-base-analysis.sh"
     - name: Publish findings
       id: publish
