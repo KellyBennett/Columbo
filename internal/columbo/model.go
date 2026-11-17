@@ -7,11 +7,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
 
 var smells = []string{"long-function", "long-parameter-list", "high-cognitive-complexity", "excessive-dependencies", "feature-envy", "data-clump", "cosmetic-extraction", "duplicate-code", "repeated-variant-decision", selectionSmell, commentSmell}
+
+func SmellIDs() []string { return slices.Clone(smells) }
 
 type Summary struct {
 	Failed     int `json:"failed"`
