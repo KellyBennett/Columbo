@@ -87,7 +87,7 @@ jobs:
   columbo:
     name: Columbo self-check
     permissions:
-      contents: read
+      contents: write
       checks: write
       pull-requests: write
     needs: acceptance
