@@ -29,7 +29,7 @@ func assessmentPrompt(finding PilotCase) string {
 		mode = "Evaluate the team's actual changes only. Do not propose or implement alternative refactorings. Use the hypothetical future change only as a read-only criterion for comparing the original and actual designs.\n"
 	}
 	return designFraming + mode + fmt.Sprintf(`
-Phase: assess. Read source and prior history in this checkout. Do not edit files. Do not look outside this checkout for reactions, discussion, other trials or later revisions.
+Phase: assess. Read source and prior history in this checkout. Read files with Read, Glob, and Grep. Use Bash only for plain git log, git show, and git diff commands in the current directory. Do not use shell loops or file-reading commands. Do not edit files. Do not look outside this checkout for reactions, discussion, other trials or later revisions.
 The starting revision is %s. Its provenance is %s.
 Finding %s, rule %s:
 %s
@@ -66,7 +66,7 @@ func reviewPrompt(finding PilotCase, result TrialResult, before, candidate, actu
 	if !finding.explores() {
 		mode = "No exploratory refactoring was performed. Evaluate the team's actual changes against the original code. Do not invent a candidate or propose alternatives. Return candidate as {\"outcome\":\"not-applicable\",\"reason\":\"No exploratory refactoring was performed.\",\"evidence\":[\"actual-changes mode\"]}.\n"
 	}
-	return designFraming + mode + fmt.Sprintf(`
+	return designFraming + mode + readOnlyGitCommands(before, candidate, actual) + fmt.Sprintf(`
 Phase: review. Read and compare the available code revisions. Do not edit files or run refactorings.
 Original checkout: %s
 Experimental checkout: %s (empty means no exploratory refactoring was performed)
@@ -93,6 +93,7 @@ func pilotSummary(root string, plan PilotPlan) error {
 		model = "agent default; see each trial's reported model"
 	}
 	fmt.Fprintf(&report, "Requested model: %s. Agent executable hash: %s. Analyzer hash: %s.\n\n", markdown(model), plan.Options.AgentSHA256, plan.Options.ColumboSHA256)
+	report.WriteString(actualChangeReport(plan.ActualChangeCounts))
 	report.WriteString("| PR | Finding | Rule | Reactions | Evaluation | Design assessment | Behavior checks | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	results := map[string]TrialResult{}
 	for _, finding := range plan.Cases {
@@ -161,4 +162,18 @@ func pilotSummary(root string, plan PilotPlan) error {
 
 func markdown(text string) string {
 	return strings.NewReplacer("|", "\\|", "\n", " ", "\r", " ").Replace(text)
+}
+
+func readOnlyGitCommands(dirs ...string) string {
+	var prompt strings.Builder
+	prompt.WriteString("\nRead files with Read, Glob, and Grep. Use Bash only for these exact read-only git commands. Do not use shell loops, file-reading commands, cd, or change the command prefix.\n")
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		for _, command := range []string{"log -5 --oneline", "show --stat HEAD", "diff --no-ext-diff --no-textconv HEAD"} {
+			fmt.Fprintf(&prompt, "git -C %s %s\n", quoteShell(dir), command)
+		}
+	}
+	return prompt.String()
 }
