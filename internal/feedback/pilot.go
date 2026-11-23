@@ -67,6 +67,14 @@ type PilotCase struct {
 	Latest           Observation `json:"latest"`
 }
 
+func (c PilotCase) explores() bool { return c.Reaction == "thumbs-down" }
+func (c PilotCase) analysisMode() string {
+	if c.explores() {
+		return "exploratory-refactoring"
+	}
+	return "actual-changes"
+}
+
 type PilotPlan struct {
 	Version  int          `json:"version"`
 	Options  PilotOptions `json:"options"`
@@ -210,6 +218,9 @@ func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {
 		if err := json.Unmarshal(data, &plan); err != nil {
 			return plan, err
 		}
+		if plan.Version != 2 {
+			return plan, fmt.Errorf("pilot analysis policy changed; choose a new --out directory to preserve earlier results")
+		}
 		before, _ := json.Marshal(plan.Options)
 		after, _ := json.Marshal(options)
 		if !bytesEqual(before, after) {
@@ -255,7 +266,7 @@ func saveJSON(path string, value any) error {
 }
 
 func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
-	plan := PilotPlan{Version: 1, Options: options}
+	plan := PilotPlan{Version: 2, Options: options}
 	latest := map[int64]Observation{}
 	for _, observation := range observations {
 		latest[observation.Record.PullRequest.Number] = observation

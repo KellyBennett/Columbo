@@ -51,28 +51,30 @@ type RefactoringAttempt struct {
 }
 
 type TrialResult struct {
-	Version              int                  `json:"version"`
-	Complete             bool                 `json:"complete"`
-	CaseID               string               `json:"case_id"`
-	Execution            string               `json:"execution"`
-	Before               string               `json:"before"`
-	After                string               `json:"after,omitempty"`
-	RevisionEvidence     string               `json:"revision_evidence"`
-	BaselineChecks       []CommandResult      `json:"baseline_checks"`
-	BaselineColumbo      CommandResult        `json:"baseline_columbo"`
-	AssessmentCommand    CommandResult        `json:"assessment_command"`
-	Assessment           DesignAssessment     `json:"assessment"`
-	Attempts             []RefactoringAttempt `json:"attempts"`
-	ActualChecks         []CommandResult      `json:"actual_checks,omitempty"`
-	ActualColumbo        *CommandResult       `json:"actual_columbo,omitempty"`
-	ActualAncestry       string               `json:"actual_ancestry"`
-	ReviewCommand        CommandResult        `json:"review_command"`
-	Review               DesignReview         `json:"review"`
-	BehaviorChecksPassed bool                 `json:"behavior_checks_passed"`
-	Error                string               `json:"error,omitempty"`
-	AnalysisConfig       string               `json:"analysis_config"`
-	AnalysisConfigSHA256 string               `json:"analysis_config_sha256"`
-	AnalysisConfigOrigin string               `json:"analysis_config_origin"`
+	AnalysisMode               string               `json:"analysis_mode"`
+	ActualBehaviorChecksPassed bool                 `json:"actual_behavior_checks_passed"`
+	Version                    int                  `json:"version"`
+	Complete                   bool                 `json:"complete"`
+	CaseID                     string               `json:"case_id"`
+	Execution                  string               `json:"execution"`
+	Before                     string               `json:"before"`
+	After                      string               `json:"after,omitempty"`
+	RevisionEvidence           string               `json:"revision_evidence"`
+	BaselineChecks             []CommandResult      `json:"baseline_checks"`
+	BaselineColumbo            CommandResult        `json:"baseline_columbo"`
+	AssessmentCommand          CommandResult        `json:"assessment_command"`
+	Assessment                 DesignAssessment     `json:"assessment"`
+	Attempts                   []RefactoringAttempt `json:"attempts"`
+	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
+	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
+	ActualAncestry             string               `json:"actual_ancestry"`
+	ReviewCommand              CommandResult        `json:"review_command"`
+	Review                     DesignReview         `json:"review"`
+	BehaviorChecksPassed       bool                 `json:"behavior_checks_passed"`
+	Error                      string               `json:"error,omitempty"`
+	AnalysisConfig             string               `json:"analysis_config"`
+	AnalysisConfigSHA256       string               `json:"analysis_config_sha256"`
+	AnalysisConfigOrigin       string               `json:"analysis_config_origin"`
 }
 
 type pilotTrial struct {
@@ -97,7 +99,7 @@ func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) 
 	}
 	root := filepath.Join(options.Out, "trials", finding.ID, "executions", rand.Text())
 	t := &pilotTrial{options: options, finding: finding, root: root, before: filepath.Join(root, "before"), candidate: filepath.Join(root, "candidate")}
-	t.result = TrialResult{Version: 1, CaseID: finding.CaseID, Execution: root, Before: finding.Before, After: finding.After, RevisionEvidence: finding.RevisionEvidence, ActualAncestry: "unavailable"}
+	t.result = TrialResult{Version: 2, AnalysisMode: finding.analysisMode(), CaseID: finding.CaseID, Execution: root, Before: finding.Before, After: finding.After, RevisionEvidence: finding.RevisionEvidence, ActualAncestry: "unavailable"}
 	defer func() {
 		if err != nil {
 			t.result.Error = err.Error()
@@ -120,7 +122,13 @@ func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) 
 func (t *pilotTrial) prepare(ctx context.Context) error {
 	options, finding, root, result := t.options, t.finding, t.root, &t.result
 	before, candidate := t.before, t.candidate
-	for _, dir := range []string{before, candidate} {
+	dirs := []string{before}
+	if finding.explores() {
+		dirs = append(dirs, candidate)
+	} else {
+		t.candidate = ""
+	}
+	for _, dir := range dirs {
 		if err := checkoutRevision(ctx, finding.Initial.GitDir, finding.Before, dir); err != nil {
 			return err
 		}
@@ -139,6 +147,9 @@ func (t *pilotTrial) prepare(ctx context.Context) error {
 
 func (t *pilotTrial) assess(ctx context.Context) error {
 	options, finding, root, result, candidate := t.options, t.finding, t.root, &t.result, t.candidate
+	if candidate == "" {
+		candidate = t.before
+	}
 	prompt := assessmentPrompt(finding)
 	result.AssessmentCommand = invokeAgent(ctx, options, candidate, "assess", prompt, filepath.Join(root, "assessment"))
 	if !commandPassed(result.AssessmentCommand) {
@@ -162,6 +173,9 @@ func (t *pilotTrial) assess(ctx context.Context) error {
 }
 
 func (t *pilotTrial) refactor(ctx context.Context) error {
+	if !t.finding.explores() {
+		return nil
+	}
 	options, finding, root, result, candidate := t.options, t.finding, t.root, &t.result, t.candidate
 	for attempt := 1; attempt <= options.Attempts; attempt++ {
 		prefix := filepath.Join(root, "attempt-"+strconv.Itoa(attempt))
@@ -220,32 +234,51 @@ func (t *pilotTrial) collectActual(ctx context.Context) error {
 		}
 	}
 	t.actual = actual
+	result.ActualBehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(result.ActualChecks)
 	return nil
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {
 	options, finding, root, result := t.options, t.finding, t.root, &t.result
 	before, candidate, actual := t.before, t.candidate, t.actual
-	last := result.Attempts[len(result.Attempts)-1]
 	prompt := reviewPrompt(finding, *result, before, candidate, actual)
-	result.ReviewCommand = invokeAgent(ctx, options, candidate, "review", prompt, filepath.Join(root, "review"))
+	reviewDir := candidate
+	if reviewDir == "" {
+		reviewDir = before
+	}
+	result.ReviewCommand = invokeAgent(ctx, options, reviewDir, "review", prompt, filepath.Join(root, "review"))
 	if !commandPassed(result.ReviewCommand) {
 		return fmt.Errorf("design review failed; see %s", result.ReviewCommand.Stderr)
 	}
 	if err := readAgentJSON(result.ReviewCommand.Stdout, &result.Review); err != nil {
 		return fmt.Errorf("design review must return JSON: %w", err)
 	}
-	if patch, err := sourcePatch(ctx, candidate, finding.Before); err != nil {
+	if patch, err := sourcePatch(ctx, reviewDir, finding.Before); err != nil {
 		return err
-	} else if saved, err := os.ReadFile(last.Patch); err != nil || string(patch) != string(saved) {
-		return fmt.Errorf("review changed the experimental source after validation")
+	} else {
+		var saved []byte
+		if len(result.Attempts) > 0 {
+			saved, err = os.ReadFile(result.Attempts[len(result.Attempts)-1].Patch)
+			if err != nil {
+				return err
+			}
+		}
+		if string(patch) != string(saved) {
+			return fmt.Errorf("review changed source after validation")
+		}
+	}
+	if !finding.explores() {
+		result.Review.Candidate = Judgment{Outcome: "not-applicable", Reason: "Exploratory refactoring is reserved for thumbs-down findings.", Evidence: []string{"reaction group: " + finding.Reaction}}
 	}
 	for name, judgment := range map[string]Judgment{"finding": result.Review.Finding, "direction": result.Review.Direction, "candidate": result.Review.Candidate, "actual": result.Review.Actual} {
+		if name == "candidate" && !finding.explores() {
+			continue
+		}
 		if !contains([]string{"beneficial", "tradeoff", "no-demonstrated-benefit", "inconclusive"}, judgment.Outcome) || judgment.Reason == "" || len(judgment.Evidence) == 0 {
 			return fmt.Errorf("review has an invalid %s judgment", name)
 		}
 	}
-	if !result.BehaviorChecksPassed || !analyzerRan(result.BaselineColumbo) || !analyzerRan(last.Columbo) {
+	if finding.explores() && (!result.BehaviorChecksPassed || !analyzerRan(result.BaselineColumbo) || !analyzerRan(result.Attempts[len(result.Attempts)-1].Columbo)) {
 		result.Review.Limitations = append(result.Review.Limitations, "Runner could not verify a changed candidate against a passing baseline with unchanged policy and completed analyzer runs.")
 		if result.Review.Candidate.Outcome == "beneficial" {
 			result.Review.Candidate.Outcome = "inconclusive"
@@ -253,7 +286,9 @@ func (t *pilotTrial) review(ctx context.Context) error {
 	}
 	if actual == "" || !checksPassed(result.BaselineChecks) || !checksPassed(result.ActualChecks) {
 		result.Review.Limitations = append(result.Review.Limitations, "Team outcome lacks an available revision or comparable passing behavior checks.")
-		if result.Review.Actual.Outcome == "beneficial" {
+		if actual == "" {
+			result.Review.Actual = Judgment{Outcome: "inconclusive", Reason: "No later PR revision is available to evaluate the team's changes.", Evidence: []string{"later PR head unavailable"}}
+		} else if result.Review.Actual.Outcome == "beneficial" {
 			result.Review.Actual.Outcome = "inconclusive"
 		}
 	}

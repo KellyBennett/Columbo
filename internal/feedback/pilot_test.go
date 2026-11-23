@@ -51,6 +51,20 @@ func executable(t *testing.T, path, script string) string {
 }
 
 func TestPilotRunsRejectedFindingRetriesTestsAndResumesWithoutCallingAgent(t *testing.T) {
+	testPilotReaction(t, "thumbs-down", true)
+}
+
+func TestPilotEvaluatesActualChangesWithoutExploringOtherReactions(t *testing.T) {
+	for _, group := range []string{"thumbs-up", "unreacted", "mixed", "other"} {
+		t.Run(group, func(t *testing.T) { testPilotReaction(t, group, true) })
+	}
+}
+
+func TestThumbsUpWithoutLaterCodeStaysInconclusiveWithoutExploring(t *testing.T) {
+	testPilotReaction(t, "thumbs-up", false)
+}
+
+func testPilotReaction(t *testing.T, group string, hasLater bool) {
 	source, before, after := newHistory(t)
 	root := t.TempDir()
 	client, err := newGitHubClient("https://api.github.com", "")
@@ -58,6 +72,13 @@ func TestPilotRunsRejectedFindingRetriesTestsAndResumesWithoutCallingAgent(t *te
 	c := collector{repository: "o/r", github: client, options: CollectOptions{Checkout: source, EvidencePath: filepath.Join(root, "evidence")}}
 	comment := Comment{Kind: ReviewComment, ID: 11, CommitID: &before, Body: "Investigate ownership", Marker: &Marker{CaseID: "C-1", Role: "finding", Rule: "feature-envy"}}
 	o := Observation{ID: "observation", ObservedAt: "2026-01-01T00:00:00Z", Record: PullRequestRecord{PullRequest: PullRequest{Number: 1}, Comments: []Comment{comment}, Reactions: []Reaction{{CommentKind: ReviewComment, CommentID: 11, Content: "-1"}}}, Revisions: []Revision{{SHA: before, Roles: []string{"original-review-anchor"}}, {SHA: after, Roles: []string{"pr-head"}}}}
+	if !hasLater {
+		o.Revisions[1].Roles = []string{"pr-commit"}
+	}
+	o.Record.Reactions = nil
+	for _, content := range map[string][]string{"thumbs-down": {"-1"}, "thumbs-up": {"+1"}, "mixed": {"+1", "-1"}, "other": {"heart"}}[group] {
+		o.Record.Reactions = append(o.Record.Reactions, Reaction{CommentKind: ReviewComment, CommentID: 11, Content: content})
+	}
 	o.GitDir, err = c.retainHistory(context.Background(), &o)
 	require.NoError(t, err)
 	storePath := filepath.Join(root, "feedback.sqlite")
@@ -106,7 +127,7 @@ esac
 	data, err := os.ReadFile(filepath.Join(options.Out, "plan.json"))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, &plan))
-	require.Equal(t, "thumbs-down", plan.Cases[0].Reaction)
+	require.Equal(t, group, plan.Cases[0].Reaction)
 	var result TrialResult
 	data, err = os.ReadFile(filepath.Join(options.Out, "trials", plan.Cases[0].ID, "result.json"))
 	require.NoError(t, err)
@@ -115,20 +136,41 @@ esac
 	require.NoError(t, err)
 	require.Len(t, executions, 2, "failed invocations must remain available after retry")
 	require.True(t, result.Complete)
-	require.True(t, result.BehaviorChecksPassed)
+	require.Equal(t, group == "thumbs-down", result.BehaviorChecksPassed)
+	require.Equal(t, hasLater, result.ActualBehaviorChecksPassed)
 	require.True(t, result.BaselineColumbo.EvidenceValid)
 	require.Equal(t, "default configuration", result.AnalysisConfigOrigin)
-	require.Len(t, result.Attempts, 2)
-	require.False(t, checksPassed(result.Attempts[0].Checks))
-	require.True(t, checksPassed(result.Attempts[1].Checks))
-	require.FileExists(t, result.Attempts[0].Patch)
-	require.FileExists(t, result.Attempts[1].Patch)
+	if group == "thumbs-down" {
+		require.Len(t, result.Attempts, 2)
+		require.False(t, checksPassed(result.Attempts[0].Checks))
+		require.True(t, checksPassed(result.Attempts[1].Checks))
+		require.FileExists(t, result.Attempts[0].Patch)
+		require.FileExists(t, result.Attempts[1].Patch)
+	} else {
+		require.Empty(t, result.Attempts)
+		require.Equal(t, "actual-changes", result.AnalysisMode)
+		require.Equal(t, "not-applicable", result.Review.Candidate.Outcome)
+		require.NoDirExists(t, filepath.Join(result.Execution, "candidate"))
+		require.NoFileExists(t, counter)
+		report, err := os.ReadFile(filepath.Join(options.Out, "report.md"))
+		require.NoError(t, err)
+		if hasLater {
+			require.Contains(t, string(report), "actual-changes | no-demonstrated-benefit | passed")
+		} else {
+			require.Equal(t, "inconclusive", result.Review.Actual.Outcome)
+			require.Contains(t, string(report), "actual-changes | inconclusive | not verified")
+		}
+	}
 	status, err := git(context.Background(), source, "status", "--porcelain")
 	require.NoError(t, err)
 	require.Empty(t, status)
 	traceBefore, err := os.ReadFile(trace)
 	require.NoError(t, err)
-	require.Equal(t, "assess\nassess\nrefactor\nrefactor\nreview\n", string(traceBefore))
+	expected := "assess\nassess\nreview\n"
+	if group == "thumbs-down" {
+		expected = "assess\nassess\nrefactor\nrefactor\nreview\n"
+	}
+	require.Equal(t, expected, string(traceBefore))
 	require.NoError(t, Pilot(context.Background(), options, &out), out.String())
 	traceAfter, err := os.ReadFile(trace)
 	require.NoError(t, err)
@@ -200,4 +242,11 @@ func TestAmbiguousCIConfigurationsRequireAnExplicitChoice(t *testing.T) {
 	trial.options.Config = ".columbo.yml"
 	require.NoError(t, trial.freezeConfig())
 	require.Equal(t, "starting checkout", trial.result.AnalysisConfigOrigin)
+}
+
+func TestLegacyPilotPlanRequiresNewOutputDirectory(t *testing.T) {
+	options := PilotOptions{Out: t.TempDir()}
+	require.NoError(t, saveJSON(filepath.Join(options.Out, "plan.json"), PilotPlan{Version: 1, Options: options}))
+	_, err := loadOrPlan(context.Background(), options)
+	require.ErrorContains(t, err, "pilot analysis policy changed; choose a new --out directory")
 }
