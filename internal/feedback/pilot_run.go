@@ -51,6 +51,7 @@ type RefactoringAttempt struct {
 }
 
 type TrialResult struct {
+	ActualChange               ActualChange         `json:"actual_change"`
 	AnalysisMode               string               `json:"analysis_mode"`
 	ActualBehaviorChecksPassed bool                 `json:"actual_behavior_checks_passed"`
 	Version                    int                  `json:"version"`
@@ -62,12 +63,14 @@ type TrialResult struct {
 	RevisionEvidence           string               `json:"revision_evidence"`
 	BaselineChecks             []CommandResult      `json:"baseline_checks"`
 	BaselineColumbo            CommandResult        `json:"baseline_columbo"`
+	AssessmentCommands         []CommandResult      `json:"assessment_commands"`
 	AssessmentCommand          CommandResult        `json:"assessment_command"`
 	Assessment                 DesignAssessment     `json:"assessment"`
 	Attempts                   []RefactoringAttempt `json:"attempts"`
 	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
 	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
 	ActualAncestry             string               `json:"actual_ancestry"`
+	ReviewCommands             []CommandResult      `json:"review_commands"`
 	ReviewCommand              CommandResult        `json:"review_command"`
 	Review                     DesignReview         `json:"review"`
 	BehaviorChecksPassed       bool                 `json:"behavior_checks_passed"`
@@ -91,15 +94,18 @@ func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) 
 		if err := json.Unmarshal(data, &previous); err != nil {
 			return err
 		}
-		if previous.Complete {
+		if previous.Complete && previous.Version == 3 {
 			return nil
 		}
 	} else if !os.IsNotExist(readErr) {
 		return readErr
 	}
+	if finding.ActualChange.Status == "" {
+		finding.ActualChange = inspectActualChange(ctx, finding)
+	}
 	root := filepath.Join(options.Out, "trials", finding.ID, "executions", rand.Text())
 	t := &pilotTrial{options: options, finding: finding, root: root, before: filepath.Join(root, "before"), candidate: filepath.Join(root, "candidate")}
-	t.result = TrialResult{Version: 2, AnalysisMode: finding.analysisMode(), CaseID: finding.CaseID, Execution: root, Before: finding.Before, After: finding.After, RevisionEvidence: finding.RevisionEvidence, ActualAncestry: "unavailable"}
+	t.result = TrialResult{Version: 3, ActualChange: finding.ActualChange, AnalysisMode: finding.analysisMode(), CaseID: finding.CaseID, Execution: root, Before: finding.Before, After: finding.After, RevisionEvidence: finding.RevisionEvidence, ActualAncestry: "unavailable"}
 	defer func() {
 		if err != nil {
 			t.result.Error = err.Error()
@@ -111,6 +117,15 @@ func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) 
 			err = saveErr
 		}
 	}()
+	if !finding.explores() && finding.ActualChange.Status == actualNoResponse {
+		if err := saveJSON(filepath.Join(root, "discussion.json"), finding); err != nil {
+			return err
+		}
+		skipped := Judgment{Outcome: "not-applicable", Reason: "No later change touches the finding, so no design comparison was performed.", Evidence: []string{finding.ActualChange.Reason}}
+		t.result.Review = DesignReview{Finding: skipped, Direction: skipped, Candidate: skipped, Actual: finding.ActualChange.judgment()}
+		t.result.Complete = true
+		return nil
+	}
 	for _, step := range []func(context.Context) error{t.prepare, t.assess, t.refactor, t.collectActual, t.review} {
 		if err := step(ctx); err != nil {
 			return err
@@ -151,15 +166,13 @@ func (t *pilotTrial) assess(ctx context.Context) error {
 		candidate = t.before
 	}
 	prompt := assessmentPrompt(finding)
-	result.AssessmentCommand = invokeAgent(ctx, options, candidate, "assess", prompt, filepath.Join(root, "assessment"))
-	if !commandPassed(result.AssessmentCommand) {
-		return fmt.Errorf("initial assessment failed; see %s", result.AssessmentCommand.Stderr)
+	var err error
+	result.Assessment, result.AssessmentCommands, err = runJSONPhase(ctx, options, candidate, prompt, filepath.Join(root, "assessment"), assessmentPhase())
+	if len(result.AssessmentCommands) > 0 {
+		result.AssessmentCommand = result.AssessmentCommands[len(result.AssessmentCommands)-1]
 	}
-	if err := readAgentJSON(result.AssessmentCommand.Stdout, &result.Assessment); err != nil {
-		return fmt.Errorf("assessment must return JSON: %w", err)
-	}
-	if result.Assessment.Relationship == "" || result.Assessment.FutureChange == "" || result.Assessment.ChangeBasis != "hypothetical" || len(result.Assessment.Evidence) == 0 {
-		return fmt.Errorf("assessment lacks a relationship, evidence or a prospective hypothetical change")
+	if err != nil {
+		return err
 	}
 	if err := saveJSON(filepath.Join(root, "assessment.json"), result.Assessment); err != nil {
 		return err
@@ -180,7 +193,7 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 	for attempt := 1; attempt <= options.Attempts; attempt++ {
 		prefix := filepath.Join(root, "attempt-"+strconv.Itoa(attempt))
 		refactoring := RefactoringAttempt{Number: attempt}
-		refactoring.Agent = invokeAgent(ctx, options, candidate, "refactor", refactoringPrompt(finding, result.Assessment, result.Attempts), prefix+"-agent")
+		refactoring.Agent = invokeAgent(ctx, options, candidate, "refactor", refactoringPrompt(finding, result.Assessment, result.Attempts), prefix+"-agent", "")
 		refactoring.Checks = validateRevision(ctx, options, candidate, prefix)
 		refactoring.Columbo = analyzeRevision(ctx, options, candidate, prefix+"-columbo")
 		patch, err := sourcePatch(ctx, candidate, finding.Before)
@@ -214,7 +227,7 @@ func (t *pilotTrial) collectActual(ctx context.Context) error {
 		return err
 	}
 	actual := ""
-	if finding.After != "" {
+	if finding.After != "" && finding.ActualChange.Status != actualNoResponse {
 		actual = filepath.Join(root, "actual")
 		if err := checkoutRevision(ctx, finding.Latest.GitDir, finding.After, actual); err != nil {
 			return err
@@ -246,12 +259,13 @@ func (t *pilotTrial) review(ctx context.Context) error {
 	if reviewDir == "" {
 		reviewDir = before
 	}
-	result.ReviewCommand = invokeAgent(ctx, options, reviewDir, "review", prompt, filepath.Join(root, "review"))
-	if !commandPassed(result.ReviewCommand) {
-		return fmt.Errorf("design review failed; see %s", result.ReviewCommand.Stderr)
+	var err error
+	result.Review, result.ReviewCommands, err = runJSONPhase(ctx, options, reviewDir, prompt, filepath.Join(root, "review"), reviewPhase(finding.explores()))
+	if len(result.ReviewCommands) > 0 {
+		result.ReviewCommand = result.ReviewCommands[len(result.ReviewCommands)-1]
 	}
-	if err := readAgentJSON(result.ReviewCommand.Stdout, &result.Review); err != nil {
-		return fmt.Errorf("design review must return JSON: %w", err)
+	if err != nil {
+		return err
 	}
 	if patch, err := sourcePatch(ctx, reviewDir, finding.Before); err != nil {
 		return err
@@ -270,23 +284,19 @@ func (t *pilotTrial) review(ctx context.Context) error {
 	if !finding.explores() {
 		result.Review.Candidate = Judgment{Outcome: "not-applicable", Reason: "Exploratory refactoring is reserved for thumbs-down findings.", Evidence: []string{"reaction group: " + finding.Reaction}}
 	}
-	for name, judgment := range map[string]Judgment{"finding": result.Review.Finding, "direction": result.Review.Direction, "candidate": result.Review.Candidate, "actual": result.Review.Actual} {
-		if name == "candidate" && !finding.explores() {
-			continue
-		}
-		if !contains([]string{"beneficial", "tradeoff", "no-demonstrated-benefit", "inconclusive"}, judgment.Outcome) || judgment.Reason == "" || len(judgment.Evidence) == 0 {
-			return fmt.Errorf("review has an invalid %s judgment", name)
-		}
-	}
 	if finding.explores() && (!result.BehaviorChecksPassed || !analyzerRan(result.BaselineColumbo) || !analyzerRan(result.Attempts[len(result.Attempts)-1].Columbo)) {
 		result.Review.Limitations = append(result.Review.Limitations, "Runner could not verify a changed candidate against a passing baseline with unchanged policy and completed analyzer runs.")
 		if result.Review.Candidate.Outcome == "beneficial" {
 			result.Review.Candidate.Outcome = "inconclusive"
 		}
 	}
-	if actual == "" || !checksPassed(result.BaselineChecks) || !checksPassed(result.ActualChecks) {
+	if finding.ActualChange.Status == actualNoResponse {
+		result.Review.Actual = finding.ActualChange.judgment()
+	} else if finding.ActualChange.Status == actualUnavailable || actual == "" || !checksPassed(result.BaselineChecks) || !checksPassed(result.ActualChecks) {
 		result.Review.Limitations = append(result.Review.Limitations, "Team outcome lacks an available revision or comparable passing behavior checks.")
-		if actual == "" {
+		if finding.ActualChange.Status == actualUnavailable {
+			result.Review.Actual = Judgment{Outcome: "inconclusive", Reason: finding.ActualChange.Reason, Evidence: []string{finding.ActualChange.Reason}}
+		} else if actual == "" {
 			result.Review.Actual = Judgment{Outcome: "inconclusive", Reason: "No later PR revision is available to evaluate the team's changes.", Evidence: []string{"later PR head unavailable"}}
 		} else if result.Review.Actual.Outcome == "beneficial" {
 			result.Review.Actual.Outcome = "inconclusive"
@@ -433,7 +443,7 @@ func checksPassed(results []CommandResult) bool {
 	return true
 }
 
-func invokeAgent(ctx context.Context, options PilotOptions, dir, phase, prompt, prefix string) CommandResult {
+func invokeAgent(ctx context.Context, options PilotOptions, dir, phase, prompt, prefix, schema string) CommandResult {
 	args := append([]string{options.Agent}, options.AgentArgs...)
 	if len(options.AgentArgs) == 0 {
 		tools, allowed := "Read,Glob,Grep,Bash", "Read,Glob,Grep,Bash(git show:*),Bash(git log:*),Bash(git diff:*)"
@@ -441,13 +451,35 @@ func invokeAgent(ctx context.Context, options PilotOptions, dir, phase, prompt, 
 			tools = "Read,Edit,Write,Glob,Grep,Bash"
 			allowed = "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(columbo:*)"
 		}
-		args = append(args, "-p", "--safe-mode", "--restricted", "--no-session-persistence", "--permission-mode", "dontAsk", "--max-turns", strconv.Itoa(options.Turns), "--output-format", "text", "--tools", tools, "--allowedTools", allowed)
+		if phase != "refactor" {
+			dirs := []string{dir}
+			if phase == "review" {
+				dirs = []string{filepath.Join(filepath.Dir(dir), "before"), filepath.Join(filepath.Dir(dir), "candidate"), filepath.Join(filepath.Dir(dir), "actual")}
+			}
+			for _, checkout := range dirs {
+				if _, err := os.Stat(checkout); err != nil {
+					continue
+				}
+				for _, verb := range []string{"show", "log", "diff"} {
+					allowed += ",Bash(git -C " + quoteShell(checkout) + " " + verb + ":*)"
+				}
+			}
+		}
+		format := "text"
+		if schema != "" {
+			format = "json"
+		}
+		args = append(args, "-p", "--safe-mode", "--restricted", "--no-session-persistence", "--permission-mode", "dontAsk", "--max-turns", strconv.Itoa(options.Turns), "--output-format", format, "--tools", tools, "--allowedTools", allowed)
+		if schema != "" {
+			args = append(args, "--json-schema", schema)
+		}
 		if options.Model != "" {
 			args = append(args, "--model", options.Model)
 		}
 		if phase != "assess" {
 			args = append(args, "--add-dir", filepath.Dir(dir))
 		}
+
 	} else {
 		for i := 1; i < len(args); i++ {
 			args[i] = strings.NewReplacer("{model}", options.Model, "{turns}", strconv.Itoa(options.Turns), "{phase}", phase).Replace(args[i])
@@ -459,17 +491,7 @@ func invokeAgent(ctx context.Context, options PilotOptions, dir, phase, prompt, 
 	return runTrialCommand(ctx, dir, args, prompt, prefix, options.Timeout, options.PassEnv...)
 }
 
-func readAgentJSON(path string, target any) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	text := strings.TrimSpace(string(data))
-	if strings.HasPrefix(text, "```json\n") && strings.HasSuffix(text, "```") {
-		text = strings.TrimSuffix(strings.TrimPrefix(text, "```json\n"), "```")
-	}
-	return json.Unmarshal([]byte(text), target)
-}
+func quoteShell(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
 
 func sourcePatch(ctx context.Context, dir, baseline string) ([]byte, error) {
 	if _, err := git(ctx, dir, "add", "--intent-to-add", "--", "."); err != nil {

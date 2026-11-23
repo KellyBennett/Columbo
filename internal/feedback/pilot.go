@@ -54,17 +54,18 @@ type PilotOptions struct {
 }
 
 type PilotCase struct {
-	ID               string      `json:"id"`
-	CaseID           string      `json:"case_id"`
-	Rule             string      `json:"rule"`
-	PR               int64       `json:"pr"`
-	Reaction         string      `json:"reaction"`
-	Finding          Comment     `json:"finding"`
-	Before           string      `json:"before"`
-	After            string      `json:"after,omitempty"`
-	RevisionEvidence string      `json:"revision_evidence"`
-	Initial          Observation `json:"initial"`
-	Latest           Observation `json:"latest"`
+	ActualChange     ActualChange `json:"actual_change"`
+	ID               string       `json:"id"`
+	CaseID           string       `json:"case_id"`
+	Rule             string       `json:"rule"`
+	PR               int64        `json:"pr"`
+	Reaction         string       `json:"reaction"`
+	Finding          Comment      `json:"finding"`
+	Before           string       `json:"before"`
+	After            string       `json:"after,omitempty"`
+	RevisionEvidence string       `json:"revision_evidence"`
+	Initial          Observation  `json:"initial"`
+	Latest           Observation  `json:"latest"`
 }
 
 func (c PilotCase) explores() bool { return c.Reaction == "thumbs-down" }
@@ -76,10 +77,11 @@ func (c PilotCase) analysisMode() string {
 }
 
 type PilotPlan struct {
-	Version  int          `json:"version"`
-	Options  PilotOptions `json:"options"`
-	Cases    []PilotCase  `json:"cases"`
-	Excluded []string     `json:"excluded"`
+	ActualChangeCounts map[string]ActualChangeCounts `json:"actual_change_counts"`
+	Version            int                           `json:"version"`
+	Options            PilotOptions                  `json:"options"`
+	Cases              []PilotCase                   `json:"cases"`
+	Excluded           []string                      `json:"excluded"`
 }
 
 func (c cli) pilot(args []string) int {
@@ -218,7 +220,7 @@ func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {
 		if err := json.Unmarshal(data, &plan); err != nil {
 			return plan, err
 		}
-		if plan.Version != 2 {
+		if plan.Version != 3 {
 			return plan, fmt.Errorf("pilot analysis policy changed; choose a new --out directory to preserve earlier results")
 		}
 		before, _ := json.Marshal(plan.Options)
@@ -251,7 +253,10 @@ func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {
 		}
 		observations = append(observations, observation)
 	}
-	plan = makePilotPlan(options, observations)
+	plan = makePilotPlan(ctx, options, observations)
+	if err := ctx.Err(); err != nil {
+		return plan, err
+	}
 	return plan, saveJSON(path, plan)
 }
 
@@ -265,8 +270,8 @@ func saveJSON(path string, value any) error {
 	return writePrivate(path, append(data, '\n'))
 }
 
-func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
-	plan := PilotPlan{Version: 2, Options: options}
+func makePilotPlan(ctx context.Context, options PilotOptions, observations []Observation) PilotPlan {
+	plan := PilotPlan{Version: 3, Options: options, ActualChangeCounts: map[string]ActualChangeCounts{}}
 	latest := map[int64]Observation{}
 	for _, observation := range observations {
 		latest[observation.Record.PullRequest.Number] = observation
@@ -274,6 +279,9 @@ func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
 	seen := map[string]bool{}
 	buckets := map[string][]PilotCase{}
 	for _, observation := range observations {
+		if ctx.Err() != nil {
+			return plan
+		}
 		pr := observation.Record.PullRequest.Number
 		if options.PR != 0 && options.PR != pr {
 			continue
@@ -314,6 +322,10 @@ func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
 				plan.Excluded = append(plan.Excluded, key+": "+reason)
 				continue
 			}
+			finding.ActualChange = inspectActualChange(ctx, finding)
+			count := plan.ActualChangeCounts[finding.Reaction]
+			count.add(finding.ActualChange)
+			plan.ActualChangeCounts[finding.Reaction] = count
 			bucket := finding.Reaction + "/" + finding.Rule
 			buckets[bucket] = append(buckets[bucket], finding)
 		}
@@ -322,7 +334,11 @@ func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
 	for key := range buckets {
 		keys = append(keys, key)
 		sort.Slice(buckets[key], func(i, j int) bool {
-			return shortHash(options.Seed+buckets[key][i].ID) < shortHash(options.Seed+buckets[key][j].ID)
+			a, b := buckets[key][i], buckets[key][j]
+			if !a.explores() && a.ActualChange.priority() != b.ActualChange.priority() {
+				return a.ActualChange.priority() < b.ActualChange.priority()
+			}
+			return shortHash(options.Seed+a.ID) < shortHash(options.Seed+b.ID)
 		})
 	}
 	sort.Strings(keys)
@@ -337,11 +353,20 @@ func makePilotPlan(options PilotOptions, observations []Observation) PilotPlan {
 		added := false
 		for _, group := range groupOrder {
 			groupKeys := groups[group]
+			preferChanged := false
+			if group != "thumbs-down" {
+				for _, key := range groupKeys {
+					if len(buckets[key]) > 0 && buckets[key][0].ActualChange.Status == actualChanged {
+						preferChanged = true
+						break
+					}
+				}
+			}
 			for step := 0; step < len(groupKeys); step++ {
 				index := positions[group] % len(groupKeys)
 				positions[group]++
 				key := groupKeys[index]
-				if len(buckets[key]) == 0 {
+				if len(buckets[key]) == 0 || (preferChanged && buckets[key][0].ActualChange.Status != actualChanged) {
 					continue
 				}
 				plan.Cases = append(plan.Cases, buckets[key][0])

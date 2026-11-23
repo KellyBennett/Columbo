@@ -30,16 +30,16 @@ func TestPilotBalancesReactionsAndRequiresExplicitReconstruction(t *testing.T) {
 		observations = append(observations, o)
 	}
 	options := PilotOptions{Limit: 3, Seed: "repeatable"}
-	plan := makePilotPlan(options, observations)
+	plan := makePilotPlan(context.Background(), options, observations)
 	require.Empty(t, plan.Cases)
 	require.Len(t, plan.Excluded, 4)
 	options.AllowReconstructed = true
-	plan = makePilotPlan(options, observations)
+	plan = makePilotPlan(context.Background(), options, observations)
 	require.Len(t, plan.Cases, 3)
 	require.Equal(t, "thumbs-down", plan.Cases[0].Reaction)
 	require.Equal(t, "thumbs-up", plan.Cases[1].Reaction)
 	require.Equal(t, "unreacted", plan.Cases[2].Reaction)
-	require.Equal(t, plan, makePilotPlan(options, observations))
+	require.Equal(t, plan, makePilotPlan(context.Background(), options, observations))
 }
 
 func shellQuote(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
@@ -70,7 +70,8 @@ func testPilotReaction(t *testing.T, group string, hasLater bool) {
 	client, err := newGitHubClient("https://api.github.com", "")
 	require.NoError(t, err)
 	c := collector{repository: "o/r", github: client, options: CollectOptions{Checkout: source, EvidencePath: filepath.Join(root, "evidence")}}
-	comment := Comment{Kind: ReviewComment, ID: 11, CommitID: &before, Body: "Investigate ownership", Marker: &Marker{CaseID: "C-1", Role: "finding", Rule: "feature-envy"}}
+	flaggedPath := "f.go"
+	comment := Comment{Path: &flaggedPath, Kind: ReviewComment, ID: 11, CommitID: &before, Body: "Investigate ownership", Marker: &Marker{CaseID: "C-1", Role: "finding", Rule: "feature-envy"}}
 	o := Observation{ID: "observation", ObservedAt: "2026-01-01T00:00:00Z", Record: PullRequestRecord{PullRequest: PullRequest{Number: 1}, Comments: []Comment{comment}, Reactions: []Reaction{{CommentKind: ReviewComment, CommentID: 11, Content: "-1"}}}, Revisions: []Revision{{SHA: before, Roles: []string{"original-review-anchor"}}, {SHA: after, Roles: []string{"pr-head"}}}}
 	if !hasLater {
 		o.Revisions[1].Roles = []string{"pr-commit"}
@@ -95,6 +96,10 @@ func testPilotReaction(t *testing.T, group string, hasLater bool) {
 	counter := filepath.Join(root, "first-attempt")
 	trace := filepath.Join(root, "agent-trace")
 	ready := filepath.Join(root, "agent-ready")
+	candidateOutcome := "tradeoff"
+	if group != "thumbs-down" {
+		candidateOutcome = "not-applicable"
+	}
 	agent := executable(t, filepath.Join(root, "agent"), `
 prompt=$(cat)
 echo "$1" >> `+shellQuote(trace)+`
@@ -102,7 +107,10 @@ if [ "$1" = assess ] && [ ! -f `+shellQuote(ready)+` ]; then echo unavailable >&
 case "$1" in
 assess)
  case "$prompt" in *thumbs-down*|*discussion.json*) exit 9;; esac
+ echo 'Here is the assessment.'
+ echo '`+"```json"+`'
  echo '{"relationship":"shared policy","opportunity":"one owner","future_change":"add an operation","change_basis":"hypothetical","costs":"extra call","evidence":["f.go:2"]}'
+ echo '`+"```"+`'
  ;;
 refactor)
  if [ ! -f `+shellQuote(counter)+` ]; then
@@ -114,7 +122,7 @@ refactor)
  echo 'Attempted refactoring'
  ;;
 review)
- echo '{"finding":{"outcome":"tradeoff","reason":"strict policy opportunity","evidence":["f.go:2"]},"direction":{"outcome":"tradeoff","reason":"extra abstraction","evidence":["f.go:3"]},"candidate":{"outcome":"tradeoff","reason":"moves ownership with a cost","evidence":["f.go:2-3"]},"actual":{"outcome":"no-demonstrated-benefit","reason":"same operation","evidence":["f.go:2"]},"limitations":["synthetic test"],"reported_model":"test"}'
+ echo '{"finding":{"outcome":"tradeoff","reason":"strict policy opportunity","evidence":["f.go:2"]},"direction":{"outcome":"tradeoff","reason":"extra abstraction","evidence":["f.go:3"]},"candidate":{"outcome":"`+candidateOutcome+`","reason":"moves ownership with a cost","evidence":["f.go:2-3"]},"actual":{"outcome":"no-demonstrated-benefit","reason":"same operation","evidence":["f.go:2"]},"limitations":["synthetic test"],"reported_model":"test"}'
  ;;
 esac
 `)
