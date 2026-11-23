@@ -128,7 +128,7 @@ columbo-feedback collect --repo your-org/your-repo --checkout /path/to/work-repo
 columbo-feedback pilot --repo your-org/your-repo --out /path/to/pilot --limit 3 --allow-reconstructed
 ```
 
-The pilot tries and tests refactorings, including for thumbs-down findings, in separate checkouts. It records an initial design assessment before providing reviewer reactions and later code. Read [the pilot instructions](docs/feedback-pilot.md) for installation from this PR, agent configuration, evidence limits, and the resulting reports.
+The pilot evaluates thumbs-up findings using the team's actual changes. Only thumbs-down findings receive exploratory refactorings in separate checkouts. Other reaction groups also use actual changes only. It records an initial design assessment before providing reviewer reactions and later code. Read [the pilot instructions](docs/feedback-pilot.md) for installation, agent configuration, evidence limits, and the resulting reports.
 
 ## Supported Languages
 

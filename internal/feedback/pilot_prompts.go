@@ -24,7 +24,11 @@ func investigationText(body string) string {
 }
 
 func assessmentPrompt(finding PilotCase) string {
-	return designFraming + fmt.Sprintf(`
+	mode := ""
+	if !finding.explores() {
+		mode = "Evaluate the team's actual changes only. Do not propose or implement alternative refactorings. Use the hypothetical future change only as a read-only criterion for comparing the original and actual designs.\n"
+	}
+	return designFraming + mode + fmt.Sprintf(`
 Phase: assess. Read source and prior history in this checkout. Do not edit files. Do not look outside this checkout for reactions, discussion, other trials or later revisions.
 The starting revision is %s. Its provenance is %s.
 Finding %s, rule %s:
@@ -58,10 +62,14 @@ Respond with a short account of the change, validation and remaining uncertainty
 
 func reviewPrompt(finding PilotCase, result TrialResult, before, candidate, actual string) string {
 	data, _ := json.MarshalIndent(result, "", "  ")
-	return designFraming + fmt.Sprintf(`
-Phase: review. Read and compare the original, experimental and actual code. Do not edit files or run refactorings.
+	mode := ""
+	if !finding.explores() {
+		mode = "No exploratory refactoring was performed. Evaluate the team's actual changes against the original code. Do not invent a candidate or propose alternatives. Return candidate as {\"outcome\":\"not-applicable\",\"reason\":\"No exploratory refactoring was performed.\",\"evidence\":[\"actual-changes mode\"]}.\n"
+	}
+	return designFraming + mode + fmt.Sprintf(`
+Phase: review. Read and compare the available code revisions. Do not edit files or run refactorings.
 Original checkout: %s
-Experimental checkout: %s
+Experimental checkout: %s (empty means no exploratory refactoring was performed)
 Later PR checkout: %s (empty means unavailable)
 Collected discussion, reactions, original anchors, CI metadata and evidence gaps: %s
 Team diff, when available: %s
@@ -70,7 +78,7 @@ Runner evidence and initial assessment:
 
 The initial prospective change must stay fixed. Compare how each design would handle it and cite the responsibilities, dependencies and edits involved. Any additional scenario learned from history must be labeled observed, and assessed separately.
 Judge the usefulness of the finding, the usefulness of its suggested direction, the experimental refactoring and the team's actual response separately. Explain what coupling capability was removed or made harder to introduce, what complexity was added, and whether existing code is a reasonable tradeoff under Columbo's deliberately strict policy. Review test changes for weakened behavior checks. Treat behavior preservation as limited to the tests and checks that actually passed. No performance claim is verified without a measurement.
-Explain whether the discussion connects the actual change to Columbo; temporal order alone does not establish causation. PR head comparisons may include unrelated changes, so separate those. No change, no useful candidate, no later revision and inconclusive evidence are valid outcomes. Rejected findings deserve the same investigation as accepted findings. Distinguish agreeing with the policy from demonstrating a local design benefit.
+Explain whether the discussion connects the actual change to Columbo; temporal order alone does not establish causation. PR head comparisons may include unrelated changes, so separate those. No change, no useful candidate, no later revision and inconclusive evidence are valid outcomes. Exploratory refactoring is reserved for thumbs-down findings. Distinguish agreeing with the policy from demonstrating a local design benefit.
 Return ONLY one JSON object. Each judgment must have outcome, reason and a nonempty evidence list. Allowed outcomes: beneficial, tradeoff, no-demonstrated-benefit, inconclusive.
 {"finding":{"outcome":"...","reason":"...","evidence":["..."]},"direction":{"outcome":"...","reason":"...","evidence":["..."]},"candidate":{"outcome":"...","reason":"...","evidence":["..."]},"actual":{"outcome":"...","reason":"...","evidence":["..."]},"limitations":["..."],"reported_model":"actual model if known, otherwise unknown"}
 These are agent assessments for human review, not established ground truth.
@@ -85,7 +93,7 @@ func pilotSummary(root string, plan PilotPlan) error {
 		model = "agent default; see each trial's reported model"
 	}
 	fmt.Fprintf(&report, "Requested model: %s. Agent executable hash: %s. Analyzer hash: %s.\n\n", markdown(model), plan.Options.AgentSHA256, plan.Options.ColumboSHA256)
-	report.WriteString("| PR | Finding | Rule | Reactions | Candidate assessment | Behavior checks | Evidence |\n| --- | --- | --- | --- | --- | --- | --- |\n")
+	report.WriteString("| PR | Finding | Rule | Reactions | Evaluation | Design assessment | Behavior checks | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	results := map[string]TrialResult{}
 	for _, finding := range plan.Cases {
 		var result TrialResult
@@ -102,12 +110,19 @@ func pilotSummary(root string, plan PilotPlan) error {
 		}
 		if result.Complete {
 			outcome = result.Review.Candidate.Outcome
+			if !finding.explores() {
+				outcome = result.Review.Actual.Outcome
+			}
 		}
 		checks := "not verified"
-		if result.BehaviorChecksPassed {
+		passed := result.BehaviorChecksPassed
+		if !finding.explores() {
+			passed = result.ActualBehaviorChecksPassed
+		}
+		if passed {
 			checks = "passed; coverage limits apply"
 		}
-		fmt.Fprintf(&report, "| %d | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", finding.PR, markdown(finding.CaseID), markdown(finding.Rule), finding.Reaction, outcome, checks, finding.ID)
+		fmt.Fprintf(&report, "| %d | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", finding.PR, markdown(finding.CaseID), markdown(finding.Rule), finding.Reaction, finding.analysisMode(), outcome, checks, finding.ID)
 	}
 	for _, finding := range plan.Cases {
 		result := results[finding.ID]
