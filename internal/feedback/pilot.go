@@ -9,9 +9,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -214,50 +216,61 @@ func Pilot(ctx context.Context, options PilotOptions, out io.Writer) error {
 
 func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {
 	path := filepath.Join(options.Out, "plan.json")
-	var plan PilotPlan
 	data, err := os.ReadFile(path)
 	if err == nil {
-		if err := json.Unmarshal(data, &plan); err != nil {
-			return plan, err
-		}
-		if plan.Version != 3 {
-			return plan, fmt.Errorf("pilot analysis policy changed; choose a new --out directory to preserve earlier results")
-		}
-		before, _ := json.Marshal(plan.Options)
-		after, _ := json.Marshal(options)
-		if !bytesEqual(before, after) {
-			return plan, fmt.Errorf("pilot options or executable hashes changed; choose a new --out directory")
-		}
-		return plan, nil
+		return resumePlan(data, options)
+	} else if !os.IsNotExist(err) {
+		return PilotPlan{}, err
 	}
-	if !os.IsNotExist(err) {
-		return plan, err
-	}
-	if _, err := os.Stat(options.Store); err != nil {
-		return plan, fmt.Errorf("collect feedback first: %w", err)
-	}
-	store, err := feedbackdb.Open(options.Store)
+	observations, err := readObservations(ctx, options)
 	if err != nil {
-		return plan, err
+		return PilotPlan{}, err
 	}
-	defer store.Close()
-	rows, err := store.Queries().Observations(ctx, feedbackdb.ObservationsParams{Repository: options.Repository})
-	if err != nil {
-		return plan, err
-	}
-	var observations []Observation
-	for _, row := range rows {
-		var observation Observation
-		if err := json.Unmarshal([]byte(row.Payload), &observation); err != nil {
-			return plan, err
-		}
-		observations = append(observations, observation)
-	}
-	plan = makePilotPlan(ctx, options, observations)
+	plan := makePilotPlan(ctx, options, observations)
 	if err := ctx.Err(); err != nil {
 		return plan, err
 	}
 	return plan, saveJSON(path, plan)
+}
+
+func resumePlan(data []byte, options PilotOptions) (PilotPlan, error) {
+	var plan PilotPlan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		return plan, err
+	}
+	if plan.Version != 3 {
+		return plan, fmt.Errorf("pilot analysis policy changed; choose a new --out directory to preserve earlier results")
+	}
+	before, _ := json.Marshal(plan.Options)
+	after, _ := json.Marshal(options)
+	if !bytesEqual(before, after) {
+		return plan, fmt.Errorf("pilot options or executable hashes changed; choose a new --out directory")
+	}
+	return plan, nil
+}
+
+func readObservations(ctx context.Context, options PilotOptions) ([]Observation, error) {
+	if _, err := os.Stat(options.Store); err != nil {
+		return nil, fmt.Errorf("collect feedback first: %w", err)
+	}
+	store, err := feedbackdb.Open(options.Store)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	rows, err := store.Queries().Observations(ctx, feedbackdb.ObservationsParams{Repository: options.Repository})
+	if err != nil {
+		return nil, err
+	}
+	observations := make([]Observation, 0, len(rows))
+	for _, row := range rows {
+		var observation Observation
+		if err := json.Unmarshal([]byte(row.Payload), &observation); err != nil {
+			return nil, err
+		}
+		observations = append(observations, observation)
+	}
+	return observations, nil
 }
 
 func bytesEqual(a, b []byte) bool { return string(a) == string(b) }
@@ -270,27 +283,35 @@ func saveJSON(path string, value any) error {
 	return writePrivate(path, append(data, '\n'))
 }
 
+var reactionGroupOrder = []string{"thumbs-down", "thumbs-up", "unreacted", "mixed", "other"}
+
 func makePilotPlan(ctx context.Context, options PilotOptions, observations []Observation) PilotPlan {
 	plan := PilotPlan{Version: 3, Options: options, ActualChangeCounts: map[string]ActualChangeCounts{}}
+	candidates, excluded := eligibleFindings(options, observations)
+	plan.Excluded = excluded
+	for i, finding := range candidates {
+		if ctx.Err() != nil {
+			return plan
+		}
+		candidates[i].ActualChange = finding.inspectActualChange(ctx)
+		counts := plan.ActualChangeCounts[finding.Reaction]
+		counts.add(candidates[i].ActualChange)
+		plan.ActualChangeCounts[finding.Reaction] = counts
+	}
+	plan.Cases = samplePilotCases(options, candidates)
+	return plan
+}
+
+func eligibleFindings(options PilotOptions, observations []Observation) (candidates []PilotCase, excluded []string) {
 	latest := map[int64]Observation{}
 	for _, observation := range observations {
 		latest[observation.Record.PullRequest.Number] = observation
 	}
 	seen := map[string]bool{}
-	buckets := map[string][]PilotCase{}
 	for _, observation := range observations {
-		if ctx.Err() != nil {
-			return plan
-		}
 		pr := observation.Record.PullRequest.Number
-		if options.PR != 0 && options.PR != pr {
-			continue
-		}
 		for _, comment := range observation.Record.Comments {
-			if comment.Marker == nil || comment.Marker.Role != "finding" {
-				continue
-			}
-			if len(options.Cases) > 0 && !contains(options.Cases, comment.Marker.CaseID) {
+			if !options.selects(pr, comment) {
 				continue
 			}
 			key := strconv.FormatInt(pr, 10) + "/" + comment.Marker.CaseID
@@ -298,91 +319,113 @@ func makePilotPlan(ctx context.Context, options PilotOptions, observations []Obs
 				continue
 			}
 			seen[key] = true
-			finding := PilotCase{CaseID: comment.Marker.CaseID, Rule: comment.Marker.Rule, PR: pr, Finding: comment, Initial: observation, Latest: latest[pr]}
-			finding.ID = shortHash(key)
-			finding.Before, finding.RevisionEvidence = findingRevision(comment, observation)
-			finding.Reaction = reactionGroup(finding.Latest.Record, comment.Kind, comment.ID)
-			for _, revision := range finding.Latest.Revisions {
-				if contains(revision.Roles, "pr-head") && revision.Present {
-					finding.After = revision.SHA
-				}
+			finding := newPilotCase(key, comment, observation, latest[pr])
+			if reason := finding.exclusion(options); reason != "" {
+				excluded = append(excluded, key+": "+reason)
+			} else {
+				candidates = append(candidates, finding)
 			}
-			reason := ""
-			switch {
-			case finding.Before == "":
-				reason = "no review-anchor revision"
-			case finding.RevisionEvidence != "recorded analyzed revision" && !options.AllowReconstructed:
-				reason = "requires --allow-reconstructed"
-			case observation.GitDir == "":
-				reason = "history not retained; collect with --checkout"
-			case !revisionPresent(observation, finding.Before):
-				reason = "starting revision unavailable"
-			}
-			if reason != "" {
-				plan.Excluded = append(plan.Excluded, key+": "+reason)
-				continue
-			}
-			finding.ActualChange = inspectActualChange(ctx, finding)
-			count := plan.ActualChangeCounts[finding.Reaction]
-			count.add(finding.ActualChange)
-			plan.ActualChangeCounts[finding.Reaction] = count
-			bucket := finding.Reaction + "/" + finding.Rule
-			buckets[bucket] = append(buckets[bucket], finding)
 		}
 	}
-	var keys []string
-	for key := range buckets {
-		keys = append(keys, key)
-		sort.Slice(buckets[key], func(i, j int) bool {
-			a, b := buckets[key][i], buckets[key][j]
-			if !a.explores() && a.ActualChange.priority() != b.ActualChange.priority() {
-				return a.ActualChange.priority() < b.ActualChange.priority()
+	return candidates, excluded
+}
+
+func (options PilotOptions) selects(pr int64, comment Comment) bool {
+	return (options.PR == 0 || options.PR == pr) && comment.Marker != nil && comment.Marker.Role == "finding" && (len(options.Cases) == 0 || contains(options.Cases, comment.Marker.CaseID))
+}
+
+func newPilotCase(key string, comment Comment, initial, latest Observation) PilotCase {
+	finding := PilotCase{ID: shortHash(key), CaseID: comment.Marker.CaseID, Rule: comment.Marker.Rule, PR: initial.Record.PullRequest.Number, Finding: comment, Initial: initial, Latest: latest}
+	finding.Before, finding.RevisionEvidence = findingRevision(comment, initial)
+	finding.Reaction = reactionGroup(latest.Record, comment.Kind, comment.ID)
+	for _, revision := range latest.Revisions {
+		if contains(revision.Roles, "pr-head") && revision.Present {
+			finding.After = revision.SHA
+		}
+	}
+	return finding
+}
+
+func (c PilotCase) exclusion(options PilotOptions) string {
+	switch {
+	case c.Before == "":
+		return "no review-anchor revision"
+	case c.RevisionEvidence != "recorded analyzed revision" && !options.AllowReconstructed:
+		return "requires --allow-reconstructed"
+	case c.Initial.GitDir == "":
+		return "history not retained; collect with --checkout"
+	case !revisionPresent(c.Initial, c.Before):
+		return "starting revision unavailable"
+	}
+	return ""
+}
+
+func (c PilotCase) prioritized() bool {
+	return !c.explores() && c.ActualChange.Status == actualChanged
+}
+
+func samplePilotCases(options PilotOptions, candidates []PilotCase) []PilotCase {
+	groups := rotations(options.Seed, candidates)
+	var cases []PilotCase
+	for added := true; added && len(cases) < options.Limit; {
+		added = false
+		for _, group := range reactionGroupOrder {
+			if len(cases) == options.Limit {
+				break
 			}
-			return shortHash(options.Seed+a.ID) < shortHash(options.Seed+b.ID)
+			if finding, ok := groups[group].next(); ok {
+				cases, added = append(cases, finding), true
+			}
+		}
+	}
+	return cases
+}
+
+type rotation struct {
+	buckets  [][]PilotCase
+	position int
+}
+
+func rotations(seed string, candidates []PilotCase) map[string]*rotation {
+	buckets := map[string][]PilotCase{}
+	for _, finding := range candidates {
+		key := finding.Reaction + "/" + finding.Rule
+		buckets[key] = append(buckets[key], finding)
+	}
+	groups := map[string]*rotation{}
+	for _, key := range slices.Sorted(maps.Keys(buckets)) {
+		bucket := buckets[key]
+		sort.Slice(bucket, func(i, j int) bool {
+			if bucket[i].prioritized() != bucket[j].prioritized() {
+				return bucket[i].prioritized()
+			}
+			return shortHash(seed+bucket[i].ID) < shortHash(seed+bucket[j].ID)
 		})
-	}
-	sort.Strings(keys)
-	groups := map[string][]string{}
-	for _, key := range keys {
-		group := strings.SplitN(key, "/", 2)[0]
-		groups[group] = append(groups[group], key)
-	}
-	groupOrder := []string{"thumbs-down", "thumbs-up", "unreacted", "mixed", "other"}
-	positions := map[string]int{}
-	for len(plan.Cases) < options.Limit {
-		added := false
-		for _, group := range groupOrder {
-			groupKeys := groups[group]
-			preferChanged := false
-			if group != "thumbs-down" {
-				for _, key := range groupKeys {
-					if len(buckets[key]) > 0 && buckets[key][0].ActualChange.Status == actualChanged {
-						preferChanged = true
-						break
-					}
-				}
-			}
-			for step := 0; step < len(groupKeys); step++ {
-				index := positions[group] % len(groupKeys)
-				positions[group]++
-				key := groupKeys[index]
-				if len(buckets[key]) == 0 || (preferChanged && buckets[key][0].ActualChange.Status != actualChanged) {
-					continue
-				}
-				plan.Cases = append(plan.Cases, buckets[key][0])
-				buckets[key] = buckets[key][1:]
-				added = true
-				break
-			}
-			if len(plan.Cases) == options.Limit {
-				break
-			}
+		group := bucket[0].Reaction
+		if groups[group] == nil {
+			groups[group] = &rotation{}
 		}
-		if !added {
-			break
-		}
+		groups[group].buckets = append(groups[group].buckets, bucket)
 	}
-	return plan
+	return groups
+}
+
+func (r *rotation) next() (PilotCase, bool) {
+	if r == nil {
+		return PilotCase{}, false
+	}
+	preferred := slices.ContainsFunc(r.buckets, func(bucket []PilotCase) bool { return len(bucket) > 0 && bucket[0].prioritized() })
+	for range len(r.buckets) {
+		bucket := &r.buckets[r.position%len(r.buckets)]
+		r.position++
+		if len(*bucket) == 0 || (preferred && !(*bucket)[0].prioritized()) {
+			continue
+		}
+		finding := (*bucket)[0]
+		*bucket = (*bucket)[1:]
+		return finding, true
+	}
+	return PilotCase{}, false
 }
 
 func shortHash(value string) string {

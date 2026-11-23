@@ -1,6 +1,7 @@
 package feedback
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -64,14 +66,12 @@ type TrialResult struct {
 	BaselineChecks             []CommandResult      `json:"baseline_checks"`
 	BaselineColumbo            CommandResult        `json:"baseline_columbo"`
 	AssessmentCommands         []CommandResult      `json:"assessment_commands"`
-	AssessmentCommand          CommandResult        `json:"assessment_command"`
 	Assessment                 DesignAssessment     `json:"assessment"`
 	Attempts                   []RefactoringAttempt `json:"attempts"`
 	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
 	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
 	ActualAncestry             string               `json:"actual_ancestry"`
 	ReviewCommands             []CommandResult      `json:"review_commands"`
-	ReviewCommand              CommandResult        `json:"review_command"`
 	Review                     DesignReview         `json:"review"`
 	BehaviorChecksPassed       bool                 `json:"behavior_checks_passed"`
 	Error                      string               `json:"error,omitempty"`
@@ -89,49 +89,73 @@ type pilotTrial struct {
 
 func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) (err error) {
 	resultPath := filepath.Join(options.Out, "trials", finding.ID, "result.json")
-	if data, readErr := os.ReadFile(resultPath); readErr == nil {
-		var previous TrialResult
-		if err := json.Unmarshal(data, &previous); err != nil {
-			return err
-		}
-		if previous.Complete && previous.Version == 3 {
-			return nil
-		}
-	} else if !os.IsNotExist(readErr) {
-		return readErr
+	if complete, err := trialComplete(resultPath); complete || err != nil {
+		return err
 	}
-	if finding.ActualChange.Status == "" {
-		finding.ActualChange = inspectActualChange(ctx, finding)
-	}
-	root := filepath.Join(options.Out, "trials", finding.ID, "executions", rand.Text())
-	t := &pilotTrial{options: options, finding: finding, root: root, before: filepath.Join(root, "before"), candidate: filepath.Join(root, "candidate")}
-	t.result = TrialResult{Version: 3, ActualChange: finding.ActualChange, AnalysisMode: finding.analysisMode(), CaseID: finding.CaseID, Execution: root, Before: finding.Before, After: finding.After, RevisionEvidence: finding.RevisionEvidence, ActualAncestry: "unavailable"}
-	defer func() {
-		if err != nil {
-			t.result.Error = err.Error()
-		}
-		if saveErr := saveJSON(filepath.Join(root, "result.json"), t.result); err == nil {
-			err = saveErr
-		}
-		if saveErr := saveJSON(resultPath, t.result); err == nil {
-			err = saveErr
-		}
-	}()
-	if !finding.explores() && finding.ActualChange.Status == actualNoResponse {
-		if err := saveJSON(filepath.Join(root, "discussion.json"), finding); err != nil {
-			return err
-		}
-		skipped := Judgment{Outcome: "not-applicable", Reason: "No later change touches the finding, so no design comparison was performed.", Evidence: []string{finding.ActualChange.Reason}}
-		t.result.Review = DesignReview{Finding: skipped, Direction: skipped, Candidate: skipped, Actual: finding.ActualChange.judgment()}
-		t.result.Complete = true
-		return nil
-	}
-	for _, step := range []func(context.Context) error{t.prepare, t.assess, t.refactor, t.collectActual, t.review} {
+	t := newPilotTrial(ctx, options, finding)
+	defer func() { err = t.save(err, resultPath) }()
+	for _, step := range t.steps() {
 		if err := step(ctx); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func trialComplete(resultPath string) (bool, error) {
+	data, err := os.ReadFile(resultPath)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	var previous TrialResult
+	if err := json.Unmarshal(data, &previous); err != nil {
+		return false, err
+	}
+	return previous.Complete && previous.Version == 3, nil
+}
+
+func newPilotTrial(ctx context.Context, options PilotOptions, finding PilotCase) *pilotTrial {
+	if finding.ActualChange.Status == "" {
+		finding.ActualChange = finding.inspectActualChange(ctx)
+	}
+	root := filepath.Join(options.Out, "trials", finding.ID, "executions", rand.Text())
+	return &pilotTrial{options: options, finding: finding, result: finding.trialResult(root), root: root, before: filepath.Join(root, "before"), candidate: filepath.Join(root, "candidate")}
+}
+
+func (c PilotCase) trialResult(execution string) TrialResult {
+	return TrialResult{Version: 3, ActualChange: c.ActualChange, AnalysisMode: c.analysisMode(), CaseID: c.CaseID, Execution: execution, Before: c.Before, After: c.After, RevisionEvidence: c.RevisionEvidence, ActualAncestry: "unavailable"}
+}
+
+func (t *pilotTrial) steps() []func(context.Context) error {
+	if !t.finding.explores() && t.finding.ActualChange.Status == actualNoResponse {
+		return []func(context.Context) error{t.recordNoResponse}
+	}
+	return []func(context.Context) error{t.prepare, t.assess, t.refactor, t.collectActual, t.review}
+}
+
+func (t *pilotTrial) recordNoResponse(context.Context) error {
+	if err := saveJSON(filepath.Join(t.root, "discussion.json"), t.finding); err != nil {
+		return err
+	}
+	skipped := Judgment{Outcome: "not-applicable", Reason: "No later change touches the finding, so no design comparison was performed.", Evidence: []string{t.finding.ActualChange.Reason}}
+	t.result.Review = DesignReview{Finding: skipped, Direction: skipped, Candidate: skipped, Actual: t.finding.ActualChange.judgment()}
+	t.result.Complete = true
+	return nil
+}
+
+func (t *pilotTrial) save(err error, resultPath string) error {
+	if err != nil {
+		t.result.Error = err.Error()
+	}
+	if saveErr := saveJSON(filepath.Join(t.root, "result.json"), t.result); err == nil {
+		err = saveErr
+	}
+	if saveErr := saveJSON(resultPath, t.result); err == nil {
+		err = saveErr
+	}
+	return err
 }
 
 func (t *pilotTrial) prepare(ctx context.Context) error {
@@ -165,12 +189,9 @@ func (t *pilotTrial) assess(ctx context.Context) error {
 	if candidate == "" {
 		candidate = t.before
 	}
-	prompt := assessmentPrompt(finding)
 	var err error
-	result.Assessment, result.AssessmentCommands, err = runJSONPhase(ctx, options, candidate, prompt, filepath.Join(root, "assessment"), assessmentPhase())
-	if len(result.AssessmentCommands) > 0 {
-		result.AssessmentCommand = result.AssessmentCommands[len(result.AssessmentCommands)-1]
-	}
+	call := agentCall{dir: candidate, prompt: assessmentPrompt(finding), prefix: filepath.Join(root, "assessment"), readDirs: []string{candidate}}
+	result.Assessment, result.AssessmentCommands, err = assessmentPhase().run(ctx, options, call)
 	if err != nil {
 		return err
 	}
@@ -193,7 +214,7 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 	for attempt := 1; attempt <= options.Attempts; attempt++ {
 		prefix := filepath.Join(root, "attempt-"+strconv.Itoa(attempt))
 		refactoring := RefactoringAttempt{Number: attempt}
-		refactoring.Agent = invokeAgent(ctx, options, candidate, "refactor", refactoringPrompt(finding, result.Assessment, result.Attempts), prefix+"-agent", "")
+		refactoring.Agent = invokeAgent(ctx, options, agentCall{phase: "refactor", dir: candidate, prompt: refactoringPrompt(finding, result.Assessment, result.Attempts), prefix: prefix + "-agent"})
 		refactoring.Checks = validateRevision(ctx, options, candidate, prefix)
 		refactoring.Columbo = analyzeRevision(ctx, options, candidate, prefix+"-columbo")
 		patch, err := sourcePatch(ctx, candidate, finding.Before)
@@ -222,88 +243,102 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 }
 
 func (t *pilotTrial) collectActual(ctx context.Context) error {
-	options, finding, root, result := t.options, t.finding, t.root, &t.result
-	if err := saveJSON(filepath.Join(root, "discussion.json"), finding); err != nil {
+	if err := saveJSON(filepath.Join(t.root, "discussion.json"), t.finding); err != nil {
 		return err
 	}
-	actual := ""
-	if finding.After != "" && finding.ActualChange.Status != actualNoResponse {
-		actual = filepath.Join(root, "actual")
-		if err := checkoutRevision(ctx, finding.Latest.GitDir, finding.After, actual); err != nil {
+	if t.finding.comparesActual() {
+		if err := t.checkoutActual(ctx); err != nil {
 			return err
 		}
-		result.ActualAncestry = "not established; revisions may have been rewritten"
-		if _, err := git(ctx, finding.Initial.GitDir, "merge-base", "--is-ancestor", finding.Before, finding.After); err == nil {
-			result.ActualAncestry = "later PR head descends from starting revision"
-		}
-		result.ActualColumbo = new(CommandResult)
-		*result.ActualColumbo = analyzeRevision(ctx, options, actual, filepath.Join(root, "actual-columbo"))
-		result.ActualChecks = validateRevision(ctx, options, actual, filepath.Join(root, "actual"))
-		patch, err := git(ctx, finding.Latest.GitDir, "diff", "--binary", "--no-ext-diff", "--no-textconv", finding.Before, finding.After)
-		if err == nil {
-			if err := writePrivate(filepath.Join(root, "actual.patch"), []byte(patch)); err != nil {
-				return err
-			}
-		}
 	}
-	t.actual = actual
-	result.ActualBehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(result.ActualChecks)
+	t.result.ActualBehaviorChecksPassed = checksPassed(t.result.BaselineChecks) && checksPassed(t.result.ActualChecks)
+	return nil
+}
+
+func (t *pilotTrial) checkoutActual(ctx context.Context) error {
+	finding, result := t.finding, &t.result
+	t.actual = filepath.Join(t.root, "actual")
+	if err := checkoutRevision(ctx, finding.Latest.GitDir, finding.After, t.actual); err != nil {
+		return err
+	}
+	result.ActualAncestry = finding.actualAncestry(ctx)
+	result.ActualColumbo = new(CommandResult)
+	*result.ActualColumbo = analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
+	result.ActualChecks = validateRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual"))
+	if patch, err := finding.actualPatch(ctx); err == nil {
+		return writePrivate(filepath.Join(t.root, "actual.patch"), []byte(patch))
+	}
 	return nil
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {
-	options, finding, root, result := t.options, t.finding, t.root, &t.result
-	before, candidate, actual := t.before, t.candidate, t.actual
-	prompt := reviewPrompt(finding, *result, before, candidate, actual)
-	reviewDir := candidate
-	if reviewDir == "" {
-		reviewDir = before
-	}
+	reviewDir := cmp.Or(t.candidate, t.before)
+	call := agentCall{dir: reviewDir, prompt: reviewPrompt(t.finding, t.result, t.before, t.candidate, t.actual), prefix: filepath.Join(t.root, "review"), readDirs: nonempty(t.before, t.candidate, t.actual)}
 	var err error
-	result.Review, result.ReviewCommands, err = runJSONPhase(ctx, options, reviewDir, prompt, filepath.Join(root, "review"), reviewPhase(finding.explores()))
-	if len(result.ReviewCommands) > 0 {
-		result.ReviewCommand = result.ReviewCommands[len(result.ReviewCommands)-1]
-	}
+	t.result.Review, t.result.ReviewCommands, err = reviewPhase(t.finding.explores()).run(ctx, t.options, call)
 	if err != nil {
 		return err
 	}
-	if patch, err := sourcePatch(ctx, reviewDir, finding.Before); err != nil {
+	if err := t.checkReviewLeftSource(ctx, reviewDir); err != nil {
 		return err
-	} else {
-		var saved []byte
-		if len(result.Attempts) > 0 {
-			saved, err = os.ReadFile(result.Attempts[len(result.Attempts)-1].Patch)
-			if err != nil {
-				return err
-			}
-		}
-		if string(patch) != string(saved) {
-			return fmt.Errorf("review changed source after validation")
-		}
 	}
-	if !finding.explores() {
-		result.Review.Candidate = Judgment{Outcome: "not-applicable", Reason: "Exploratory refactoring is reserved for thumbs-down findings.", Evidence: []string{"reaction group: " + finding.Reaction}}
-	}
-	if finding.explores() && (!result.BehaviorChecksPassed || !analyzerRan(result.BaselineColumbo) || !analyzerRan(result.Attempts[len(result.Attempts)-1].Columbo)) {
-		result.Review.Limitations = append(result.Review.Limitations, "Runner could not verify a changed candidate against a passing baseline with unchanged policy and completed analyzer runs.")
-		if result.Review.Candidate.Outcome == "beneficial" {
-			result.Review.Candidate.Outcome = "inconclusive"
-		}
-	}
-	if finding.ActualChange.Status == actualNoResponse {
-		result.Review.Actual = finding.ActualChange.judgment()
-	} else if finding.ActualChange.Status == actualUnavailable || actual == "" || !checksPassed(result.BaselineChecks) || !checksPassed(result.ActualChecks) {
-		result.Review.Limitations = append(result.Review.Limitations, "Team outcome lacks an available revision or comparable passing behavior checks.")
-		if finding.ActualChange.Status == actualUnavailable {
-			result.Review.Actual = Judgment{Outcome: "inconclusive", Reason: finding.ActualChange.Reason, Evidence: []string{finding.ActualChange.Reason}}
-		} else if actual == "" {
-			result.Review.Actual = Judgment{Outcome: "inconclusive", Reason: "No later PR revision is available to evaluate the team's changes.", Evidence: []string{"later PR head unavailable"}}
-		} else if result.Review.Actual.Outcome == "beneficial" {
-			result.Review.Actual.Outcome = "inconclusive"
-		}
-	}
-	result.Complete = true
+	t.qualifyCandidate()
+	t.qualifyActual()
+	t.result.Complete = true
 	return nil
+}
+
+func (t *pilotTrial) checkReviewLeftSource(ctx context.Context, reviewDir string) error {
+	patch, err := sourcePatch(ctx, reviewDir, t.finding.Before)
+	if err != nil {
+		return err
+	}
+	var saved []byte
+	if attempts := t.result.Attempts; len(attempts) > 0 {
+		if saved, err = os.ReadFile(attempts[len(attempts)-1].Patch); err != nil {
+			return err
+		}
+	}
+	if string(patch) != string(saved) {
+		return fmt.Errorf("review changed source after validation")
+	}
+	return nil
+}
+
+func (t *pilotTrial) qualifyCandidate() {
+	review := &t.result.Review
+	if !t.finding.explores() {
+		review.Candidate = Judgment{Outcome: "not-applicable", Reason: "Exploratory refactoring is reserved for thumbs-down findings.", Evidence: []string{"reaction group: " + t.finding.Reaction}}
+		return
+	}
+	if t.result.BehaviorChecksPassed && analyzerRan(t.result.BaselineColumbo) && analyzerRan(t.result.Attempts[len(t.result.Attempts)-1].Columbo) {
+		return
+	}
+	review.Limitations = append(review.Limitations, "Runner could not verify a changed candidate against a passing baseline with unchanged policy and completed analyzer runs.")
+	if review.Candidate.Outcome == "beneficial" {
+		review.Candidate.Outcome = "inconclusive"
+	}
+}
+
+func (t *pilotTrial) qualifyActual() {
+	review, change := &t.result.Review, t.finding.ActualChange
+	switch {
+	case change.Status == actualNoResponse:
+		review.Actual = change.judgment()
+		return
+	case change.Status == actualChanged && checksPassed(t.result.BaselineChecks) && checksPassed(t.result.ActualChecks):
+		return
+	}
+	review.Limitations = append(review.Limitations, "Team outcome lacks an available revision or comparable passing behavior checks.")
+	if change.Status == actualUnavailable {
+		review.Actual = change.judgment()
+	} else if review.Actual.Outcome == "beneficial" {
+		review.Actual.Outcome = "inconclusive"
+	}
+}
+
+func nonempty(values ...string) []string {
+	return slices.DeleteFunc(values, func(value string) bool { return value == "" })
 }
 
 func checkModule(root, module string) error {
@@ -442,56 +477,6 @@ func checksPassed(results []CommandResult) bool {
 	}
 	return true
 }
-
-func invokeAgent(ctx context.Context, options PilotOptions, dir, phase, prompt, prefix, schema string) CommandResult {
-	args := append([]string{options.Agent}, options.AgentArgs...)
-	if len(options.AgentArgs) == 0 {
-		tools, allowed := "Read,Glob,Grep,Bash", "Read,Glob,Grep,Bash(git show:*),Bash(git log:*),Bash(git diff:*)"
-		if phase == "refactor" {
-			tools = "Read,Edit,Write,Glob,Grep,Bash"
-			allowed = "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(columbo:*)"
-		}
-		if phase != "refactor" {
-			dirs := []string{dir}
-			if phase == "review" {
-				dirs = []string{filepath.Join(filepath.Dir(dir), "before"), filepath.Join(filepath.Dir(dir), "candidate"), filepath.Join(filepath.Dir(dir), "actual")}
-			}
-			for _, checkout := range dirs {
-				if _, err := os.Stat(checkout); err != nil {
-					continue
-				}
-				for _, verb := range []string{"show", "log", "diff"} {
-					allowed += ",Bash(git -C " + quoteShell(checkout) + " " + verb + ":*)"
-				}
-			}
-		}
-		format := "text"
-		if schema != "" {
-			format = "json"
-		}
-		args = append(args, "-p", "--safe-mode", "--restricted", "--no-session-persistence", "--permission-mode", "dontAsk", "--max-turns", strconv.Itoa(options.Turns), "--output-format", format, "--tools", tools, "--allowedTools", allowed)
-		if schema != "" {
-			args = append(args, "--json-schema", schema)
-		}
-		if options.Model != "" {
-			args = append(args, "--model", options.Model)
-		}
-		if phase != "assess" {
-			args = append(args, "--add-dir", filepath.Dir(dir))
-		}
-
-	} else {
-		for i := 1; i < len(args); i++ {
-			args[i] = strings.NewReplacer("{model}", options.Model, "{turns}", strconv.Itoa(options.Turns), "{phase}", phase).Replace(args[i])
-		}
-	}
-	if err := writePrivate(prefix+".prompt", []byte(prompt)); err != nil {
-		return CommandResult{Exit: -1, Error: err.Error()}
-	}
-	return runTrialCommand(ctx, dir, args, prompt, prefix, options.Timeout, options.PassEnv...)
-}
-
-func quoteShell(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
 
 func sourcePatch(ctx context.Context, dir, baseline string) ([]byte, error) {
 	if _, err := git(ctx, dir, "add", "--intent-to-add", "--", "."); err != nil {

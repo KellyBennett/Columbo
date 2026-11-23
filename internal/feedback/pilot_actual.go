@@ -3,6 +3,7 @@ package feedback
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -25,33 +26,53 @@ type ActualChangeCounts struct {
 	Unavailable int `json:"unavailable"`
 }
 
-func inspectActualChange(ctx context.Context, finding PilotCase) ActualChange {
-	if finding.After == "" {
+func (c PilotCase) inspectActualChange(ctx context.Context) ActualChange {
+	switch {
+	case c.After == "":
 		return ActualChange{actualUnavailable, "No later PR revision is available."}
+	case c.Before == c.After:
+		return ActualChange{actualNoResponse, "The starting and later PR revisions are identical: " + c.Before}
 	}
-	if finding.Before == finding.After {
-		return ActualChange{actualNoResponse, "The starting and later PR revisions are identical: " + finding.Before}
-	}
-	paths, err := git(ctx, finding.Latest.GitDir, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z", finding.Before, finding.After, "--")
+	paths, err := git(ctx, c.Latest.GitDir, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z", c.Before, c.After, "--")
 	if err != nil {
 		return ActualChange{actualUnavailable, "Later diff unavailable: " + err.Error()}
 	}
-	if paths == "" {
+	return classifyLaterPaths(paths, c.Finding.Path)
+}
+
+func (c PilotCase) comparesActual() bool {
+	return c.After != "" && c.ActualChange.Status != actualNoResponse
+}
+
+func (c PilotCase) actualAncestry(ctx context.Context) string {
+	if _, err := git(ctx, c.Initial.GitDir, "merge-base", "--is-ancestor", c.Before, c.After); err == nil {
+		return "later PR head descends from starting revision"
+	}
+	return "not established; revisions may have been rewritten"
+}
+
+func (c PilotCase) actualPatch(ctx context.Context) (string, error) {
+	return git(ctx, c.Latest.GitDir, "diff", "--binary", "--no-ext-diff", "--no-textconv", c.Before, c.After)
+}
+
+func classifyLaterPaths(paths string, flagged *string) ActualChange {
+	switch {
+	case paths == "":
 		return ActualChange{actualNoResponse, "The starting and later PR revisions have identical files."}
-	}
-	if finding.Finding.Path == nil || *finding.Finding.Path == "" {
+	case flagged == nil || *flagged == "":
 		return ActualChange{actualUnavailable, "The finding has no flagged file, so the later diff's relevance is unknown."}
+	case slices.Contains(strings.Split(paths, "\x00"), *flagged):
+		return ActualChange{actualChanged, "The later diff touches flagged file " + *flagged}
 	}
-	for _, path := range strings.Split(paths, "\x00") {
-		if path == *finding.Finding.Path {
-			return ActualChange{actualChanged, "The later diff touches flagged file " + path}
-		}
-	}
-	return ActualChange{actualNoResponse, "The later diff does not touch flagged file " + *finding.Finding.Path}
+	return ActualChange{actualNoResponse, "The later diff does not touch flagged file " + *flagged}
 }
 
 func (change ActualChange) judgment() Judgment {
-	return Judgment{Outcome: string(change.Status), Reason: change.Reason, Evidence: []string{change.Reason}}
+	outcome := string(change.Status)
+	if change.Status == actualUnavailable {
+		outcome = "inconclusive"
+	}
+	return Judgment{Outcome: outcome, Reason: change.Reason, Evidence: []string{change.Reason}}
 }
 
 func (counts *ActualChangeCounts) add(change ActualChange) {
@@ -65,20 +86,13 @@ func (counts *ActualChangeCounts) add(change ActualChange) {
 	}
 }
 
-func (change ActualChange) priority() string {
-	if change.Status == actualChanged {
-		return "0"
-	}
-	return "1"
-}
-
 func actualChangeReport(counts map[string]ActualChangeCounts) string {
 	if len(counts) == 0 {
 		return ""
 	}
 	var report strings.Builder
 	report.WriteString("## Actual-change candidates\n\nCounts include all eligible candidates before the sample limit. Changed findings take priority within each actual-changes reaction group. No-response records inaction, not a design judgment.\n\n| Reactions | Changed flagged file | No response | Unavailable evidence |\n| --- | --- | --- | --- |\n")
-	for _, group := range []string{"thumbs-down", "thumbs-up", "unreacted", "mixed", "other"} {
+	for _, group := range reactionGroupOrder {
 		if count, ok := counts[group]; ok {
 			fmt.Fprintf(&report, "| %s | %d | %d | %d |\n", group, count.Changed, count.NoResponse, count.Unavailable)
 		}

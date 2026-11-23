@@ -31,8 +31,8 @@ func TestPilotUnchangedActualChangesNeedsNoAgent(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &result))
 	require.True(t, result.Complete)
 	require.Equal(t, "no-response", result.Review.Actual.Outcome)
-	require.Empty(t, result.AssessmentCommand.Args)
-	require.Empty(t, result.ReviewCommand.Args)
+	require.Empty(t, result.AssessmentCommands)
+	require.Empty(t, result.ReviewCommands)
 }
 
 func TestAgentJSONExtractsLastCompleteAnswerAndStructuredOutput(t *testing.T) {
@@ -82,7 +82,7 @@ func TestJSONPhaseRetriesInvalidRepliesAndRetainsBothAttempts(t *testing.T) {
 			agent := executable(t, filepath.Join(dir, "agent"), "cat >/dev/null\nif [ ! -f "+shellQuote(marker)+" ]; then touch "+shellQuote(marker)+"; printf '%s' "+shellQuote(test.first)+"; else printf '%s' "+shellQuote(test.second)+"; fi\n")
 			prefix := filepath.Join(dir, "assessment")
 			options := PilotOptions{Agent: agent, AgentArgs: stringList{"{phase}"}, Timeout: 5 * time.Second}
-			result, commands, err := runJSONPhase(context.Background(), options, dir, "Assess the source.", prefix, assessmentPhase())
+			result, commands, err := assessmentPhase().run(context.Background(), options, agentCall{dir: dir, prompt: "Assess the source.", prefix: prefix})
 			require.Len(t, commands, 2)
 			if test.fail {
 				require.ErrorContains(t, err, "after one retry")
@@ -110,7 +110,7 @@ func TestReviewRetriesInvalidJudgment(t *testing.T) {
 	second, _ := json.Marshal(valid)
 	marker := filepath.Join(dir, "first")
 	agent := executable(t, filepath.Join(dir, "agent"), "cat >/dev/null\nif [ ! -f "+shellQuote(marker)+" ]; then touch "+shellQuote(marker)+"; printf '%s' "+shellQuote(string(first))+"; else printf '%s' "+shellQuote(string(second))+"; fi\n")
-	result, commands, err := runJSONPhase(context.Background(), PilotOptions{Agent: agent, AgentArgs: stringList{"{phase}"}, Timeout: 5 * time.Second}, dir, "Review changes.", filepath.Join(dir, "review"), reviewPhase(false))
+	result, commands, err := reviewPhase(false).run(context.Background(), PilotOptions{Agent: agent, AgentArgs: stringList{"{phase}"}, Timeout: 5 * time.Second}, agentCall{dir: dir, prompt: "Review changes.", prefix: filepath.Join(dir, "review")})
 	require.NoError(t, err)
 	require.Len(t, commands, 2)
 	require.Equal(t, "beneficial", result.Actual.Outcome)
@@ -120,12 +120,12 @@ func TestJSONPhaseDoesNotRetryProcessFailuresOrCancellation(t *testing.T) {
 	dir := t.TempDir()
 	agent := executable(t, filepath.Join(dir, "agent"), "cat >/dev/null\nexit 7\n")
 	options := PilotOptions{Agent: agent, AgentArgs: stringList{"{phase}"}, Timeout: time.Second}
-	_, commands, err := runJSONPhase(context.Background(), options, dir, "assess", filepath.Join(dir, "failure"), assessmentPhase())
+	_, commands, err := assessmentPhase().run(context.Background(), options, agentCall{dir: dir, prompt: "assess", prefix: filepath.Join(dir, "failure")})
 	require.Error(t, err)
 	require.Len(t, commands, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, commands, err = runJSONPhase(ctx, options, dir, "assess", filepath.Join(dir, "cancelled"), assessmentPhase())
+	_, commands, err = assessmentPhase().run(ctx, options, agentCall{dir: dir, prompt: "assess", prefix: filepath.Join(dir, "cancelled")})
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, commands)
 }
@@ -197,43 +197,82 @@ func TestPilotPrefersRelevantChangesAcrossRulesAndReportsPopulation(t *testing.T
 func TestActualChangeMissingEvidenceStaysUnknownAndPathsAreLiteral(t *testing.T) {
 	source, before, after := newHistory(t)
 	finding := PilotCase{Before: before, After: after, Latest: Observation{GitDir: source}}
-	require.Equal(t, actualUnavailable, inspectActualChange(context.Background(), finding).Status)
+	require.Equal(t, actualUnavailable, finding.inspectActualChange(context.Background()).Status)
 	path := "f*.go"
 	finding.Finding.Path = &path
-	require.Equal(t, actualNoResponse, inspectActualChange(context.Background(), finding).Status)
+	require.Equal(t, actualNoResponse, finding.inspectActualChange(context.Background()).Status)
 	finding.After = ""
-	require.Equal(t, actualUnavailable, inspectActualChange(context.Background(), finding).Status)
+	require.Equal(t, actualUnavailable, finding.inspectActualChange(context.Background()).Status)
 	finding.After = strings.Repeat("f", 40)
-	require.Equal(t, actualUnavailable, inspectActualChange(context.Background(), finding).Status)
+	require.Equal(t, actualUnavailable, finding.inspectActualChange(context.Background()).Status)
 }
 
 func TestDefaultAgentRequestsStructuredOutputAndNarrowReviewCommands(t *testing.T) {
+	source, before, _ := newHistory(t)
 	root := filepath.Join(t.TempDir(), "root with spaces")
-	before := filepath.Join(root, "before")
-	actual := filepath.Join(root, "actual")
-	require.NoError(t, os.MkdirAll(before, 0700))
-	require.NoError(t, os.MkdirAll(actual, 0700))
-	agent := executable(t, filepath.Join(root, "agent"), "cat >/dev/null\nprintf '%s' '{\"type\":\"result\",\"subtype\":\"success\",\"structured_output\":{\"relationship\":\"policy\"}}'\n")
-	result := invokeAgent(context.Background(), PilotOptions{Agent: agent, Turns: 3, Timeout: time.Second}, before, "review", "Review the source.", filepath.Join(root, "review"), assessmentPhase().schema)
-	require.True(t, commandPassed(result))
+	trial := pilotTrial{finding: PilotCase{Before: before, Reaction: "thumbs-up"}, root: root, before: filepath.Join(root, "before"), actual: filepath.Join(root, "actual")}
+	for _, dir := range []string{trial.before, trial.actual} {
+		require.NoError(t, checkoutRevision(context.Background(), source, before, dir))
+	}
+	judgment := `{"outcome":"tradeoff","reason":"r","evidence":["f.go:2"]}`
+	review := `{"finding":` + judgment + `,"direction":` + judgment + `,"candidate":{"outcome":"not-applicable","reason":"r","evidence":["e"]},"actual":` + judgment + `}`
+	agent := executable(t, filepath.Join(t.TempDir(), "agent"), "cat >/dev/null\nprintf '%s' "+shellQuote(`{"type":"result","subtype":"success","structured_output":`+review+`}`)+"\n")
+	trial.options = PilotOptions{Agent: agent, Turns: 3, Timeout: 5 * time.Second}
+	require.NoError(t, trial.review(context.Background()))
+	require.Equal(t, "tradeoff", trial.result.Review.Finding.Outcome)
+	require.Len(t, trial.result.ReviewCommands, 1)
+	args := trial.result.ReviewCommands[0].Args
 	arg := func(name string) string {
-		for i, value := range result.Args {
-			if value == name && i+1 < len(result.Args) {
-				return result.Args[i+1]
+		for i, value := range args {
+			if value == name && i+1 < len(args) {
+				return args[i+1]
 			}
 		}
 		return ""
 	}
 	require.Equal(t, "json", arg("--output-format"))
-	require.Equal(t, assessmentPhase().schema, arg("--json-schema"))
+	require.Equal(t, reviewPhase(false).schema, arg("--json-schema"))
 	allowed := arg("--allowedTools")
-	require.Contains(t, allowed, "Bash(git -C "+quoteShell(before)+" log:*)")
-	require.Contains(t, allowed, "Bash(git -C "+quoteShell(actual)+" log:*)")
-	require.Contains(t, allowed, "Bash(git -C "+quoteShell(actual)+" diff:*)")
+	require.Contains(t, allowed, "Bash(git -C "+quoteShell(trial.before)+" log:*)")
+	require.Contains(t, allowed, "Bash(git -C "+quoteShell(trial.actual)+" log:*)")
+	require.Contains(t, allowed, "Bash(git -C "+quoteShell(trial.actual)+" diff:*)")
 	require.NotContains(t, allowed, "Bash(git -C:*)")
-	require.Contains(t, strings.Join(result.Args, " "), "--safe-mode --restricted")
-	var value DesignAssessment
-	require.NoError(t, readAgentJSON(result.Stdout, &value))
-	require.Equal(t, "policy", value.Relationship)
-	require.Contains(t, readOnlyGitCommands(before, actual), "git -C "+quoteShell(actual)+" log -5 --oneline")
+	require.Contains(t, strings.Join(args, " "), "--safe-mode --restricted")
+	require.Contains(t, readOnlyGitCommands(trial.before, trial.actual), "git -C "+quoteShell(trial.actual)+" log -5 --oneline")
+}
+
+func TestReviewQualifiesTeamOutcomeByActualChangeEvidence(t *testing.T) {
+	passed := []CommandResult{{}}
+	failed := []CommandResult{{Exit: 1}}
+	agent := Judgment{Outcome: "beneficial", Reason: "agent", Evidence: []string{"f.go:2"}}
+	for _, test := range []struct {
+		name        string
+		change      ActualChange
+		actualCheck []CommandResult
+		outcome     string
+		limited     bool
+	}{
+		{"no response replaces agent judgment", ActualChange{actualNoResponse, "untouched"}, nil, "no-response", false},
+		{"unavailable evidence is inconclusive", ActualChange{actualUnavailable, "no later revision"}, nil, "inconclusive", true},
+		{"changed with passing checks keeps agent judgment", ActualChange{actualChanged, "touched"}, passed, "beneficial", false},
+		{"changed with failing checks downgrades benefit", ActualChange{actualChanged, "touched"}, failed, "inconclusive", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			trial := pilotTrial{finding: PilotCase{Reaction: "thumbs-up", ActualChange: test.change}}
+			trial.result = TrialResult{BaselineChecks: passed, ActualChecks: test.actualCheck, Review: DesignReview{Actual: agent}}
+			trial.qualifyCandidate()
+			trial.qualifyActual()
+			require.Equal(t, test.outcome, trial.result.Review.Actual.Outcome)
+			require.Equal(t, "not-applicable", trial.result.Review.Candidate.Outcome)
+			require.Equal(t, test.limited, len(trial.result.Review.Limitations) == 1)
+		})
+	}
+}
+
+func TestReviewQualifiesUnverifiedCandidate(t *testing.T) {
+	trial := pilotTrial{finding: PilotCase{Reaction: "thumbs-down"}}
+	trial.result = TrialResult{Attempts: []RefactoringAttempt{{}}, Review: DesignReview{Candidate: Judgment{Outcome: "beneficial"}}}
+	trial.qualifyCandidate()
+	require.Equal(t, "inconclusive", trial.result.Review.Candidate.Outcome)
+	require.Len(t, trial.result.Review.Limitations, 1)
 }

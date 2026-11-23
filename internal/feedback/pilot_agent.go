@@ -5,8 +5,75 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
+
+type agentCall struct {
+	phase, dir, prompt, prefix, schema string
+	readDirs                           []string
+}
+
+func (c agentCall) retrying(reason error) agentCall {
+	c.prompt += fmt.Sprintf("\nYour previous response could not be accepted: %s\nReturn a corrected JSON object matching this schema:\n%s\n", reason, c.schema)
+	c.prefix += "-retry"
+	return c
+}
+
+func invokeAgent(ctx context.Context, options PilotOptions, call agentCall) CommandResult {
+	if err := writePrivate(call.prefix+".prompt", []byte(call.prompt)); err != nil {
+		return CommandResult{Exit: -1, Error: err.Error()}
+	}
+	return runTrialCommand(ctx, call.dir, agentArgs(options, call), call.prompt, call.prefix, options.Timeout, options.PassEnv...)
+}
+
+func agentArgs(options PilotOptions, call agentCall) []string {
+	args := append([]string{options.Agent}, options.AgentArgs...)
+	if len(options.AgentArgs) == 0 {
+		return append(args, claudeArgs(options, call)...)
+	}
+	placeholders := strings.NewReplacer("{model}", options.Model, "{turns}", strconv.Itoa(options.Turns), "{phase}", call.phase)
+	for i := 1; i < len(args); i++ {
+		args[i] = placeholders.Replace(args[i])
+	}
+	return args
+}
+
+func claudeArgs(options PilotOptions, call agentCall) []string {
+	tools, allowed := "Read,Glob,Grep,Bash", "Read,Glob,Grep,Bash(git show:*),Bash(git log:*),Bash(git diff:*)"+call.gitPermissions()
+	if call.phase == "refactor" {
+		tools = "Read,Edit,Write,Glob,Grep,Bash"
+		allowed = "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(columbo:*)"
+	}
+	format := "text"
+	if call.schema != "" {
+		format = "json"
+	}
+	args := []string{"-p", "--safe-mode", "--restricted", "--no-session-persistence", "--permission-mode", "dontAsk", "--max-turns", strconv.Itoa(options.Turns), "--output-format", format, "--tools", tools, "--allowedTools", allowed}
+	if call.schema != "" {
+		args = append(args, "--json-schema", call.schema)
+	}
+	if options.Model != "" {
+		args = append(args, "--model", options.Model)
+	}
+	if call.phase != "assess" {
+		args = append(args, "--add-dir", filepath.Dir(call.dir))
+	}
+	return args
+}
+
+func (c agentCall) gitPermissions() string {
+	var allowed strings.Builder
+	for _, checkout := range c.readDirs {
+		for _, verb := range []string{"show", "log", "diff"} {
+			allowed.WriteString(",Bash(git -C " + quoteShell(checkout) + " " + verb + ":*)")
+		}
+	}
+	return allowed.String()
+}
+
+func quoteShell(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
 
 type jsonPhase[T any] struct {
 	name     string
@@ -14,37 +81,34 @@ type jsonPhase[T any] struct {
 	validate func(T) error
 }
 
-func runJSONPhase[T any](ctx context.Context, options PilotOptions, dir, prompt, prefix string, phase jsonPhase[T]) (T, []CommandResult, error) {
-	var commands []CommandResult
-	original := prompt
-	var value T
-	for attempt := 0; attempt < 2; attempt++ {
+func (p jsonPhase[T]) run(ctx context.Context, options PilotOptions, call agentCall) (value T, commands []CommandResult, err error) {
+	call.phase, call.schema = p.name, p.schema
+	for range 2 {
 		if err := ctx.Err(); err != nil {
 			return value, commands, err
 		}
-		log := prefix
-		if attempt > 0 {
-			log += "-retry"
-		}
-		command := invokeAgent(ctx, options, dir, phase.name, prompt, log, phase.schema)
+		command := invokeAgent(ctx, options, call)
 		commands = append(commands, command)
 		if !commandPassed(command) {
-			return value, commands, fmt.Errorf("%s agent failed; see %s", phase.name, command.Stderr)
+			return value, commands, fmt.Errorf("%s agent failed; see %s", p.name, command.Stderr)
 		}
-		var decoded T
-		err := readAgentJSON(command.Stdout, &decoded)
-		if err == nil {
-			err = phase.validate(decoded)
+		if value, err = p.decode(command.Stdout); err == nil {
+			return value, commands, nil
 		}
-		if err == nil {
-			return decoded, commands, nil
-		}
-		if attempt == 1 {
-			return value, commands, fmt.Errorf("%s response invalid after one retry: %w", phase.name, err)
-		}
-		prompt = original + fmt.Sprintf("\nYour previous response could not be accepted: %s\nReturn a corrected JSON object matching this schema:\n%s\n", err, phase.schema)
+		call = call.retrying(err)
 	}
-	panic("unreachable")
+	return value, commands, fmt.Errorf("%s response invalid after one retry: %w", p.name, err)
+}
+
+func (p jsonPhase[T]) decode(path string) (T, error) {
+	var value, zero T
+	if err := readAgentJSON(path, &value); err != nil {
+		return zero, err
+	}
+	if err := p.validate(value); err != nil {
+		return zero, err
+	}
+	return value, nil
 }
 
 func assessmentPhase() jsonPhase[DesignAssessment] {
@@ -52,39 +116,49 @@ func assessmentPhase() jsonPhase[DesignAssessment] {
 		"relationship": nonemptyString(), "opportunity": map[string]any{"type": "string"}, "future_change": nonemptyString(),
 		"change_basis": map[string]any{"type": "string", "const": "hypothetical"}, "costs": map[string]any{"type": "string"}, "evidence": evidenceSchema(),
 	}, []string{"relationship", "future_change", "change_basis", "evidence"})
-	return jsonPhase[DesignAssessment]{"assess", schemaText(schema), func(a DesignAssessment) error {
-		if strings.TrimSpace(a.Relationship) == "" || strings.TrimSpace(a.FutureChange) == "" || a.ChangeBasis != "hypothetical" || !validEvidence(a.Evidence) {
-			return fmt.Errorf("assessment requires nonempty relationship, future_change, evidence and change_basis hypothetical")
-		}
-		return nil
-	}}
+	return jsonPhase[DesignAssessment]{"assess", schemaText(schema), DesignAssessment.validate}
 }
 
-func reviewPhase(explores bool) jsonPhase[DesignReview] {
-	outcomes := []string{"beneficial", "tradeoff", "no-demonstrated-benefit", "inconclusive"}
-	judgment := func(allowed []string) map[string]any {
-		return objectSchema(map[string]any{"outcome": map[string]any{"type": "string", "enum": allowed}, "reason": nonemptyString(), "evidence": evidenceSchema()}, []string{"outcome", "reason", "evidence"})
+func (a DesignAssessment) validate() error {
+	if strings.TrimSpace(a.Relationship) == "" || strings.TrimSpace(a.FutureChange) == "" || a.ChangeBasis != "hypothetical" || !validEvidence(a.Evidence) {
+		return fmt.Errorf("assessment requires nonempty relationship, future_change, evidence and change_basis hypothetical")
 	}
-	candidateOutcomes := append([]string{}, outcomes...)
+	return nil
+}
+
+var reviewOutcomes = []string{"beneficial", "tradeoff", "no-demonstrated-benefit", "inconclusive"}
+
+func reviewPhase(explores bool) jsonPhase[DesignReview] {
+	candidateOutcomes := reviewOutcomes
 	if !explores {
 		candidateOutcomes = []string{"not-applicable"}
 	}
 	schema := objectSchema(map[string]any{
-		"finding": judgment(outcomes), "direction": judgment(outcomes), "candidate": judgment(candidateOutcomes), "actual": judgment(outcomes),
+		"finding": judgmentSchema(reviewOutcomes), "direction": judgmentSchema(reviewOutcomes), "candidate": judgmentSchema(candidateOutcomes), "actual": judgmentSchema(reviewOutcomes),
 		"limitations": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "reported_model": map[string]any{"type": "string"},
 	}, []string{"finding", "direction", "candidate", "actual"})
-	return jsonPhase[DesignReview]{"review", schemaText(schema), func(r DesignReview) error {
-		for _, item := range []struct {
-			name    string
-			value   Judgment
-			allowed []string
-		}{{"finding", r.Finding, outcomes}, {"direction", r.Direction, outcomes}, {"candidate", r.Candidate, candidateOutcomes}, {"actual", r.Actual, outcomes}} {
-			if !contains(item.allowed, item.value.Outcome) || strings.TrimSpace(item.value.Reason) == "" || !validEvidence(item.value.Evidence) {
-				return fmt.Errorf("review has an invalid %s judgment; require an allowed outcome, nonempty reason and evidence", item.name)
-			}
+	return jsonPhase[DesignReview]{"review", schemaText(schema), func(r DesignReview) error { return r.validate(candidateOutcomes) }}
+}
+
+func (r DesignReview) validate(candidateOutcomes []string) error {
+	for _, item := range []struct {
+		name     string
+		judgment Judgment
+		allowed  []string
+	}{{"finding", r.Finding, reviewOutcomes}, {"direction", r.Direction, reviewOutcomes}, {"candidate", r.Candidate, candidateOutcomes}, {"actual", r.Actual, reviewOutcomes}} {
+		if !item.judgment.valid(item.allowed) {
+			return fmt.Errorf("review has an invalid %s judgment; require an allowed outcome, nonempty reason and evidence", item.name)
 		}
-		return nil
-	}}
+	}
+	return nil
+}
+
+func (j Judgment) valid(allowed []string) bool {
+	return contains(allowed, j.Outcome) && strings.TrimSpace(j.Reason) != "" && validEvidence(j.Evidence)
+}
+
+func judgmentSchema(allowed []string) map[string]any {
+	return objectSchema(map[string]any{"outcome": map[string]any{"type": "string", "enum": allowed}, "reason": nonemptyString(), "evidence": evidenceSchema()}, []string{"outcome", "reason", "evidence"})
 }
 
 func nonemptyString() map[string]any {
@@ -114,28 +188,41 @@ func readAgentJSON(path string, target any) error {
 	if err != nil {
 		return err
 	}
-	text := strings.TrimSpace(string(data))
-	if !json.Valid([]byte(text)) {
-		remaining, fenced, found := text, "", false
-		for {
-			start := strings.Index(remaining, "```json")
-			if start < 0 {
-				break
-			}
-			block := remaining[start+len("```json"):]
-			end := strings.Index(block, "```")
-			if end < 0 {
-				break
-			}
-			fenced, found = strings.TrimSpace(block[:end]), true
-			remaining = block[end+3:]
-		}
-		if found {
-			text = fenced
-		} else if start, end := strings.IndexByte(text, '{'), strings.LastIndexByte(text, '}'); start >= 0 && end > start {
-			text = text[start : end+1]
-		}
+	payload, err := structuredPayload(extractJSON(strings.TrimSpace(string(data))))
+	if err != nil {
+		return err
 	}
+	return json.Unmarshal(payload, target)
+}
+
+func extractJSON(text string) string {
+	if json.Valid([]byte(text)) {
+		return text
+	}
+	if fenced, ok := lastJSONFence(text); ok {
+		return fenced
+	}
+	if start, end := strings.IndexByte(text, '{'), strings.LastIndexByte(text, '}'); start >= 0 && end > start {
+		return text[start : end+1]
+	}
+	return text
+}
+
+func lastJSONFence(text string) (fenced string, found bool) {
+	for {
+		_, block, ok := strings.Cut(text, "```json")
+		if !ok {
+			return fenced, found
+		}
+		body, rest, ok := strings.Cut(block, "```")
+		if !ok {
+			return fenced, found
+		}
+		fenced, found, text = strings.TrimSpace(body), true, rest
+	}
+}
+
+func structuredPayload(text string) ([]byte, error) {
 	var envelope struct {
 		Type       string          `json:"type"`
 		IsError    bool            `json:"is_error"`
@@ -143,16 +230,15 @@ func readAgentJSON(path string, target any) error {
 		Structured json.RawMessage `json:"structured_output"`
 	}
 	if err := json.Unmarshal([]byte(text), &envelope); err != nil {
-		return err
+		return nil, err
 	}
-	if envelope.Type == "result" {
-		if envelope.IsError || (envelope.Subtype != "" && envelope.Subtype != "success") {
-			return fmt.Errorf("agent returned an error result (%s)", envelope.Subtype)
-		}
-		if len(envelope.Structured) == 0 || string(envelope.Structured) == "null" {
-			return fmt.Errorf("agent result lacks structured_output")
-		}
-		return json.Unmarshal(envelope.Structured, target)
+	switch {
+	case envelope.Type != "result":
+		return []byte(text), nil
+	case envelope.IsError || (envelope.Subtype != "" && envelope.Subtype != "success"):
+		return nil, fmt.Errorf("agent returned an error result (%s)", envelope.Subtype)
+	case len(envelope.Structured) == 0 || string(envelope.Structured) == "null":
+		return nil, fmt.Errorf("agent result lacks structured_output")
 	}
-	return json.Unmarshal([]byte(text), target)
+	return envelope.Structured, nil
 }
