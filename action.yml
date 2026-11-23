@@ -67,6 +67,21 @@ runs:
         COLUMBO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         COLUMBO_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run-base-analysis.sh"
+    - name: Retain feedback analysis provenance
+      if: ${{ !cancelled() && inputs.feedback == 'true' && steps.analyze.outputs.analyzer != '' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        COLUMBO_ANALYZER: ${{ steps.analyze.outputs.analyzer }}
+        COLUMBO_EVIDENCE: ${{ steps.analyze.outputs.evidence }}
+        COLUMBO_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        COLUMBO_CONFIG: ${{ inputs.config }}
+        COLUMBO_STAGED: ${{ inputs.staged }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/scripts/feedback-provenance.py" \
+          --working-directory "$GITHUB_WORKSPACE/$COLUMBO_WORKING_DIRECTORY" \
+          --evidence "$COLUMBO_EVIDENCE" --analyzer "$COLUMBO_ANALYZER" \
+          --config "$COLUMBO_CONFIG"
     - name: Publish findings
       id: publish
       if: ${{ !cancelled() && steps.analyze.outputs.exit-code != '' }}

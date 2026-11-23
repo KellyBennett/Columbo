@@ -56,6 +56,7 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/columbo
+      - run: go build ./cmd/columbo-feedback
       - name: Run diagnostic SQLite queries against all seven smells
         shell: bash
         run: |
@@ -66,6 +67,8 @@ jobs:
           ./scripts/test-sqlite-queries.sh "$RUNNER_TEMP/columbo-fixture.sqlite"
       - name: Test action runner exit status and evidence retention
         run: python3 -m unittest discover -s scripts -p test_run_action.py -v
+      - name: Test feedback checkout provenance
+        run: python3 -m unittest discover -s scripts -p test_feedback_provenance.py -v
       - name: Test Checks API projection, batching and failure behavior
         env:
           COLUMBO_TEST_SNAPSHOT: ${{ runner.temp }}/columbo-fixture.sqlite

@@ -98,6 +98,38 @@ GitHub lets the workflow token resolve threads only when the job also has `conte
 
 Feedback is advisory. It never changes the check or fails the job. Pull requests from forks are skipped with a warning, because their token can't comment. If the base commit can't be analyzed, nothing is posted and the check summary says so.
 
+#### Reading the feedback
+
+`columbo-feedback` gathers your team's reactions and replies into a SQLite file on your machine. Reactions describe reviewer responses, rather than establishing whether a stricter design would help. Collection only reads from GitHub. The optional pilot runner sends code and evidence to the agent you configure.
+
+```bash
+go install github.com/KellyBennett/Columbo/cmd/columbo-feedback@latest
+columbo-feedback collect --repo your-org/your-repo
+columbo-feedback status
+```
+
+```text
+rule                 👍  👎  missed
+feature-envy          0   0       1
+long-parameter-list   4   1       0
+no rule               0   0       2
+```
+
+`collect` saves every pull request Columbo has commented on, including closed pull requests. It captures comments, reactions, all current PR commits and their patches, reviews, thread resolution, timeline events, and CI artifact metadata. Each collection preserves an observation, so earlier observed comments and reactions survive later changes. `status` uses the latest state. Repeat `--repo` for more repositories. The store defaults to `~/.columbo/feedback.sqlite`; choose another with `--store`. For GitHub Enterprise, pass `--api-url` or set `GITHUB_API_URL`.
+
+`collect` needs a token that can read the repository's pull requests. It uses `GH_TOKEN` if set, otherwise `gh auth token`.
+
+`status` counts 👍 and 👎 per rule on Columbo's finding comments. To tell Columbo it missed something, start a pull request comment with `Columbo missed:` and name the rule, for example `Columbo missed: feature-envy in Parse`. Misses that name no rule are counted under "no rule".
+
+To investigate whether following a finding produces a design with less coupling or better cohesion, retain Git history and run a pilot:
+
+```bash
+columbo-feedback collect --repo your-org/your-repo --checkout /path/to/work-repo --artifacts
+columbo-feedback pilot --repo your-org/your-repo --out /path/to/pilot --limit 3 --allow-reconstructed
+```
+
+The pilot tries and tests refactorings, including for thumbs-down findings, in separate checkouts. It records an initial design assessment before providing reviewer reactions and later code. Read [the pilot instructions](docs/feedback-pilot.md) for installation from this PR, agent configuration, evidence limits, and the resulting reports.
+
 ## Supported Languages
 
 - Go

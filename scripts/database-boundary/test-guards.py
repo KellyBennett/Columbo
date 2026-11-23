@@ -19,6 +19,10 @@ sqlc = shutil.which(sqlc) or str(Path(sqlc).resolve())
 env = {**os.environ, "GOTOOLCHAIN": "local", "GOTELEMETRY": "off", "GOWORK": "off",
        "GOFLAGS": os.environ.get("GOFLAGS", "") + " -buildvcs=false -p=1", "GOMAXPROCS": "2"}
 manifest = json.loads((here / "manifest.json").read_text())
+stores = manifest["stores"]
+
+def store_name(store):
+    return Path(store["package"]).name
 
 def run(command, cwd, extra_env=None):
     return subprocess.run(command, cwd=cwd, env={**env, **(extra_env or {})}, text=True, stdout=subprocess.PIPE,
@@ -55,7 +59,7 @@ print("PASS: CI invokes both database checks and propagates their failures")
 
 with tempfile.TemporaryDirectory(prefix="columbo-db-negative-") as temporary:
     base = Path(temporary) / "base"
-    (base / "internal/snapshotdb").mkdir(parents=True)
+    base.mkdir()
     # Match the actual application's import path and verified dependency versions.
     for name in ["go.mod", "go.sum", ".golangci.database.yml"]:
         shutil.copyfile(root / name, base / name)
@@ -67,34 +71,38 @@ with tempfile.TemporaryDirectory(prefix="columbo-db-negative-") as temporary:
         target = base / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / name, target)
-    (base / "schema.sql").write_text("CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT NOT NULL);\n")
-    (base / "queries.sql").write_text("-- name: Values :many\nSELECT id, value FROM entries ORDER BY id;\n")
-    (base / "sqlc.yaml").write_text('''version: "2"
-sql:
-  - engine: sqlite
-    schema: schema.sql
-    queries: queries.sql
+    sqlc_config = 'version: "2"\nsql:\n'
+    for store in stores:
+        name = store_name(store)
+        (base / store["package"]).mkdir(parents=True)
+        (base / store["package"] / "schema.sql").write_text("CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT NOT NULL);\n")
+        (base / store["package"] / "queries.sql").write_text("-- name: Values :many\nSELECT id, value FROM entries ORDER BY id;\n")
+        sqlc_config += f'''  - engine: sqlite
+    schema: {store["package"]}/schema.sql
+    queries: {store["package"]}/queries.sql
     gen:
       go:
-        package: snapshotdb
-        out: internal/snapshotdb
+        package: {name}
+        out: {store["package"]}
         emit_interface: true
-''')
-    # An intentionally leaky synthetic exempt provider verifies that even a passed
-    # handle with no consumer import cannot evade the off-the-shelf call guard.
-    (base / manifest["lifecycle"]).write_text('''package snapshotdb
+'''
+        # An intentionally leaky synthetic exempt provider verifies that even a passed
+        # handle with no consumer import cannot evade the off-the-shelf call guard.
+        (base / store["lifecycle"]).write_text(f'''package {name}
 import "database/sql"
-func RawForFixture() *sql.DB { return nil }
+func RawForFixture() *sql.DB {{ return nil }}
 ''')
+    (base / "sqlc.yaml").write_text(sqlc_config)
     generated = run([sqlc, "generate"], base)
     require(generated.returncode == 0, "fixture sqlc generation", generated.stdout)
 
-    def copy_case(name, fixture, target="internal/consumer/client.go"):
+    # Store-specific fixtures are written against snapshotdb; rename them per store.
+    def copy_case(name, fixture, target="internal/consumer/client.go", store=stores[0]):
         case = Path(temporary) / name
         shutil.copytree(base, case)
         path = case / target
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text((here / "fixtures" / fixture).read_text())
+        path.write_text((here / "fixtures" / fixture).read_text().replace("snapshotdb", store_name(store)))
         return case
 
     def lint_case(case):
@@ -113,9 +121,10 @@ func RawForFixture() *sql.DB { return nil }
             "GOLANGCI_LINT_SCHEMA": str(Path(schema).resolve()),
             "BOUNDARY_REPORT_DIR": str(case / "boundary-report")})
 
-    positive = copy_case("positive", "positive.go.txt")
-    result, issues = lint_case(positive)
-    require(result.returncode == 0 and not issues, "typed Querier positive control", result.stdout)
+    for store in stores:
+        positive = copy_case("positive-" + store_name(store), "positive.go.txt", store=store)
+        result, issues = lint_case(positive)
+        require(result.returncode == 0 and not issues, f"{store_name(store)} typed Querier positive control", result.stdout)
     for checker in ["check-manifest.py", "check-package-inventory.py", "check-generated.py"]:
         result = run(["python3", str(here / checker), "--root", str(positive)] +
                      (["--sqlc", sqlc] if checker == "check-generated.py" else []), positive)
@@ -131,7 +140,6 @@ func RawForFixture() *sql.DB { return nil }
         "database_open_apis.go.txt": ("forbidigo", ["OpenDB", "Register"]),
         "sqlite_driver_import.go.txt": ("depguard", ["modernc.org/sqlite"]),
         "concrete_promoted.go.txt": ("forbidigo", ["PrepareContext"]),
-        "raw_transaction_api.go.txt": ("forbidigo", ["WithTx"]),
         "driver_import.go.txt": ("depguard", ["database/sql/driver"]),
         "alias_import.go.txt": ("forbidigo", ["Exec"]),
         "passed_handle.go.txt": ("forbidigo", ["Query"]),
@@ -140,10 +148,16 @@ func RawForFixture() *sql.DB { return nil }
         "embedded_method_value.go.txt": ("forbidigo", ["Query"]),
         "method_expression.go.txt": ("forbidigo", ["PrepareContext"]),
         "fake_generated.go.txt": ("forbidigo", ["Query"]),
+    }
+    store_fixtures = {
+        "raw_transaction_api.go.txt": ("forbidigo", ["WithTx"]),
         "raw_generated_api.go.txt": ("forbidigo", ["DBTX", "Queries", "New"]),
     }
-    for fixture, (linter, words) in fixtures.items():
-        case = copy_case(fixture, fixture)
+    cases = [(fixture, fixture, expected, stores[0]) for fixture, expected in fixtures.items()]
+    cases += [(f"{store_name(store)}-{fixture}", fixture, expected, store)
+              for store in stores for fixture, expected in store_fixtures.items()]
+    for label, fixture, (linter, words), store in cases:
+        case = copy_case(label, fixture, store=store)
         result, issues = lint_case(case)
         checked = [i for i in issues if i["FromLinter"] == linter]
         require(result.returncode != 0 and checked, f"{fixture} rejected by {linter}", result.stdout)
@@ -156,8 +170,8 @@ func RawForFixture() *sql.DB { return nil }
                 found = word in symbols
             else:
                 found = any(re.search(r"\b" + re.escape(word) + r"\b", i["Text"]) for i in checked)
-            require(found, f"{fixture}: {word} rejected", result.stdout)
-        print(f"PASS: {fixture} rejected by {linter}")
+            require(found, f"{label}: {word} rejected", result.stdout)
+        print(f"PASS: {label} rejected by {linter}")
 
     # Lightweight external stub modules exercise import policy, not driver
     # behavior. Their source lives outside each fixture root and is not a hidden
@@ -201,25 +215,32 @@ func RawForFixture() *sql.DB { return nil }
                 f"{target}: reviewed test exception cannot include runtime counterpart", result.stdout)
         print(f"PASS: {target} is not a runtime exception")
 
-    for fixture in ["nolint.go.txt", "slash_nolint.go.txt", "tab_permit.go.txt", "permit.go.txt", "extra_same_package.go.txt"]:
-        target = "internal/snapshotdb/extra.go" if fixture == "extra_same_package.go.txt" else "internal/consumer/client.go"
-        case = copy_case(fixture, fixture, target)
+    directive_cases = [(fixture, fixture, "internal/consumer/client.go", stores[0])
+                       for fixture in ["nolint.go.txt", "slash_nolint.go.txt", "tab_permit.go.txt", "permit.go.txt"]]
+    directive_cases += [(f"{store_name(store)}-extra_same_package.go.txt", "extra_same_package.go.txt",
+                         store["package"] + "/extra.go", store) for store in stores]
+    for label, fixture, target, store in directive_cases:
+        case = copy_case(label, fixture, target, store)
         result = run(["python3", str(here / "check-manifest.py"), "--root", str(case)], case)
         require(result.returncode != 0 and target in result.stdout,
-                f"{fixture} rejected by exact manifest/directive guard", result.stdout)
-        print(f"PASS: {fixture} rejected by manifest")
+                f"{label} rejected by exact manifest/directive guard", result.stdout)
+        print(f"PASS: {label} rejected by manifest")
 
-    for name, target, reason in [
-        ("missing-lifecycle", manifest["lifecycle"], "Required regular boundary file is missing"),
-        ("missing-header", "internal/snapshotdb/models.go", "lacks the exact generator header"),
-        ("source-symlink", "internal/consumer/client.go", "Source symlinks cannot expand"),
-    ]:
+    manifest_cases = [("source-symlink", "source-symlink", "internal/consumer/client.go", "Source symlinks cannot expand")]
+    for store in stores:
+        manifest_cases += [
+            ("missing-lifecycle", f"{store_name(store)}-missing-lifecycle", store["lifecycle"],
+             "Required regular boundary file is missing"),
+            ("missing-header", f"{store_name(store)}-missing-header", store["package"] + "/models.go",
+             "lacks the exact generator header"),
+        ]
+    for kind, name, target, reason in manifest_cases:
         case = Path(temporary) / name
         shutil.copytree(base, case)
         path = case / target
-        if name == "missing-lifecycle":
+        if kind == "missing-lifecycle":
             path.unlink()
-        elif name == "missing-header":
+        elif kind == "missing-header":
             path.write_text(path.read_text().removeprefix("// Code generated by sqlc. DO NOT EDIT.\n"))
         else:
             path.parent.mkdir(parents=True)
@@ -315,8 +336,8 @@ func RawForFixture() *sql.DB { return nil }
                 f"{name}: active cgo source is an unreviewed build variant", active.stdout)
         print(f"PASS: {name} active CgoFiles rejected by package inventory")
 
-    for name in manifest["generated"]:
-        case = Path(temporary) / ("edited-" + Path(name).name)
+    for name in [name for store in stores for name in store["generated"]]:
+        case = Path(temporary) / ("edited-" + name.replace("/", "-"))
         shutil.copytree(base, case)
         with (case / name).open("a") as output:
             output.write("\n// Handwritten edit retaining the authentic sqlc generated header.\n")
@@ -324,26 +345,27 @@ func RawForFixture() *sql.DB { return nil }
         require(result.returncode != 0 and name in result.stdout,
                 f"{name}: authentic generated header does not excuse generated edits", result.stdout)
         print(f"PASS: {name} edit rejected by regeneration byte comparison")
-    for name, before, after in [
-        ("redirected-output", "out: internal/snapshotdb", "out: internal/otherdb"),
-        ("missing-interface", "emit_interface: true", "emit_interface: false"),
-    ]:
+    config_cases = [("missing-interface", "emit_interface: true", "emit_interface: false")]
+    config_cases += [(f"{store_name(store)}-redirected-output", "out: " + store["package"], "out: internal/otherdb")
+                     for store in stores]
+    for name, before, after in config_cases:
         case = Path(temporary) / name
         shutil.copytree(base, case)
         config = case / "sqlc.yaml"
-        config.write_text(config.read_text().replace(before, after))
+        config.write_text(config.read_text().replace(before + "\n", after + "\n"))
         result = run(["python3", str(here / "check-generated.py"), "--root", str(case), "--sqlc", sqlc], case)
         require(result.returncode != 0 and "sqlc output differs" in result.stdout,
                 f"{name}: stale generated files cannot pass", result.stdout)
         print(f"PASS: {name} rejected despite stale original outputs")
 
-    extra_generated = Path(temporary) / "unexpected-generated-file"
-    shutil.copytree(base, extra_generated)
-    (extra_generated / "internal/snapshotdb/extra.go").write_text("package snapshotdb\n")
-    result = run(["python3", str(here / "check-generated.py"), "--root", str(extra_generated), "--sqlc", sqlc], extra_generated)
-    require(result.returncode != 0 and "internal/snapshotdb/extra.go: sqlc output differs" in result.stdout,
-            "regeneration rejects an unexpected same-package output independently of manifest", result.stdout)
-    print("PASS: regeneration rejects unexpected same-package output")
+    for store in stores:
+        extra_generated = Path(temporary) / (store_name(store) + "-unexpected-generated-file")
+        shutil.copytree(base, extra_generated)
+        (extra_generated / store["package"] / "extra.go").write_text(f"package {store_name(store)}\n")
+        result = run(["python3", str(here / "check-generated.py"), "--root", str(extra_generated), "--sqlc", sqlc], extra_generated)
+        require(result.returncode != 0 and f"{store['package']}/extra.go: sqlc output differs" in result.stdout,
+                "regeneration rejects an unexpected same-package output independently of manifest", result.stdout)
+        print(f"PASS: regeneration rejects unexpected {store_name(store)} output")
 
     wrong_version = Path(temporary) / "wrong-version-sqlc"
     wrong_version.write_text('#!/bin/sh\nif [ "$1" = version ]; then echo v0.0.0; else exec ' + shlex.quote(sqlc) + ' "$@"; fi\n')
