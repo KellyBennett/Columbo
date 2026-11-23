@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,10 @@ type CollectOptions struct {
 	APIURL       string
 	Token        string
 	Now          func() time.Time
+	Checkout     string
+	EvidencePath string
+	Artifacts    bool
+	PullRequests []int64
 }
 
 func Collect(ctx context.Context, options CollectOptions, out io.Writer) error {
@@ -33,7 +38,7 @@ func Collect(ctx context.Context, options CollectOptions, out io.Writer) error {
 	}
 	defer store.Close()
 	for _, repository := range options.Repositories {
-		c := collector{github: client, store: store, repository: repository, run: stamp(options.Now())}
+		c := collector{github: client, store: store, repository: repository, run: stamp(options.Now()), options: options}
 		if err = c.collect(ctx, out); err != nil {
 			return fmt.Errorf("%s: %w", repository, err)
 		}
@@ -48,6 +53,7 @@ type collector struct {
 	store      *feedbackdb.Store
 	repository string
 	run        string
+	options    CollectOptions
 }
 
 func (c collector) collect(ctx context.Context, out io.Writer) error {
@@ -69,6 +75,9 @@ func (c collector) collect(ctx context.Context, out io.Writer) error {
 		summary.add(record)
 	}
 	fmt.Fprintln(out, summary)
+	if len(c.options.PullRequests) > 0 {
+		return nil
+	}
 	return c.store.Update(ctx, func(q feedbackdb.Querier) error {
 		return q.SetRepositoryScannedThrough(ctx, feedbackdb.SetRepositoryScannedThroughParams{ScannedThrough: &c.run, Name: c.repository})
 	})
@@ -80,10 +89,25 @@ func (c collector) save(ctx context.Context, number int64) (PullRequestRecord, e
 		return PullRequestRecord{}, err
 	}
 	record := fetched.record()
-	return record, c.store.Update(ctx, func(q feedbackdb.Querier) error { return saveRecord(ctx, q, record, c.run) })
+	observation, err := c.observe(ctx, number, fetched, record)
+	if err != nil {
+		return record, err
+	}
+	return record, c.store.Update(ctx, func(q feedbackdb.Querier) error {
+		if err := saveRecord(ctx, q, record, c.run); err != nil {
+			return err
+		}
+		return q.InsertObservation(ctx, feedbackdb.InsertObservationParams{
+			ID: observation.ID, Repository: c.repository, Number: number,
+			ObservedAt: observation.ObservedAt, Payload: observation.payload(),
+		})
+	})
 }
 
 func (c collector) pullRequests(ctx context.Context) ([]int64, error) {
+	if len(c.options.PullRequests) > 0 {
+		return c.options.PullRequests, nil
+	}
 	numbers, err := c.store.Queries().PullRequestNumbers(ctx, feedbackdb.PullRequestNumbersParams{Repository: c.repository})
 	if err != nil {
 		return nil, err
@@ -140,7 +164,9 @@ func (c ghComment) pullRequestNumber() (int64, error) {
 
 func (c collector) fetch(ctx context.Context, number int64) (fetchedPullRequest, error) {
 	pull := fmt.Sprintf("repos/%s/pulls/%d", c.repository, number)
-	f := fetchedPullRequest{repository: c.repository, reactions: map[commentKey][]ghReaction{}, commitFiles: map[string][]ghFile{}}
+	f := fetchedPullRequest{repository: c.repository, reactions: map[commentKey][]ghReaction{}, commitFiles: map[string][]ghFile{}, observationID: rand.Text()}
+	f.resources = map[string]json.RawMessage{}
+	c.github.captured = f.resources
 	steps := []func() error{
 		func() (err error) { f.pull, err = one[ghPull](ctx, c.github, pull); return },
 		func() (err error) {
@@ -193,11 +219,7 @@ func (c collector) fetchReactions(ctx context.Context, source commentSource, int
 }
 
 func (c collector) fetchCommitFiles(ctx context.Context, f *fetchedPullRequest) error {
-	first, ok := firstMarkerTime(slices.Concat(f.reviewComments, f.issueComments))
 	for _, commit := range f.commits {
-		if !ok || !commit.Commit.Committer.Date.After(first) {
-			continue
-		}
 		files, err := c.commitFiles(ctx, commit.SHA)
 		if err != nil {
 			return err

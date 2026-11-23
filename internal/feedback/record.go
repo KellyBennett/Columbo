@@ -37,17 +37,19 @@ const (
 )
 
 type Comment struct {
-	Kind      CommentKind
-	ID        int64
-	Author    string
-	Body      string
-	Path      *string
-	Line      *int64
-	CommitID  *string
-	InReplyTo *int64
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Marker    *Marker
+	Kind             CommentKind
+	ID               int64
+	Author           string
+	Body             string
+	Path             *string
+	Line             *int64
+	CommitID         *string
+	OriginalCommitID *string
+	OriginalLine     *int64
+	InReplyTo        *int64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Marker           *Marker
 }
 
 type Marker struct {

@@ -2,6 +2,8 @@ package feedback
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/KellyBennett/Columbo/internal/feedbackdb"
@@ -16,8 +18,55 @@ type saving struct {
 
 func saveRecord(ctx context.Context, q feedbackdb.Querier, record PullRequestRecord, run string) error {
 	s := saving{ctx: ctx, q: q, pullRequestID: record.PullRequest.ID, run: run}
-	for _, write := range append(record.upserts(), saving.deleteUnseenConversation, saving.deleteUnseenCode) {
+	for _, write := range record.upserts() {
 		if err := write(s); err != nil {
+			return err
+		}
+	}
+	return record.pruneCurrent(s)
+}
+
+func jsonKeys(keys []string) string {
+	data, _ := json.Marshal(append([]string{}, keys...))
+	return string(data)
+}
+
+func (r PullRequestRecord) pruneCurrent(s saving) error {
+	var comments, reactions, commits, files, suppressions []string
+	for _, c := range r.Comments {
+		comments = append(comments, string(c.Kind)+":"+strconv.FormatInt(c.ID, 10))
+	}
+	for _, r := range r.Reactions {
+		reactions = append(reactions, strconv.FormatInt(r.ID, 10))
+	}
+	for _, c := range r.Commits {
+		commits = append(commits, c.SHA)
+		for _, f := range c.Files {
+			files = append(files, c.SHA+":"+f.Path)
+		}
+	}
+	for _, u := range r.Suppressions {
+		suppressions = append(suppressions, u.Path+":"+strconv.FormatInt(u.Line, 10))
+	}
+	steps := []func() error{
+		func() error {
+			return s.q.PruneReactions(s.ctx, feedbackdb.PruneReactionsParams{PullRequestID: s.pullRequestID, Keys: jsonKeys(reactions)})
+		},
+		func() error {
+			return s.q.PruneComments(s.ctx, feedbackdb.PruneCommentsParams{PullRequestID: s.pullRequestID, Keys: jsonKeys(comments)})
+		},
+		func() error {
+			return s.q.PruneCommitFiles(s.ctx, feedbackdb.PruneCommitFilesParams{PullRequestID: s.pullRequestID, Keys: jsonKeys(files)})
+		},
+		func() error {
+			return s.q.PruneCommits(s.ctx, feedbackdb.PruneCommitsParams{PullRequestID: s.pullRequestID, Keys: jsonKeys(commits)})
+		},
+		func() error {
+			return s.q.PruneSuppressions(s.ctx, feedbackdb.PruneSuppressionsParams{PullRequestID: s.pullRequestID, Keys: jsonKeys(suppressions)})
+		},
+	}
+	for _, step := range steps {
+		if err := step(); err != nil {
 			return err
 		}
 	}
@@ -94,23 +143,6 @@ func (u Suppression) save(s saving) error {
 	return s.q.UpsertSuppression(s.ctx, feedbackdb.UpsertSuppressionParams{
 		PullRequestID: s.pullRequestID, Path: u.Path, Line: u.Line, Rule: u.Rule, Justification: u.Justification, Seen: s.run,
 	})
-}
-
-func (s saving) deleteUnseenConversation() error {
-	if err := s.q.DeleteReactionsNotSeenSince(s.ctx, feedbackdb.DeleteReactionsNotSeenSinceParams{PullRequestID: s.pullRequestID, RunTime: s.run}); err != nil {
-		return err
-	}
-	return s.q.DeleteCommentsNotSeenSince(s.ctx, feedbackdb.DeleteCommentsNotSeenSinceParams{PullRequestID: s.pullRequestID, RunTime: s.run})
-}
-
-func (s saving) deleteUnseenCode() error {
-	if err := s.q.DeleteCommitFilesNotSeenSince(s.ctx, feedbackdb.DeleteCommitFilesNotSeenSinceParams{PullRequestID: s.pullRequestID, RunTime: s.run}); err != nil {
-		return err
-	}
-	if err := s.q.DeleteCommitsNotSeenSince(s.ctx, feedbackdb.DeleteCommitsNotSeenSinceParams{PullRequestID: s.pullRequestID, RunTime: s.run}); err != nil {
-		return err
-	}
-	return s.q.DeleteSuppressionsNotSeenSince(s.ctx, feedbackdb.DeleteSuppressionsNotSeenSinceParams{PullRequestID: s.pullRequestID, RunTime: s.run})
 }
 
 func boolInt(value bool) int64 {

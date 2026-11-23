@@ -2,8 +2,8 @@ package feedback
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
-	"time"
 )
 
 type commentKey struct {
@@ -12,6 +12,8 @@ type commentKey struct {
 }
 
 type fetchedPullRequest struct {
+	observationID  string
+	resources      map[string]json.RawMessage
 	repository     string
 	pull           ghPull
 	reviewComments []ghComment
@@ -77,6 +79,7 @@ func (p ghPull) record(repository string) PullRequest {
 func (c ghComment) review() Comment {
 	comment := c.issue()
 	comment.Kind, comment.Path, comment.CommitID, comment.InReplyTo = ReviewComment, c.Path, c.CommitID, c.InReplyToID
+	comment.OriginalCommitID, comment.OriginalLine = c.OriginalCommitID, c.OriginalLine
 	comment.Line = c.anchorLine()
 	return comment
 }
@@ -118,14 +121,4 @@ func (f ghFile) suppressions() []Suppression {
 		return nil
 	}
 	return parseSuppressions(f.Filename, *f.Patch)
-}
-
-func firstMarkerTime(comments []ghComment) (time.Time, bool) {
-	var first time.Time
-	for _, comment := range comments {
-		if parseMarker(comment.Body) != nil && (first.IsZero() || comment.CreatedAt.Before(first)) {
-			first = comment.CreatedAt
-		}
-	}
-	return first, !first.IsZero()
 }

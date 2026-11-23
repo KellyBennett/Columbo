@@ -12,7 +12,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 const SQLiteApplicationID = 'C'<<24 | 'L'<<16 | 'M'<<8 | 'F'
 
@@ -62,10 +62,33 @@ func prepare(db *sql.DB, path string) error {
 		return create(db)
 	case applicationID != SQLiteApplicationID:
 		return fmt.Errorf("%s is not a Columbo feedback store", path)
+	case userVersion == 1:
+		return migrateV1(db)
 	case userVersion != SchemaVersion:
 		return fmt.Errorf("%s has feedback store schema version %d; this build reads version %d", path, userVersion, SchemaVersion)
 	}
 	return nil
+}
+
+func migrateV1(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.Exec(`CREATE TABLE observations (
+ id TEXT PRIMARY KEY,
+ repository TEXT NOT NULL REFERENCES repositories(name),
+ number INTEGER NOT NULL CHECK (number > 0),
+ observed_at TEXT NOT NULL,
+ payload TEXT NOT NULL CHECK (json_valid(payload))
+) STRICT;
+CREATE INDEX observations_pull ON observations(repository, number, observed_at);
+PRAGMA user_version=2;`)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func create(db *sql.DB) error {

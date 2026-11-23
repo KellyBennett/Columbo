@@ -95,7 +95,7 @@ func TestUpsertKeepsFirstSeenAndForeignKeysHold(t *testing.T) {
 	}
 
 	require.NoError(t, store.Update(ctx, func(q feedbackdb.Querier) error {
-		return q.DeleteCommentsNotSeenSince(ctx, feedbackdb.DeleteCommentsNotSeenSinceParams{PullRequestID: 7, RunTime: "2026-01-03T00:00:00Z"})
+		return q.PruneComments(ctx, feedbackdb.PruneCommentsParams{PullRequestID: 7, Keys: "[]"})
 	}))
 	rows, err = store.Queries().RowTimes(ctx)
 	require.NoError(t, err)

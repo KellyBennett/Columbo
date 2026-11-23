@@ -2,6 +2,14 @@
 INSERT INTO repositories(name, first_seen, last_seen) VALUES (@name, @seen, @seen)
 ON CONFLICT(name) DO UPDATE SET last_seen = excluded.last_seen;
 
+-- name: InsertObservation :exec
+INSERT INTO observations(id, repository, number, observed_at, payload)
+VALUES (@id, @repository, @number, @observed_at, @payload);
+
+-- name: Observations :many
+SELECT id, repository, number, observed_at, payload FROM observations
+WHERE repository = @repository ORDER BY observed_at, rowid;
+
 -- name: RepositoryScannedThrough :one
 SELECT scanned_through FROM repositories WHERE name = ?;
 
@@ -54,24 +62,29 @@ VALUES (@pull_request_id, @path, @line, @rule, @justification, @seen, @seen)
 ON CONFLICT(pull_request_id, path, line) DO UPDATE SET
  rule = excluded.rule, justification = excluded.justification, last_seen = excluded.last_seen;
 
--- A run writes last_seen = its own start time on every row it saw, so any
--- other value means the row was not seen this run, even within one second.
+-- Current views are pruned by fetched IDs, so changes within one second do
+-- not survive merely because last_seen has second precision.
 
--- name: DeleteCommentsNotSeenSince :exec
-DELETE FROM comments WHERE pull_request_id = @pull_request_id AND last_seen <> @run_time;
+-- name: PruneComments :exec
+DELETE FROM comments WHERE pull_request_id = @pull_request_id
+AND kind || ':' || id NOT IN (SELECT value FROM json_each(CAST(@keys AS TEXT)));
 
--- name: DeleteReactionsNotSeenSince :exec
-DELETE FROM reactions WHERE reactions.last_seen <> @run_time AND EXISTS
- (SELECT 1 FROM comments c WHERE c.kind = reactions.comment_kind AND c.id = reactions.comment_id AND c.pull_request_id = @pull_request_id);
+-- name: PruneReactions :exec
+DELETE FROM reactions WHERE EXISTS
+ (SELECT 1 FROM comments c WHERE c.kind = reactions.comment_kind AND c.id = reactions.comment_id AND c.pull_request_id = @pull_request_id)
+AND CAST(id AS TEXT) NOT IN (SELECT value FROM json_each(CAST(@keys AS TEXT)));
 
--- name: DeleteCommitsNotSeenSince :exec
-DELETE FROM commits WHERE pull_request_id = @pull_request_id AND last_seen <> @run_time;
+-- name: PruneCommits :exec
+DELETE FROM commits WHERE pull_request_id = @pull_request_id
+AND sha NOT IN (SELECT value FROM json_each(CAST(@keys AS TEXT)));
 
--- name: DeleteCommitFilesNotSeenSince :exec
-DELETE FROM commit_files WHERE pull_request_id = @pull_request_id AND last_seen <> @run_time;
+-- name: PruneCommitFiles :exec
+DELETE FROM commit_files WHERE pull_request_id = @pull_request_id
+AND sha || ':' || path NOT IN (SELECT value FROM json_each(CAST(@keys AS TEXT)));
 
--- name: DeleteSuppressionsNotSeenSince :exec
-DELETE FROM suppressions WHERE pull_request_id = @pull_request_id AND last_seen <> @run_time;
+-- name: PruneSuppressions :exec
+DELETE FROM suppressions WHERE pull_request_id = @pull_request_id
+AND path || ':' || line NOT IN (SELECT value FROM json_each(CAST(@keys AS TEXT)));
 
 -- name: FindingReactions :many
 SELECT c.rule, r.content, count(*) AS reactions

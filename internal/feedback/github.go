@@ -1,6 +1,7 @@
 package feedback
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,9 +15,10 @@ import (
 )
 
 type githubClient struct {
-	base  *url.URL
-	token string
-	http  *http.Client
+	base     *url.URL
+	token    string
+	http     *http.Client
+	captured map[string]json.RawMessage
 }
 
 func newGitHubClient(apiURL, token string) (*githubClient, error) {
@@ -56,8 +58,18 @@ func (c *githubClient) get(ctx context.Context, target string, page func(*json.D
 	if response.StatusCode != http.StatusOK {
 		return "", responseError(request.URL.Path, response)
 	}
-	if err = page(json.NewDecoder(response.Body)); err != nil {
+	body, err := io.ReadAll(io.LimitReader(response.Body, 32<<20+1))
+	if err != nil {
+		return "", err
+	}
+	if len(body) > 32<<20 {
+		return "", fmt.Errorf("GET %s: response exceeds 32 MiB", request.URL.Path)
+	}
+	if err = page(json.NewDecoder(bytes.NewReader(body))); err != nil {
 		return "", fmt.Errorf("GET %s: unexpected response: %w", request.URL.Path, err)
+	}
+	if c.captured != nil {
+		c.captured[request.URL.RequestURI()] = json.RawMessage(body)
 	}
 	return nextLink(response.Header), nil
 }
@@ -144,29 +156,37 @@ func (u *ghUser) login() string {
 }
 
 type ghPull struct {
-	ID        int64      `json:"id"`
-	Number    int64      `json:"number"`
-	Title     string     `json:"title"`
-	User      *ghUser    `json:"user"`
-	State     string     `json:"state"`
-	Merged    bool       `json:"merged"`
-	CreatedAt time.Time  `json:"created_at"`
-	ClosedAt  *time.Time `json:"closed_at"`
+	ID             int64      `json:"id"`
+	Number         int64      `json:"number"`
+	Title          string     `json:"title"`
+	User           *ghUser    `json:"user"`
+	State          string     `json:"state"`
+	Merged         bool       `json:"merged"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ClosedAt       *time.Time `json:"closed_at"`
+	Base           ghRef      `json:"base"`
+	Head           ghRef      `json:"head"`
+	MergeCommitSHA string     `json:"merge_commit_sha"`
+}
+
+type ghRef struct {
+	SHA string `json:"sha"`
 }
 
 type ghComment struct {
-	ID             int64     `json:"id"`
-	User           *ghUser   `json:"user"`
-	Body           string    `json:"body"`
-	Path           *string   `json:"path"`
-	Line           *int64    `json:"line"`
-	OriginalLine   *int64    `json:"original_line"`
-	CommitID       *string   `json:"commit_id"`
-	InReplyToID    *int64    `json:"in_reply_to_id"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	PullRequestURL string    `json:"pull_request_url"`
-	IssueURL       string    `json:"issue_url"`
+	ID               int64     `json:"id"`
+	User             *ghUser   `json:"user"`
+	Body             string    `json:"body"`
+	Path             *string   `json:"path"`
+	Line             *int64    `json:"line"`
+	OriginalLine     *int64    `json:"original_line"`
+	CommitID         *string   `json:"commit_id"`
+	OriginalCommitID *string   `json:"original_commit_id"`
+	InReplyToID      *int64    `json:"in_reply_to_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	PullRequestURL   string    `json:"pull_request_url"`
+	IssueURL         string    `json:"issue_url"`
 }
 
 type ghReaction struct {

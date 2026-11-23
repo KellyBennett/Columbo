@@ -85,3 +85,11 @@ CREATE TABLE suppressions (
  last_seen TEXT NOT NULL CHECK (last_seen GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'),
  PRIMARY KEY (pull_request_id, path, line)
 ) STRICT;
+CREATE TABLE observations (
+ id TEXT PRIMARY KEY,
+ repository TEXT NOT NULL REFERENCES repositories(name),
+ number INTEGER NOT NULL CHECK (number > 0),
+ observed_at TEXT NOT NULL,
+ payload TEXT NOT NULL CHECK (json_valid(payload))
+) STRICT;
+CREATE INDEX observations_pull ON observations(repository, number, observed_at);

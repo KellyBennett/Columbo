@@ -9,80 +9,6 @@ import (
 	"context"
 )
 
-const deleteCommentsNotSeenSince = `-- name: DeleteCommentsNotSeenSince :exec
-
-DELETE FROM comments WHERE pull_request_id = ?1 AND last_seen <> ?2
-`
-
-type DeleteCommentsNotSeenSinceParams struct {
-	PullRequestID int64
-	RunTime       string
-}
-
-// A run writes last_seen = its own start time on every row it saw, so any
-// other value means the row was not seen this run, even within one second.
-func (q *Queries) DeleteCommentsNotSeenSince(ctx context.Context, arg DeleteCommentsNotSeenSinceParams) error {
-	_, err := q.db.ExecContext(ctx, deleteCommentsNotSeenSince, arg.PullRequestID, arg.RunTime)
-	return err
-}
-
-const deleteCommitFilesNotSeenSince = `-- name: DeleteCommitFilesNotSeenSince :exec
-DELETE FROM commit_files WHERE pull_request_id = ?1 AND last_seen <> ?2
-`
-
-type DeleteCommitFilesNotSeenSinceParams struct {
-	PullRequestID int64
-	RunTime       string
-}
-
-func (q *Queries) DeleteCommitFilesNotSeenSince(ctx context.Context, arg DeleteCommitFilesNotSeenSinceParams) error {
-	_, err := q.db.ExecContext(ctx, deleteCommitFilesNotSeenSince, arg.PullRequestID, arg.RunTime)
-	return err
-}
-
-const deleteCommitsNotSeenSince = `-- name: DeleteCommitsNotSeenSince :exec
-DELETE FROM commits WHERE pull_request_id = ?1 AND last_seen <> ?2
-`
-
-type DeleteCommitsNotSeenSinceParams struct {
-	PullRequestID int64
-	RunTime       string
-}
-
-func (q *Queries) DeleteCommitsNotSeenSince(ctx context.Context, arg DeleteCommitsNotSeenSinceParams) error {
-	_, err := q.db.ExecContext(ctx, deleteCommitsNotSeenSince, arg.PullRequestID, arg.RunTime)
-	return err
-}
-
-const deleteReactionsNotSeenSince = `-- name: DeleteReactionsNotSeenSince :exec
-DELETE FROM reactions WHERE reactions.last_seen <> ?1 AND EXISTS
- (SELECT 1 FROM comments c WHERE c.kind = reactions.comment_kind AND c.id = reactions.comment_id AND c.pull_request_id = ?2)
-`
-
-type DeleteReactionsNotSeenSinceParams struct {
-	RunTime       string
-	PullRequestID int64
-}
-
-func (q *Queries) DeleteReactionsNotSeenSince(ctx context.Context, arg DeleteReactionsNotSeenSinceParams) error {
-	_, err := q.db.ExecContext(ctx, deleteReactionsNotSeenSince, arg.RunTime, arg.PullRequestID)
-	return err
-}
-
-const deleteSuppressionsNotSeenSince = `-- name: DeleteSuppressionsNotSeenSince :exec
-DELETE FROM suppressions WHERE pull_request_id = ?1 AND last_seen <> ?2
-`
-
-type DeleteSuppressionsNotSeenSinceParams struct {
-	PullRequestID int64
-	RunTime       string
-}
-
-func (q *Queries) DeleteSuppressionsNotSeenSince(ctx context.Context, arg DeleteSuppressionsNotSeenSinceParams) error {
-	_, err := q.db.ExecContext(ctx, deleteSuppressionsNotSeenSince, arg.PullRequestID, arg.RunTime)
-	return err
-}
-
 const findingReactions = `-- name: FindingReactions :many
 SELECT c.rule, r.content, count(*) AS reactions
 FROM reactions r JOIN comments c ON c.kind = r.comment_kind AND c.id = r.comment_id
@@ -146,6 +72,30 @@ func (q *Queries) FindingRules(ctx context.Context) ([]*string, error) {
 	return items, nil
 }
 
+const insertObservation = `-- name: InsertObservation :exec
+INSERT INTO observations(id, repository, number, observed_at, payload)
+VALUES (?1, ?2, ?3, ?4, ?5)
+`
+
+type InsertObservationParams struct {
+	ID         string
+	Repository string
+	Number     int64
+	ObservedAt string
+	Payload    string
+}
+
+func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationParams) error {
+	_, err := q.db.ExecContext(ctx, insertObservation,
+		arg.ID,
+		arg.Repository,
+		arg.Number,
+		arg.ObservedAt,
+		arg.Payload,
+	)
+	return err
+}
+
 const missCandidates = `-- name: MissCandidates :many
 SELECT body FROM comments WHERE case_id IS NULL AND body LIKE '%columbo missed:%' ORDER BY kind, id
 `
@@ -172,6 +122,123 @@ func (q *Queries) MissCandidates(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const observations = `-- name: Observations :many
+SELECT id, repository, number, observed_at, payload FROM observations
+WHERE repository = ?1 ORDER BY observed_at, rowid
+`
+
+type ObservationsParams struct {
+	Repository string
+}
+
+func (q *Queries) Observations(ctx context.Context, arg ObservationsParams) ([]Observation, error) {
+	rows, err := q.db.QueryContext(ctx, observations, arg.Repository)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Observation
+	for rows.Next() {
+		var i Observation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Repository,
+			&i.Number,
+			&i.ObservedAt,
+			&i.Payload,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pruneComments = `-- name: PruneComments :exec
+
+DELETE FROM comments WHERE pull_request_id = ?1
+AND kind || ':' || id NOT IN (SELECT value FROM json_each(CAST(?2 AS TEXT)))
+`
+
+type PruneCommentsParams struct {
+	PullRequestID int64
+	Keys          string
+}
+
+// Current views are pruned by fetched IDs, so changes within one second do
+// not survive merely because last_seen has second precision.
+func (q *Queries) PruneComments(ctx context.Context, arg PruneCommentsParams) error {
+	_, err := q.db.ExecContext(ctx, pruneComments, arg.PullRequestID, arg.Keys)
+	return err
+}
+
+const pruneCommitFiles = `-- name: PruneCommitFiles :exec
+DELETE FROM commit_files WHERE pull_request_id = ?1
+AND sha || ':' || path NOT IN (SELECT value FROM json_each(CAST(?2 AS TEXT)))
+`
+
+type PruneCommitFilesParams struct {
+	PullRequestID int64
+	Keys          string
+}
+
+func (q *Queries) PruneCommitFiles(ctx context.Context, arg PruneCommitFilesParams) error {
+	_, err := q.db.ExecContext(ctx, pruneCommitFiles, arg.PullRequestID, arg.Keys)
+	return err
+}
+
+const pruneCommits = `-- name: PruneCommits :exec
+DELETE FROM commits WHERE pull_request_id = ?1
+AND sha NOT IN (SELECT value FROM json_each(CAST(?2 AS TEXT)))
+`
+
+type PruneCommitsParams struct {
+	PullRequestID int64
+	Keys          string
+}
+
+func (q *Queries) PruneCommits(ctx context.Context, arg PruneCommitsParams) error {
+	_, err := q.db.ExecContext(ctx, pruneCommits, arg.PullRequestID, arg.Keys)
+	return err
+}
+
+const pruneReactions = `-- name: PruneReactions :exec
+DELETE FROM reactions WHERE EXISTS
+ (SELECT 1 FROM comments c WHERE c.kind = reactions.comment_kind AND c.id = reactions.comment_id AND c.pull_request_id = ?1)
+AND CAST(id AS TEXT) NOT IN (SELECT value FROM json_each(CAST(?2 AS TEXT)))
+`
+
+type PruneReactionsParams struct {
+	PullRequestID int64
+	Keys          string
+}
+
+func (q *Queries) PruneReactions(ctx context.Context, arg PruneReactionsParams) error {
+	_, err := q.db.ExecContext(ctx, pruneReactions, arg.PullRequestID, arg.Keys)
+	return err
+}
+
+const pruneSuppressions = `-- name: PruneSuppressions :exec
+DELETE FROM suppressions WHERE pull_request_id = ?1
+AND path || ':' || line NOT IN (SELECT value FROM json_each(CAST(?2 AS TEXT)))
+`
+
+type PruneSuppressionsParams struct {
+	PullRequestID int64
+	Keys          string
+}
+
+func (q *Queries) PruneSuppressions(ctx context.Context, arg PruneSuppressionsParams) error {
+	_, err := q.db.ExecContext(ctx, pruneSuppressions, arg.PullRequestID, arg.Keys)
+	return err
 }
 
 const pullRequestNumbers = `-- name: PullRequestNumbers :many

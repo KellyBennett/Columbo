@@ -9,17 +9,19 @@ import (
 )
 
 type Querier interface {
-	// A run writes last_seen = its own start time on every row it saw, so any
-	// other value means the row was not seen this run, even within one second.
-	DeleteCommentsNotSeenSince(ctx context.Context, arg DeleteCommentsNotSeenSinceParams) error
-	DeleteCommitFilesNotSeenSince(ctx context.Context, arg DeleteCommitFilesNotSeenSinceParams) error
-	DeleteCommitsNotSeenSince(ctx context.Context, arg DeleteCommitsNotSeenSinceParams) error
-	DeleteReactionsNotSeenSince(ctx context.Context, arg DeleteReactionsNotSeenSinceParams) error
-	DeleteSuppressionsNotSeenSince(ctx context.Context, arg DeleteSuppressionsNotSeenSinceParams) error
 	FindingReactions(ctx context.Context) ([]FindingReactionsRow, error)
 	FindingRules(ctx context.Context) ([]*string, error)
+	InsertObservation(ctx context.Context, arg InsertObservationParams) error
 	// LIKE is ASCII case-insensitive; the caller decides which candidates are misses.
 	MissCandidates(ctx context.Context) ([]string, error)
+	Observations(ctx context.Context, arg ObservationsParams) ([]Observation, error)
+	// Current views are pruned by fetched IDs, so changes within one second do
+	// not survive merely because last_seen has second precision.
+	PruneComments(ctx context.Context, arg PruneCommentsParams) error
+	PruneCommitFiles(ctx context.Context, arg PruneCommitFilesParams) error
+	PruneCommits(ctx context.Context, arg PruneCommitsParams) error
+	PruneReactions(ctx context.Context, arg PruneReactionsParams) error
+	PruneSuppressions(ctx context.Context, arg PruneSuppressionsParams) error
 	PullRequestNumbers(ctx context.Context, arg PullRequestNumbersParams) ([]int64, error)
 	RepositoryScannedThrough(ctx context.Context, arg RepositoryScannedThroughParams) (*string, error)
 	// One row per stored record, so a caller can see what a run added, kept or removed.

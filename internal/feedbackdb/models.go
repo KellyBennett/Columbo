@@ -43,6 +43,14 @@ type CommitFile struct {
 	LastSeen      string
 }
 
+type Observation struct {
+	ID         string
+	Repository string
+	Number     int64
+	ObservedAt string
+	Payload    string
+}
+
 type PullRequest struct {
 	ID         int64
 	Repository string
