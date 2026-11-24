@@ -86,95 +86,171 @@ These are agent assessments for human review, not established ground truth.
 }
 
 func pilotSummary(root string, plan PilotPlan) error {
-	var report strings.Builder
-	report.WriteString("# Columbo pilot\n\nAgent assessments for human review. The sample is balanced by reaction group and rule, not representative of all findings. Reactions are recorded separately from design outcomes. A successful check does not prove behavioral equivalence.\n\n")
-	model := plan.Options.Model
-	if model == "" {
-		model = "agent default; see each trial's reported model"
+	results, err := readTrialResults(root, plan.Cases)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintf(&report, "Requested model: %s. Agent executable hash: %s. Analyzer hash: %s.\n\n", markdown(model), plan.Options.AgentSHA256, plan.Options.ColumboSHA256)
+	var report strings.Builder
+	report.WriteString(plan.Options.reportHeader())
 	report.WriteString(actualChangeReport(plan.ActualChangeCounts))
 	report.WriteString("| PR | Finding | Rule | Reactions | Evaluation | Design assessment | Behavior checks | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n")
-	results := map[string]TrialResult{}
 	for _, finding := range plan.Cases {
+		report.WriteString(finding.summaryRow(results[finding.ID]))
+	}
+	for _, finding := range plan.Cases {
+		report.WriteString(finding.details(results[finding.ID]))
+	}
+	report.WriteString(exclusionReport(plan.Excluded))
+	return writePrivate(filepath.Join(root, "report.md"), []byte(report.String()))
+}
+
+func readTrialResults(root string, cases []PilotCase) (map[string]TrialResult, error) {
+	results := map[string]TrialResult{}
+	for _, finding := range cases {
 		var result TrialResult
-		data, err := os.ReadFile(filepath.Join(root, "trials", finding.ID, "result.json"))
-		if err == nil {
+		if data, err := os.ReadFile(filepath.Join(root, "trials", finding.ID, "result.json")); err == nil {
 			if err := json.Unmarshal(data, &result); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		results[finding.ID] = result
-		outcome := "pending"
-		if result.Error != "" {
-			outcome = "incomplete"
-		}
-		if result.Complete {
-			outcome = result.Review.Candidate.Outcome
-			if !finding.explores() {
-				outcome = result.Review.Actual.Outcome
-			}
-		}
-		checks := "not verified"
-		passed, scope := result.BehaviorChecksPassed, result.BaselineTestScope
-		if last := lastTestScope(result.Attempts); last != nil {
-			scope = *last
-		}
-		if !finding.explores() {
-			passed = result.ActualBehaviorChecksPassed
-			if result.ActualTestScope != nil {
-				scope = *result.ActualTestScope
-			}
-		}
-		if passed {
-			checks = "passed; coverage limits apply"
-			if len(scope.Packages) > 0 {
-				checks = fmt.Sprintf("passed in %d affected packages; coverage limits apply", len(scope.Packages))
-			}
-		}
-		fmt.Fprintf(&report, "| %d | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", finding.PR, markdown(finding.CaseID), markdown(finding.Rule), finding.Reaction, finding.analysisMode(), outcome, checks, finding.ID)
 	}
-	for _, finding := range plan.Cases {
-		result := results[finding.ID]
-		fmt.Fprintf(&report, "\n## PR %d, %s\n\nRevision evidence: %s.\n\n", finding.PR, markdown(finding.CaseID), finding.RevisionEvidence)
-		if result.Error != "" {
-			fmt.Fprintf(&report, "Incomplete: %s\n\n", result.Error)
-		}
-		if !result.Complete {
-			continue
-		}
-		for _, revision := range []struct {
-			name  string
-			scope *TestScope
-		}{{"original", &result.BaselineTestScope}, {"experimental", lastTestScope(result.Attempts)}, {"later PR", result.ActualTestScope}} {
-			if revision.scope != nil && revision.scope.Reason != "" {
-				fmt.Fprintf(&report, "Tests covered in the %s revision: %s.\n\n", revision.name, revision.scope.describe())
-			}
-		}
-		for _, item := range []struct {
-			name     string
-			judgment Judgment
-		}{{"Finding", result.Review.Finding}, {"Suggested direction", result.Review.Direction}, {"Experimental refactoring", result.Review.Candidate}, {"Team response", result.Review.Actual}} {
-			fmt.Fprintf(&report, "%s: %s. %s\n\n", item.name, item.judgment.Outcome, item.judgment.Reason)
-			for _, evidence := range item.judgment.Evidence {
-				fmt.Fprintf(&report, "* %s\n", evidence)
-			}
-			report.WriteByte('\n')
-		}
-		for _, limitation := range result.Review.Limitations {
-			fmt.Fprintf(&report, "* Limitation: %s\n", limitation)
-		}
-		for _, gap := range finding.Latest.Gaps {
-			fmt.Fprintf(&report, "* Collection gap (%s): %s\n", gap.Source, gap.Reason)
+	return results, nil
+}
+
+func (o PilotOptions) reportHeader() string {
+	model := o.Model
+	if model == "" {
+		model = "agent default; see each trial's reported model"
+	}
+	return "# Columbo pilot\n\nAgent assessments for human review. The sample is balanced by reaction group and rule, not representative of all findings. Reactions are recorded separately from design outcomes. A successful check does not prove behavioral equivalence.\n\n" +
+		fmt.Sprintf("Requested model: %s. Agent executable hash: %s. Analyzer hash: %s.\n\n", markdown(model), o.AgentSHA256, o.ColumboSHA256)
+}
+
+func (c PilotCase) summaryRow(result TrialResult) string {
+	return fmt.Sprintf("| %d | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", c.PR, markdown(c.CaseID), markdown(c.Rule), c.Reaction, c.analysisMode(), c.outcome(result), c.verification(result), c.ID)
+}
+
+func (c PilotCase) outcome(result TrialResult) string {
+	switch {
+	case result.Complete && c.explores():
+		return result.Review.Candidate.Outcome
+	case result.Complete:
+		return result.Review.Actual.Outcome
+	case result.Error != "":
+		return "incomplete"
+	}
+	return "pending"
+}
+
+type verification struct {
+	passed bool
+	scope  TestScope
+}
+
+func (c PilotCase) verification(result TrialResult) verification {
+	if c.explores() {
+		return result.candidateVerification()
+	}
+	return result.actualVerification()
+}
+
+func (r TrialResult) candidateVerification() verification {
+	scope := r.BaselineTestScope
+	if last := lastTestScope(r.Attempts); last != nil {
+		scope = *last
+	}
+	return verification{passed: r.BehaviorChecksPassed, scope: scope}
+}
+
+func (r TrialResult) actualVerification() verification {
+	v := r.candidateVerification()
+	v.passed = r.ActualBehaviorChecksPassed
+	if r.ActualTestScope != nil {
+		v.scope = *r.ActualTestScope
+	}
+	return v
+}
+
+func (v verification) String() string {
+	switch {
+	case !v.passed:
+		return "not verified"
+	case len(v.scope.Packages) > 0:
+		return fmt.Sprintf("passed in %d affected packages; coverage limits apply", len(v.scope.Packages))
+	}
+	return "passed; coverage limits apply"
+}
+
+func (c PilotCase) details(result TrialResult) string {
+	var report strings.Builder
+	fmt.Fprintf(&report, "\n## PR %d, %s\n\nRevision evidence: %s.\n\n", c.PR, markdown(c.CaseID), c.RevisionEvidence)
+	if result.Error != "" {
+		fmt.Fprintf(&report, "Incomplete: %s\n\n", result.Error)
+	}
+	if result.Complete {
+		report.WriteString(result.testScopeReport())
+		report.WriteString(result.Review.report())
+		report.WriteString(c.Latest.gapReport())
+	}
+	return report.String()
+}
+
+func (r TrialResult) testScopeReport() string {
+	var report strings.Builder
+	for _, revision := range []struct {
+		name  string
+		scope *TestScope
+	}{{"original", &r.BaselineTestScope}, {"experimental", lastTestScope(r.Attempts)}, {"later PR", r.ActualTestScope}} {
+		if revision.scope != nil && revision.scope.Reason != "" {
+			fmt.Fprintf(&report, "Tests covered in the %s revision: %s.\n\n", revision.name, revision.scope.describe())
 		}
 	}
-	if len(plan.Excluded) > 0 {
-		report.WriteString("\n## Excluded findings\n\n")
-		for _, reason := range plan.Excluded {
-			fmt.Fprintf(&report, "* %s\n", reason)
-		}
+	return report.String()
+}
+
+func (r DesignReview) report() string {
+	var report strings.Builder
+	for _, item := range []struct {
+		name     string
+		judgment Judgment
+	}{{"Finding", r.Finding}, {"Suggested direction", r.Direction}, {"Experimental refactoring", r.Candidate}, {"Team response", r.Actual}} {
+		report.WriteString(item.judgment.report(item.name))
 	}
-	return writePrivate(filepath.Join(root, "report.md"), []byte(report.String()))
+	for _, limitation := range r.Limitations {
+		fmt.Fprintf(&report, "* Limitation: %s\n", limitation)
+	}
+	return report.String()
+}
+
+func (j Judgment) report(name string) string {
+	var report strings.Builder
+	fmt.Fprintf(&report, "%s: %s. %s\n\n", name, j.Outcome, j.Reason)
+	for _, evidence := range j.Evidence {
+		fmt.Fprintf(&report, "* %s\n", evidence)
+	}
+	report.WriteByte('\n')
+	return report.String()
+}
+
+func (o Observation) gapReport() string {
+	var report strings.Builder
+	for _, gap := range o.Gaps {
+		fmt.Fprintf(&report, "* Collection gap (%s): %s\n", gap.Source, gap.Reason)
+	}
+	return report.String()
+}
+
+func exclusionReport(excluded []string) string {
+	if len(excluded) == 0 {
+		return ""
+	}
+	var report strings.Builder
+	report.WriteString("\n## Excluded findings\n\n")
+	for _, reason := range excluded {
+		fmt.Fprintf(&report, "* %s\n", reason)
+	}
+	return report.String()
 }
 
 func markdown(text string) string {

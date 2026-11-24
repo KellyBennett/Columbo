@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 )
 
-// TestScope records which packages the default test check covered in one revision.
 type TestScope struct {
 	Packages []string `json:"packages,omitempty"`
 	Reason   string   `json:"reason"`
@@ -77,99 +77,177 @@ type listedPackage struct {
 	EmbedFiles, TestEmbedFiles, XTestEmbedFiles []string
 }
 
+func (p listedPackage) imports() []string {
+	return slices.Concat(p.Imports, p.TestImports, p.XTestImports)
+}
+
+func (p listedPackage) embeds() []string {
+	return slices.Concat(p.EmbedFiles, p.TestEmbedFiles, p.XTestEmbedFiles)
+}
+
 func affectedScope(ctx context.Context, options PilotOptions, checkoutDir string, changed []string) TestScope {
-	switch {
-	case options.FullTests:
-		return moduleScope("--full-tests")
-	case len(options.Checks) > 0:
-		return moduleScope(customChecks)
-	case len(changed) == 0:
-		return moduleScope("no changed files")
+	inModule, reason := options.scopedPaths(changed)
+	if reason != "" {
+		return moduleScope(reason)
 	}
-	module := filepath.Clean(options.Module)
-	var inModule []string
-	for _, path := range changed {
-		rel, err := filepath.Rel(module, filepath.FromSlash(path))
-		outside := err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
-		switch {
-		case slices.Contains([]string{"go.mod", "go.sum", "go.work"}, filepath.Base(path)):
-			return moduleScope(path + " changes module requirements")
-		case outside && filepath.Ext(path) == ".go":
-			return moduleScope(path + " is Go source outside the module")
-		case !outside:
-			inModule = append(inModule, rel)
-		}
-	}
-	packages, err := listPackages(ctx, options, filepath.Join(checkoutDir, module))
-	if err != nil {
-		return moduleScope("go list failed: " + err.Error())
-	}
-	root, err := filepath.EvalSymlinks(filepath.Join(checkoutDir, module))
+	graph, err := loadPackageGraph(ctx, options, filepath.Join(checkoutDir, filepath.Clean(options.Module)))
 	if err != nil {
 		return moduleScope(err.Error())
 	}
-	byDir, embedders, importers := map[string]string{}, map[string][]string{}, map[string][]string{}
+	return graph.scope(inModule)
+}
+
+func (o PilotOptions) scopedPaths(changed []string) ([]string, string) {
+	switch {
+	case o.FullTests:
+		return nil, "--full-tests"
+	case len(o.Checks) > 0:
+		return nil, customChecks
+	case len(changed) == 0:
+		return nil, "no changed files"
+	}
+	return modulePaths(filepath.Clean(o.Module), changed)
+}
+
+func modulePaths(module string, changed []string) ([]string, string) {
+	var inModule []string
+	for _, path := range changed {
+		rel, err := filepath.Rel(module, filepath.FromSlash(path))
+		inside := err == nil && !escapes(rel)
+		if reason := wholeModuleReason(path, inside); reason != "" {
+			return nil, reason
+		}
+		if inside {
+			inModule = append(inModule, rel)
+		}
+	}
+	return inModule, ""
+}
+
+func escapes(rel string) bool {
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func wholeModuleReason(path string, inModule bool) string {
+	switch {
+	case slices.Contains([]string{"go.mod", "go.sum", "go.work"}, filepath.Base(path)):
+		return path + " changes module requirements"
+	case !inModule && filepath.Ext(path) == ".go":
+		return path + " is Go source outside the module"
+	}
+	return ""
+}
+
+type packageGraph struct {
+	root      string
+	byDir     map[string]string
+	embedders map[string][]string
+	importers map[string][]string
+}
+
+func loadPackageGraph(ctx context.Context, options PilotOptions, dir string) (*packageGraph, error) {
+	packages, err := listPackages(ctx, options, dir)
+	if err != nil {
+		return nil, errors.New("go list failed: " + err.Error())
+	}
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, err
+	}
+	return newPackageGraph(root, packages), nil
+}
+
+func newPackageGraph(root string, packages []listedPackage) *packageGraph {
+	graph := &packageGraph{root: root, byDir: map[string]string{}, embedders: map[string][]string{}, importers: map[string][]string{}}
 	for _, pkg := range packages {
-		for _, imported := range slices.Concat(pkg.Imports, pkg.TestImports, pkg.XTestImports) {
-			importers[imported] = append(importers[imported], pkg.ImportPath)
-		}
-		dir, err := filepath.EvalSymlinks(pkg.Dir)
-		if err != nil {
-			continue
-		}
-		byDir[dir] = pkg.ImportPath
-		for _, embedded := range slices.Concat(pkg.EmbedFiles, pkg.TestEmbedFiles, pkg.XTestEmbedFiles) {
-			file := filepath.Join(dir, embedded)
-			embedders[file] = append(embedders[file], pkg.ImportPath)
-		}
+		graph.add(pkg)
 	}
-	var queue []string
-	for _, rel := range inModule {
-		file := filepath.Join(root, rel)
-		queue = append(queue, embedders[file]...)
-		for dir := filepath.Dir(file); strings.HasPrefix(dir, root); dir = filepath.Dir(dir) {
-			if pkg, ok := byDir[dir]; ok {
-				queue = append(queue, pkg)
-				break
-			}
-			if dir == root {
-				break
-			}
-		}
+	return graph
+}
+
+func (g *packageGraph) add(pkg listedPackage) {
+	for _, imported := range pkg.imports() {
+		g.importers[imported] = append(g.importers[imported], pkg.ImportPath)
 	}
-	if len(queue) == 0 {
+	dir, err := filepath.EvalSymlinks(pkg.Dir)
+	if err != nil {
+		return
+	}
+	g.byDir[dir] = pkg.ImportPath
+	for _, embedded := range pkg.embeds() {
+		file := filepath.Join(dir, embedded)
+		g.embedders[file] = append(g.embedders[file], pkg.ImportPath)
+	}
+}
+
+func (g *packageGraph) scope(changed []string) TestScope {
+	owners := g.owners(changed)
+	if len(owners) == 0 {
 		return moduleScope("no package encloses the changed files")
 	}
+	return TestScope{Packages: slices.Sorted(maps.Keys(g.dependents(owners))), Reason: "affected packages"}
+}
+
+func (g *packageGraph) owners(changed []string) []string {
+	var owners []string
+	for _, rel := range changed {
+		file := filepath.Join(g.root, rel)
+		owners = append(owners, g.embedders[file]...)
+		if pkg, ok := g.enclosing(file); ok {
+			owners = append(owners, pkg)
+		}
+	}
+	return owners
+}
+
+func (g *packageGraph) enclosing(file string) (string, bool) {
+	for dir := filepath.Dir(file); strings.HasPrefix(dir, g.root); dir = filepath.Dir(dir) {
+		if pkg, ok := g.byDir[dir]; ok {
+			return pkg, true
+		}
+		if dir == g.root {
+			break
+		}
+	}
+	return "", false
+}
+
+func (g *packageGraph) dependents(queue []string) map[string]bool {
 	affected := map[string]bool{}
 	for len(queue) > 0 {
 		pkg := queue[0]
 		queue = queue[1:]
 		if !affected[pkg] {
 			affected[pkg] = true
-			queue = append(queue, importers[pkg]...)
+			queue = append(queue, g.importers[pkg]...)
 		}
 	}
-	scope := TestScope{Reason: "affected packages"}
-	for _, pkg := range packages {
-		if affected[pkg.ImportPath] {
-			scope.Packages = append(scope.Packages, pkg.ImportPath)
-		}
-	}
-	slices.Sort(scope.Packages)
-	return scope
+	return affected
 }
 
 func listPackages(ctx context.Context, options PilotOptions, dir string) ([]listedPackage, error) {
 	ctx, cancel := context.WithTimeout(ctx, options.CheckTimeout)
 	defer cancel()
+	stdout, err := options.goList(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	return decodePackages(stdout)
+}
+
+func (o PilotOptions) goList(ctx context.Context, dir string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-json=ImportPath,Dir,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles", "./...")
 	var stdout, stderr bytes.Buffer
-	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, trialEnvironment(options.PassEnv...), &stdout, &stderr
+	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, trialEnvironment(o.PassEnv...), &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		return nil, errors.New(strings.TrimSpace(err.Error() + " " + stderr.String()))
 	}
+	return stdout.Bytes(), nil
+}
+
+func decodePackages(data []byte) ([]listedPackage, error) {
 	var packages []listedPackage
-	for decoder := json.NewDecoder(&stdout); ; {
+	for decoder := json.NewDecoder(bytes.NewReader(data)); ; {
 		var pkg listedPackage
 		if err := decoder.Decode(&pkg); err == io.EOF {
 			return packages, nil

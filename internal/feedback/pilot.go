@@ -17,7 +17,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -209,41 +208,6 @@ func Pilot(ctx context.Context, options PilotOptions, out io.Writer) error {
 		return fmt.Errorf("%d trials incomplete; rerun the same command to retry (earlier attempts retained)", failures)
 	}
 	return nil
-}
-
-func runPilotCases(ctx context.Context, options PilotOptions, cases []PilotCase, out io.Writer) (failures int) {
-	var mu sync.Mutex
-	var workers sync.WaitGroup
-	indices := make(chan int)
-	for range max(options.Parallel, 1) {
-		workers.Go(func() {
-			for i := range indices {
-				finding := cases[i]
-				label := fmt.Sprintf("[%d/%d] PR %d %s (%s)", i+1, len(cases), finding.PR, finding.CaseID, finding.Reaction)
-				mu.Lock()
-				fmt.Fprintln(out, label+": started")
-				mu.Unlock()
-				err := runPilotCase(ctx, options, finding)
-				mu.Lock()
-				if err != nil {
-					failures++
-					fmt.Fprintf(out, "%s: incomplete: %v\n", label, err)
-				} else {
-					fmt.Fprintln(out, label+": done")
-				}
-				mu.Unlock()
-			}
-		})
-	}
-	for i := 0; i < len(cases) && ctx.Err() == nil; i++ {
-		select {
-		case indices <- i:
-		case <-ctx.Done():
-		}
-	}
-	close(indices)
-	workers.Wait()
-	return failures
 }
 
 func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {

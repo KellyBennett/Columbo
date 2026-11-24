@@ -164,35 +164,44 @@ func (t *pilotTrial) save(err error, resultPath string) error {
 }
 
 func (t *pilotTrial) prepare(ctx context.Context) error {
-	options, finding, root, result := t.options, t.finding, t.root, &t.result
-	before, candidate := t.before, t.candidate
-	dirs := []string{before}
-	if finding.explores() {
-		dirs = append(dirs, candidate)
-	} else {
-		t.candidate = ""
+	if err := t.checkoutBefore(ctx); err != nil {
+		return err
 	}
-	for _, dir := range dirs {
-		if err := checkoutRevision(ctx, finding.Initial.GitDir, finding.Before, dir); err != nil {
-			return err
-		}
-	}
-	if err := checkModule(before, options.Module); err != nil {
+	if err := checkModule(t.before, t.options.Module); err != nil {
 		return err
 	}
 	if err := t.freezeConfig(); err != nil {
 		return err
 	}
-	if finding.comparesActual() {
-		paths, err := changedPaths(ctx, finding.Latest.GitDir, finding.Before, finding.After, "--")
-		if err != nil {
+	var err error
+	if t.actualPaths, err = t.finding.actualPaths(ctx); err != nil {
+		return err
+	}
+	t.result.ChangedPaths = t.actualPaths
+	t.result.BaselineColumbo = analyzeRevision(ctx, t.options, t.before, filepath.Join(t.root, "baseline-columbo"))
+	return nil
+}
+
+func (t *pilotTrial) checkoutBefore(ctx context.Context) error {
+	dirs := []string{t.before}
+	if t.finding.explores() {
+		dirs = append(dirs, t.candidate)
+	} else {
+		t.candidate = ""
+	}
+	for _, dir := range dirs {
+		if err := checkoutRevision(ctx, t.finding.Initial.GitDir, t.finding.Before, dir); err != nil {
 			return err
 		}
-		t.actualPaths = paths
 	}
-	result.ChangedPaths = t.actualPaths
-	result.BaselineColumbo = analyzeRevision(ctx, t.options, before, filepath.Join(root, "baseline-columbo"))
 	return nil
+}
+
+func (c PilotCase) actualPaths(ctx context.Context) ([]string, error) {
+	if !c.comparesActual() {
+		return nil, nil
+	}
+	return changedPaths(ctx, c.Latest.GitDir, c.Before, c.After, "--")
 }
 
 func (t *pilotTrial) assess(ctx context.Context) error {
@@ -221,33 +230,17 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 	if !t.finding.explores() {
 		return nil
 	}
-	options, finding, root, result, candidate := t.options, t.finding, t.root, &t.result, t.candidate
-	for attempt := 1; attempt <= options.Attempts; attempt++ {
-		prefix := filepath.Join(root, "attempt-"+strconv.Itoa(attempt))
-		refactoring := RefactoringAttempt{Number: attempt}
-		refactoring.Agent = invokeAgent(ctx, options, agentCall{phase: "refactor", dir: candidate, prompt: refactoringPrompt(finding, result.Assessment, result.Attempts), prefix: prefix + "-agent"})
-		paths, err := candidatePaths(ctx, candidate, finding.Before)
+	for number := 1; number <= t.options.Attempts; number++ {
+		prefix := filepath.Join(t.root, "attempt-"+strconv.Itoa(number))
+		refactoring, err := t.attempt(ctx, number, prefix)
 		if err != nil {
 			return err
 		}
-		result.ChangedPaths = unionPaths(paths, t.actualPaths)
-		refactoring.TestScope = affectedScope(ctx, options, candidate, result.ChangedPaths)
-		refactoring.Checks = validateRevision(ctx, options, candidate, prefix, refactoring.TestScope)
-		refactoring.Columbo = analyzeRevision(ctx, options, candidate, prefix+"-columbo")
-		patch, err := sourcePatch(ctx, candidate, finding.Before)
-		if err != nil {
-			return err
-		}
-		refactoring.HasChanges, refactoring.Patch = len(patch) != 0, prefix+".patch"
-		if err := writePrivate(refactoring.Patch, patch); err != nil {
-			return err
-		}
-		refactoring.PolicyChanges, refactoring.TestChanges = inspectPatch(string(patch))
-		result.Attempts = append(result.Attempts, refactoring)
+		t.result.Attempts = append(t.result.Attempts, refactoring)
 		if err := saveJSON(prefix+".json", refactoring); err != nil {
 			return err
 		}
-		if commandPassed(refactoring.Agent) && checksPassed(refactoring.Checks) && analyzerRan(refactoring.Columbo) && refactoring.HasChanges && len(refactoring.PolicyChanges) == 0 {
+		if refactoring.succeeded() {
 			break
 		}
 		if ctx.Err() != nil {
@@ -255,6 +248,48 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (RefactoringAttempt, error) {
+	refactoring := RefactoringAttempt{Number: number}
+	refactoring.Agent = invokeAgent(ctx, t.options, t.refactoringCall(prefix))
+	if err := t.collectCandidatePaths(ctx); err != nil {
+		return refactoring, err
+	}
+	refactoring.TestScope, refactoring.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
+	refactoring.Columbo = analyzeRevision(ctx, t.options, t.candidate, prefix+"-columbo")
+	return refactoring, refactoring.recordPatch(ctx, t.candidate, t.finding.Before, prefix)
+}
+
+func (t *pilotTrial) refactoringCall(prefix string) agentCall {
+	return agentCall{phase: "refactor", dir: t.candidate, prompt: refactoringPrompt(t.finding, t.result.Assessment, t.result.Attempts), prefix: prefix + "-agent"}
+}
+
+func (t *pilotTrial) collectCandidatePaths(ctx context.Context) error {
+	paths, err := candidatePaths(ctx, t.candidate, t.finding.Before)
+	if err != nil {
+		return err
+	}
+	t.result.ChangedPaths = unionPaths(paths, t.actualPaths)
+	return nil
+}
+
+func (a *RefactoringAttempt) recordPatch(ctx context.Context, dir, baseline, prefix string) error {
+	patch, err := sourcePatch(ctx, dir, baseline)
+	if err != nil {
+		return err
+	}
+	a.HasChanges, a.Patch = len(patch) != 0, prefix+".patch"
+	a.PolicyChanges, a.TestChanges = inspectPatch(string(patch))
+	return writePrivate(a.Patch, patch)
+}
+
+func (a RefactoringAttempt) verified() bool {
+	return commandPassed(a.Agent) && checksPassed(a.Checks) && a.HasChanges && len(a.PolicyChanges) == 0
+}
+
+func (a RefactoringAttempt) succeeded() bool {
+	return a.verified() && analyzerRan(a.Columbo)
 }
 
 func (t *pilotTrial) collectActual(ctx context.Context) error {
@@ -270,15 +305,16 @@ func (t *pilotTrial) collectActual(ctx context.Context) error {
 }
 
 func (t *pilotTrial) validateBaseline(ctx context.Context) error {
-	result := &t.result
-	result.BaselineTestScope = affectedScope(ctx, t.options, t.before, result.ChangedPaths)
-	result.BaselineChecks = validateRevision(ctx, t.options, t.before, filepath.Join(t.root, "baseline"), result.BaselineTestScope)
-	result.ActualBehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(result.ActualChecks)
-	if attempts := result.Attempts; len(attempts) > 0 {
-		last := attempts[len(attempts)-1]
-		result.BehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(last.Checks) && commandPassed(last.Agent) && last.HasChanges && len(last.PolicyChanges) == 0
-	}
+	t.result.BaselineTestScope, t.result.BaselineChecks = t.options.validateRevision(ctx, t.before, filepath.Join(t.root, "baseline"), t.result.ChangedPaths)
+	t.result.recordBehaviorChecks()
 	return nil
+}
+
+func (r *TrialResult) recordBehaviorChecks() {
+	r.ActualBehaviorChecksPassed = checksPassed(r.BaselineChecks) && checksPassed(r.ActualChecks)
+	if len(r.Attempts) > 0 {
+		r.BehaviorChecksPassed = checksPassed(r.BaselineChecks) && r.Attempts[len(r.Attempts)-1].verified()
+	}
 }
 
 func (t *pilotTrial) checkoutActual(ctx context.Context) error {
@@ -288,15 +324,17 @@ func (t *pilotTrial) checkoutActual(ctx context.Context) error {
 		return err
 	}
 	result.ActualAncestry = finding.actualAncestry(ctx)
-	result.ActualColumbo = new(CommandResult)
-	*result.ActualColumbo = analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
-	scope := affectedScope(ctx, t.options, t.actual, result.ChangedPaths)
-	result.ActualTestScope = &scope
-	result.ActualChecks = validateRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual"), scope)
+	t.validateActual(ctx)
 	if patch, err := finding.actualPatch(ctx); err == nil {
 		return writePrivate(filepath.Join(t.root, "actual.patch"), []byte(patch))
 	}
 	return nil
+}
+
+func (t *pilotTrial) validateActual(ctx context.Context) {
+	columbo := analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
+	scope, checks := t.options.validateRevision(ctx, t.actual, filepath.Join(t.root, "actual"), t.result.ChangedPaths)
+	t.result.ActualColumbo, t.result.ActualTestScope, t.result.ActualChecks = &columbo, &scope, checks
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {
@@ -379,19 +417,24 @@ func checkModule(root, module string) error {
 		return err
 	}
 	rel, err := filepath.Rel(root, path)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if err != nil || escapes(rel) {
 		return fmt.Errorf("module escapes trial checkout")
 	}
 	return nil
 }
 
-func validateRevision(ctx context.Context, options PilotOptions, dir, prefix string, scope TestScope) []CommandResult {
-	if err := checkModule(dir, options.Module); err != nil {
-		return []CommandResult{{Exit: -1, Error: err.Error()}}
+func (o PilotOptions) validateRevision(ctx context.Context, dir, prefix string, changed []string) (TestScope, []CommandResult) {
+	scope := affectedScope(ctx, o, dir, changed)
+	if err := checkModule(dir, o.Module); err != nil {
+		return scope, []CommandResult{{Exit: -1, Error: err.Error()}}
 	}
+	return scope, o.runChecks(ctx, dir, prefix, scope)
+}
+
+func (o PilotOptions) runChecks(ctx context.Context, dir, prefix string, scope TestScope) []CommandResult {
 	var results []CommandResult
-	for i, check := range options.checkCommands(scope) {
-		results = append(results, runTrialCommand(ctx, filepath.Join(dir, options.Module), []string{"/bin/sh", "-c", check}, "", prefix+"-check-"+strconv.Itoa(i+1), options.CheckTimeout, options.PassEnv...))
+	for i, check := range o.checkCommands(scope) {
+		results = append(results, runTrialCommand(ctx, filepath.Join(dir, o.Module), []string{"/bin/sh", "-c", check}, "", prefix+"-check-"+strconv.Itoa(i+1), o.CheckTimeout, o.PassEnv...))
 	}
 	return results
 }
