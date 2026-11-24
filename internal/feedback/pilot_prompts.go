@@ -55,7 +55,8 @@ Earlier attempt records (read their logs if needed):
 %s
 
 Change the code in this checkout. Preserve behavior and public contracts. Add focused behavior tests when coverage leaves a gap. Do not delete, skip or weaken existing assertions. Do not change Columbo configuration, add suppressions, game metrics, edit .git, make commits or push anything. Keep changes limited to this investigation. Explain when a broader refactoring is necessary rather than silently expanding scope.
-The runner will independently build, vet, test and rerun Columbo after you finish. If no useful refactoring is found within the limit, explain the failed direction and leave evidence of the attempt. A failed attempt is not proof that no useful design exists.
+Bash permits only these commands: go build, go vet, go test, gofmt, go fmt and columbo. Format the Go files you change with gofmt.
+The runner will independently build, vet, test, check gofmt -l on changed Go files and rerun Columbo after you finish. If no useful refactoring is found within the limit, explain the failed direction and leave evidence of the attempt. A failed attempt is not proof that no useful design exists.
 Respond with a short account of the change, validation and remaining uncertainty. No JSON is required in this phase.
 `, finding.Before, finding.CaseID, finding.Rule, investigationText(finding.Finding.Body), data, previous)
 }

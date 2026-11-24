@@ -44,7 +44,7 @@ func claudeArgs(options PilotOptions, call agentCall) []string {
 	tools, allowed := "Read,Glob,Grep,Bash", "Read,Glob,Grep,Bash(git show:*),Bash(git log:*),Bash(git diff:*)"+call.gitPermissions()
 	if call.phase == "refactor" {
 		tools = "Read,Edit,Write,Glob,Grep,Bash"
-		allowed = "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(columbo:*)"
+		allowed = "Read,Edit,Write,Glob,Grep,Bash(go build:*),Bash(go vet:*),Bash(go test:*),Bash(gofmt:*),Bash(go fmt:*),Bash(columbo:*)"
 	}
 	format := "text"
 	if call.schema != "" {

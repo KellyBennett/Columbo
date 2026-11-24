@@ -51,6 +51,8 @@ type RefactoringAttempt struct {
 	PolicyChanges []string        `json:"policy_changes,omitempty"`
 	TestChanges   []string        `json:"test_changes,omitempty"`
 	HasChanges    bool            `json:"has_changes"`
+	Gofmt         *CommandResult  `json:"gofmt,omitempty"`
+	Unformatted   []string        `json:"unformatted,omitempty"`
 }
 
 type TrialResult struct {
@@ -253,9 +255,12 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (RefactoringAttempt, error) {
 	refactoring := RefactoringAttempt{Number: number}
 	refactoring.Agent = invokeAgent(ctx, t.options, t.refactoringCall(prefix))
-	if err := t.collectCandidatePaths(ctx); err != nil {
+	own, err := candidatePaths(ctx, t.candidate, t.finding.Before)
+	if err != nil {
 		return refactoring, err
 	}
+	t.result.ChangedPaths = unionPaths(own, t.actualPaths)
+	refactoring.checkFormatting(ctx, t.options, t.candidate, own, prefix)
 	refactoring.TestScope, refactoring.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
 	refactoring.Columbo = analyzeRevision(ctx, t.options, t.candidate, prefix+"-columbo")
 	return refactoring, refactoring.recordPatch(ctx, t.candidate, t.finding.Before, prefix)
@@ -263,15 +268,6 @@ func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (Re
 
 func (t *pilotTrial) refactoringCall(prefix string) agentCall {
 	return agentCall{phase: "refactor", dir: t.candidate, prompt: refactoringPrompt(t.finding, t.result.Assessment, t.result.Attempts), prefix: prefix + "-agent"}
-}
-
-func (t *pilotTrial) collectCandidatePaths(ctx context.Context) error {
-	paths, err := candidatePaths(ctx, t.candidate, t.finding.Before)
-	if err != nil {
-		return err
-	}
-	t.result.ChangedPaths = unionPaths(paths, t.actualPaths)
-	return nil
 }
 
 func (a *RefactoringAttempt) recordPatch(ctx context.Context, dir, baseline, prefix string) error {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -239,6 +240,14 @@ func TestDefaultAgentRequestsStructuredOutputAndNarrowReviewCommands(t *testing.
 	require.NotContains(t, allowed, "Bash(git -C:*)")
 	require.Contains(t, strings.Join(args, " "), "--safe-mode --restricted")
 	require.Contains(t, readOnlyGitCommands(trial.before, trial.actual), "git -C "+quoteShell(trial.actual)+" log -5 --oneline")
+	refactorArgs := claudeArgs(trial.options, agentCall{phase: "refactor", dir: trial.before})
+	refactorAllowed := strings.Split(refactorArgs[slices.Index(refactorArgs, "--allowedTools")+1], ",")
+	require.Contains(t, refactorAllowed, "Bash(gofmt:*)", "a refactor-phase gofmt -l . must be allowed")
+	require.Contains(t, refactorAllowed, "Bash(go fmt:*)")
+	require.NotContains(t, strings.Split(allowed, ","), "Bash(gofmt:*)", "read-only phases must not format source")
+	for _, command := range []string{"go build", "go vet", "go test", "gofmt", "go fmt", "columbo"} {
+		require.Contains(t, refactoringPrompt(PilotCase{}, DesignAssessment{}, nil), command)
+	}
 }
 
 func TestReviewQualifiesTeamOutcomeByActualChangeEvidence(t *testing.T) {
@@ -275,4 +284,19 @@ func TestReviewQualifiesUnverifiedCandidate(t *testing.T) {
 	trial.qualifyCandidate()
 	require.Equal(t, "inconclusive", trial.result.Review.Candidate.Outcome)
 	require.Len(t, trial.result.Review.Limitations, 1)
+}
+
+func TestRefactoringAttemptRecordsUnformattedChangedGoFiles(t *testing.T) {
+	source, before, _ := newHistory(t)
+	root := t.TempDir()
+	candidate := filepath.Join(root, "candidate")
+	require.NoError(t, checkoutRevision(context.Background(), source, before, candidate))
+	agent := executable(t, filepath.Join(t.TempDir(), "agent"), "cat >/dev/null\nprintf 'package p\\nfunc Sum(a,b int) int {\\nreturn a+b }\\n' > f.go\nprintf 'package p\\n\\nfunc Neat() {}\\n' > neat.go\nrm f_test.go\necho notes > notes.txt\n")
+	trial := pilotTrial{options: PilotOptions{Agent: agent, AgentArgs: stringList{"{phase}"}, Checks: stringList{"true"}, Module: ".", Timeout: 5 * time.Second, CheckTimeout: 30 * time.Second}, finding: PilotCase{Before: before, Reaction: "thumbs-down"}, root: root, candidate: candidate}
+	attempt, err := trial.attempt(context.Background(), 1, filepath.Join(root, "attempt-1"))
+	require.NoError(t, err)
+	require.NotNil(t, attempt.Gofmt)
+	require.Equal(t, []string{"gofmt", "-l", "--", "f.go", "neat.go"}, attempt.Gofmt.Args)
+	require.Equal(t, []string{"f.go"}, attempt.Unformatted)
+	require.True(t, attempt.verified(), "formatting is recorded evidence, not a verification gate")
 }
