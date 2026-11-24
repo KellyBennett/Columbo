@@ -55,8 +55,6 @@ func changedPaths(ctx context.Context, dir string, args ...string) ([]string, er
 	return slices.DeleteFunc(strings.Split(names, "\x00"), func(name string) bool { return name == "" }), nil
 }
 
-// intendToAddUntracked makes files the agent created visible to git diff
-// against a baseline commit without staging their content.
 func intendToAddUntracked(ctx context.Context, dir string) error {
 	_, err := git(ctx, dir, "add", "--intent-to-add", "--", ".")
 	return err

@@ -255,23 +255,34 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 }
 
 func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (RefactoringAttempt, error) {
-	refactoring := RefactoringAttempt{Number: number}
-	refactoring.Agent = invokeAgent(ctx, t.options, t.refactoringCall(prefix))
-	own, err := candidatePaths(ctx, t.candidate, t.finding.Before)
-	if err != nil {
+	refactoring := RefactoringAttempt{Number: number, Agent: invokeAgent(ctx, t.options, t.refactoringCall(prefix))}
+	if err := t.evaluateCandidate(ctx, &refactoring, prefix); err != nil {
 		return refactoring, err
 	}
-	t.result.ChangedPaths = unionPaths(own, t.actualPaths)
-	refactoring.checkFormatting(ctx, t.options, t.candidate, own, prefix)
-	refactoring.TestScope, refactoring.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
-	refactoring.Columbo = analyzeRevision(ctx, t.options, t.candidate, prefix+"-columbo")
-	renames, err := candidateRenames(ctx, t.candidate, t.finding.Before, t.options.Module)
-	refactoring.Target = t.observeTarget(refactoring.Columbo, prefix+"-columbo", renames, err)
 	return refactoring, refactoring.recordPatch(ctx, t.candidate, t.finding.Before, prefix)
+}
+
+func (t *pilotTrial) evaluateCandidate(ctx context.Context, attempt *RefactoringAttempt, prefix string) error {
+	own, err := t.collectCandidatePaths(ctx)
+	if err != nil {
+		return err
+	}
+	attempt.Gofmt, attempt.Unformatted = t.options.unformattedFiles(ctx, t.candidate, prefix, own)
+	attempt.TestScope, attempt.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
+	attempt.Columbo, attempt.Target = t.analyzeWithTarget(ctx, t.candidate, prefix+"-columbo", t.candidateRenames)
+	return nil
 }
 
 func (t *pilotTrial) refactoringCall(prefix string) agentCall {
 	return agentCall{phase: "refactor", dir: t.candidate, prompt: refactoringPrompt(t.finding, t.result.Assessment, t.result.Attempts), prefix: prefix + "-agent"}
+}
+
+func (t *pilotTrial) collectCandidatePaths(ctx context.Context) ([]string, error) {
+	own, err := candidatePaths(ctx, t.candidate, t.finding.Before)
+	if err == nil {
+		t.result.ChangedPaths = unionPaths(own, t.actualPaths)
+	}
+	return own, err
 }
 
 func (a *RefactoringAttempt) recordPatch(ctx context.Context, dir, baseline, prefix string) error {
@@ -332,12 +343,10 @@ func (t *pilotTrial) checkoutActual(ctx context.Context) error {
 }
 
 func (t *pilotTrial) validateActual(ctx context.Context) {
-	prefix := filepath.Join(t.root, "actual-columbo")
-	columbo := analyzeRevision(ctx, t.options, t.actual, prefix)
+	columbo, target := t.analyzeWithTarget(ctx, t.actual, filepath.Join(t.root, "actual-columbo"), t.actualRenames)
+	t.result.ActualColumbo, t.result.ActualTarget = &columbo, target
 	scope, checks := t.options.validateRevision(ctx, t.actual, filepath.Join(t.root, "actual"), t.result.ChangedPaths)
-	t.result.ActualColumbo, t.result.ActualTestScope, t.result.ActualChecks = &columbo, &scope, checks
-	renames, err := renamedPaths(ctx, t.finding.Latest.GitDir, t.options.Module, t.finding.Before, t.finding.After, "--")
-	t.result.ActualTarget = t.observeTarget(columbo, prefix, renames, err)
+	t.result.ActualTestScope, t.result.ActualChecks = &scope, checks
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {

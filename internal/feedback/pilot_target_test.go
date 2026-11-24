@@ -51,7 +51,7 @@ func Audit(orgID string, sectionID string, termID string)  {}
 		{"refactor leaves the target untouched", clumpBaseline + "\nfunc Unrelated() {}\n", TargetPersisted, 4},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			outcome := classifyTarget(target.ID, baseline, analyzeSource(t, test.source), nil)
+			outcome := newTargetSearch(baseline, analyzeSource(t, test.source), nil).classify(target.ID)
 			require.Equal(t, test.status, outcome.Status, outcome.Reason)
 			require.Equal(t, target.ID, outcome.Baseline.ID)
 			require.Empty(t, outcome.NewCases)
@@ -88,7 +88,7 @@ func analyzeSource(t *testing.T, source string) []AnalyzedCase {
 	cases, err := loadAnalyzedCases(context.Background(), snapshot.Queries())
 	require.NoError(t, err)
 	require.NoError(t, saveJSON(casesPath(prefix), cases))
-	loaded, err := readAnalyzedCases(CommandResult{Exit: 1, EvidenceValid: true}, prefix)
+	loaded, err := readValidAnalyzedCases(CommandResult{Exit: 1, EvidenceValid: true}, prefix)
 	require.NoError(t, err)
 	return loaded
 }
@@ -120,25 +120,25 @@ func TestTargetSuccessorExcludesPreexistingCasesAndCountsNewOnes(t *testing.T) {
 	spawned := syntheticCase("C-spawned", "long-function", "a.go", "p.A")
 	baseline := []AnalyzedCase{target, neighbor}
 
-	outcome := classifyTarget("C-target", baseline, []AnalyzedCase{neighbor, spawned}, nil)
+	outcome := newTargetSearch(baseline, []AnalyzedCase{neighbor, spawned}, nil).classify("C-target")
 	require.Equal(t, TargetCleared, outcome.Status, "a pre-existing same-smell case in the same file is not the successor")
 	require.Equal(t, []string{"C-spawned"}, outcome.NewCases)
 
 	pathOnly := syntheticCase("C-path", "data-clump", "a.go", "p.X", "p.Y", "p.Z")
 	symbolOverlap := syntheticCase("C-symbols", "data-clump", "b.go", "p.B", "p.C", "p.D")
-	outcome = classifyTarget("C-target", baseline, []AnalyzedCase{neighbor, pathOnly, symbolOverlap, spawned}, nil)
+	outcome = newTargetSearch(baseline, []AnalyzedCase{neighbor, pathOnly, symbolOverlap, spawned}, nil).classify("C-target")
 	require.Equal(t, TargetPersistedChanged, outcome.Status)
 	require.Equal(t, "C-symbols", outcome.Match.ID, "symbol overlap is preferred over a primary-file match")
 	require.Equal(t, []string{"C-path", "C-spawned"}, outcome.NewCases)
 
 	moved := syntheticCase("C-moved", "data-clump", "renamed.go", "p.X", "p.Y", "p.Z")
-	outcome = classifyTarget("C-target", baseline, []AnalyzedCase{moved}, map[string]string{"a.go": "renamed.go"})
+	outcome = newTargetSearch(baseline, []AnalyzedCase{moved}, map[string]string{"a.go": "renamed.go"}).classify("C-target")
 	require.Equal(t, TargetPersistedChanged, outcome.Status)
 	require.Equal(t, "C-moved", outcome.Match.ID)
 	require.Contains(t, outcome.Reason, "primary file renamed.go")
-	require.Equal(t, TargetCleared, classifyTarget("C-target", baseline, []AnalyzedCase{moved}, nil).Status)
+	require.Equal(t, TargetCleared, newTargetSearch(baseline, []AnalyzedCase{moved}, nil).classify("C-target").Status)
 
-	outcome = classifyTarget("C-missing", baseline, []AnalyzedCase{target, spawned}, nil)
+	outcome = newTargetSearch(baseline, []AnalyzedCase{target, spawned}, nil).classify("C-missing")
 	require.Equal(t, TargetUnknown, outcome.Status)
 	require.Contains(t, outcome.Reason, "rule 1")
 }
@@ -163,9 +163,21 @@ func TestRenamedPathsAreModuleRelative(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mod", "old.go"), []byte(body), 0o600))
 	before := commitFiles(t, dir)
 	require.NoError(t, os.Rename(filepath.Join(dir, "mod", "old.go"), filepath.Join(dir, "mod", "new.go")))
-	renames, err := candidateRenames(context.Background(), dir, before, "mod")
+	trial := pilotTrial{candidate: dir, finding: PilotCase{Before: before}, options: PilotOptions{Module: "mod"}}
+	renames, err := trial.candidateRenames(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"old.go": "new.go"}, renames)
+	require.Equal(t, pathRenames{"old.go": "new.go"}, renames)
+}
+
+func TestParseRenamesKeepsModuleRenamesOnly(t *testing.T) {
+	renames, err := parseRenames("M\x00mod/kept.go\x00R100\x00mod/old.go\x00mod/new.go\x00C90\x00mod/a.go\x00mod/b.go\x00R100\x00other/x.go\x00mod/x.go\x00", "mod")
+	require.NoError(t, err)
+	require.Equal(t, pathRenames{"old.go": "new.go"}, renames)
+	empty, err := parseRenames("", "mod")
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	_, err = parseRenames("R100\x00mod/old.go\x00", "mod")
+	require.ErrorContains(t, err, "truncated git rename record")
 }
 
 func TestReportShowsRunnerObservedTargetSeparatelyFromAgentJudgment(t *testing.T) {
@@ -175,8 +187,8 @@ func TestReportShowsRunnerObservedTargetSeparatelyFromAgentJudgment(t *testing.T
 	target.Metrics = []snapshotdb.SummaryMetricsRow{{Kind: "clump-occurrences", NumericValue: 4.0, LimitValue: limit}}
 	successor := syntheticCase("C-successor", "data-clump", "a.go", "p.B", "p.C")
 	successor.Metrics = []snapshotdb.SummaryMetricsRow{{Kind: "clump-occurrences", NumericValue: 3.0, LimitValue: limit}}
-	narrowed := classifyTarget("C-target", []AnalyzedCase{target}, []AnalyzedCase{successor, syntheticCase("C-spawned", "long-function", "b.go", "p.D")}, nil)
-	untouched := classifyTarget("C-target", []AnalyzedCase{target}, []AnalyzedCase{target}, nil)
+	narrowed := newTargetSearch([]AnalyzedCase{target}, []AnalyzedCase{successor, syntheticCase("C-spawned", "long-function", "b.go", "p.D")}, nil).classify("C-target")
+	untouched := newTargetSearch([]AnalyzedCase{target}, []AnalyzedCase{target}, nil).classify("C-target")
 	explored := PilotCase{ID: "explored", PR: 1, CaseID: "C-target", Rule: "data-clump", Reaction: "thumbs-down"}
 	actual := PilotCase{ID: "actual", PR: 2, CaseID: "C-target", Rule: "data-clump", Reaction: "thumbs-up"}
 	unobserved := PilotCase{ID: "unobserved", PR: 3, CaseID: "C-other", Rule: "data-clump", Reaction: "unreacted"}

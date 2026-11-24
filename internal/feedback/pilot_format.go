@@ -8,20 +8,21 @@ import (
 	"strings"
 )
 
-// checkFormatting records which of the candidate's own changed Go files gofmt
-// would rewrite. It is evidence for the report, not a verification gate.
-func (a *RefactoringAttempt) checkFormatting(ctx context.Context, options PilotOptions, dir string, changed []string, prefix string) {
+func (o PilotOptions) unformattedFiles(ctx context.Context, dir, prefix string, changed []string) (*CommandResult, []string) {
 	files := existingGoFiles(dir, changed)
 	if len(files) == 0 {
-		return
+		return nil, nil
 	}
-	command := runTrialCommand(ctx, dir, append([]string{"gofmt", "-l", "--"}, files...), "", prefix+"-gofmt", options.CheckTimeout, options.PassEnv...)
-	a.Gofmt = &command
-	listed, err := os.ReadFile(command.Stdout)
+	command := runTrialCommand(ctx, dir, append([]string{"gofmt", "-l", "--"}, files...), "", prefix+"-gofmt", o.CheckTimeout, o.PassEnv...)
+	return &command, listedFiles(command.Stdout)
+}
+
+func listedFiles(path string) []string {
+	listed, err := os.ReadFile(path)
 	if err != nil {
-		return
+		return nil
 	}
-	a.Unformatted = slices.DeleteFunc(strings.Split(string(listed), "\n"), func(name string) bool { return name == "" })
+	return slices.DeleteFunc(strings.Split(string(listed), "\n"), func(name string) bool { return name == "" })
 }
 
 func existingGoFiles(dir string, paths []string) []string {

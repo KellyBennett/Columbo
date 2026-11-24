@@ -13,13 +13,10 @@ import (
 	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
-// CaseDeclaration is one declaration a case involves, as case_declarations records it.
 type CaseDeclaration struct {
 	Symbol, Path, Role string
 }
 
-// AnalyzedCase is one analyzer case with the declarations it involves and its
-// measured values. It is the shape of every <prefix>.cases.json file.
 type AnalyzedCase struct {
 	snapshotdb.SummaryCasesRow
 	Declarations []CaseDeclaration
@@ -35,8 +32,6 @@ const (
 	TargetUnknown          TargetStatus = "unknown"
 )
 
-// TargetOutcome is the runner's own observation of what a revision did to the
-// targeted finding. It is independent of any agent's judgment.
 type TargetOutcome struct {
 	Status   TargetStatus  `json:"status"`
 	Reason   string        `json:"reason"`
@@ -50,30 +45,46 @@ func loadAnalyzedCases(ctx context.Context, queries snapshotdb.Querier) ([]Analy
 	if err != nil {
 		return nil, err
 	}
+	declarations, err := loadCaseDeclarations(ctx, queries)
+	if err != nil {
+		return nil, err
+	}
+	return declarations.measuredCases(ctx, queries, rows)
+}
+
+type caseDeclarations map[string][]CaseDeclaration
+
+func loadCaseDeclarations(ctx context.Context, queries snapshotdb.Querier) (caseDeclarations, error) {
 	links, err := queries.SummaryCaseDeclarations(ctx)
 	if err != nil {
 		return nil, err
 	}
-	declarations := map[string][]CaseDeclaration{}
+	declarations := caseDeclarations{}
 	for _, link := range links {
 		declarations[link.CaseID] = append(declarations[link.CaseID], CaseDeclaration{Symbol: link.Symbol, Path: link.Path, Role: link.Role})
 	}
+	return declarations, nil
+}
+
+func (d caseDeclarations) measuredCases(ctx context.Context, queries snapshotdb.Querier, rows []snapshotdb.SummaryCasesRow) ([]AnalyzedCase, error) {
 	cases := make([]AnalyzedCase, len(rows))
 	for i, row := range rows {
-		metrics, err := queries.SummaryMetrics(ctx, snapshotdb.SummaryMetricsParams{CaseID: row.ID})
-		if err != nil {
+		cases[i] = AnalyzedCase{SummaryCasesRow: row, Declarations: d[row.ID]}
+		if err := cases[i].loadMetrics(ctx, queries); err != nil {
 			return nil, err
 		}
-		cases[i] = AnalyzedCase{SummaryCasesRow: row, Declarations: declarations[row.ID], Metrics: metrics}
 	}
 	return cases, nil
 }
 
+func (c *AnalyzedCase) loadMetrics(ctx context.Context, queries snapshotdb.Querier) (err error) {
+	c.Metrics, err = queries.SummaryMetrics(ctx, snapshotdb.SummaryMetricsParams{CaseID: c.ID})
+	return err
+}
+
 func casesPath(prefix string) string { return prefix + ".cases.json" }
 
-// readAnalyzedCases loads the cases an analyzer run recorded, refusing runs
-// without valid evidence so that missing data stays unknown.
-func readAnalyzedCases(result CommandResult, prefix string) ([]AnalyzedCase, error) {
+func readValidAnalyzedCases(result CommandResult, prefix string) ([]AnalyzedCase, error) {
 	if !analyzerRan(result) {
 		return nil, errors.New("analyzer run at " + prefix + " lacks valid evidence")
 	}
@@ -85,13 +96,11 @@ func readAnalyzedCases(result CommandResult, prefix string) ([]AnalyzedCase, err
 	return cases, json.Unmarshal(data, &cases)
 }
 
-// observeTarget classifies the target in one revision against the baseline
-// analysis. Any missing evidence yields unknown.
-func (t *pilotTrial) observeTarget(revision CommandResult, prefix string, renames map[string]string, renameErr error) *TargetOutcome {
-	baseline, err := readAnalyzedCases(t.result.BaselineColumbo, filepath.Join(t.root, "baseline-columbo"))
+func (t *pilotTrial) observeTarget(revision CommandResult, prefix string, renames pathRenames, renameErr error) *TargetOutcome {
+	baseline, err := readValidAnalyzedCases(t.result.BaselineColumbo, filepath.Join(t.root, "baseline-columbo"))
 	var current []AnalyzedCase
 	if err == nil {
-		current, err = readAnalyzedCases(revision, prefix)
+		current, err = readValidAnalyzedCases(revision, prefix)
 	}
 	if err == nil && renameErr != nil {
 		err = fmt.Errorf("rename detection failed: %w", renameErr)
@@ -99,67 +108,104 @@ func (t *pilotTrial) observeTarget(revision CommandResult, prefix string, rename
 	if err != nil {
 		return &TargetOutcome{Status: TargetUnknown, Reason: "evidence unavailable: " + err.Error()}
 	}
-	outcome := classifyTarget(t.finding.CaseID, baseline, current, renames)
+	outcome := newTargetSearch(baseline, current, renames).classify(t.finding.CaseID)
 	return &outcome
 }
 
-func classifyTarget(targetID string, baseline, revision []AnalyzedCase, renames map[string]string) TargetOutcome {
+func (t *pilotTrial) analyzeWithTarget(ctx context.Context, dir, prefix string, renames func(context.Context) (pathRenames, error)) (CommandResult, *TargetOutcome) {
+	columbo := analyzeRevision(ctx, t.options, dir, prefix)
+	found, err := renames(ctx)
+	return columbo, t.observeTarget(columbo, prefix, found, err)
+}
+
+type targetSearch struct {
+	baseline map[string]AnalyzedCase
+	revision []AnalyzedCase
+	renames  pathRenames
+}
+
+func newTargetSearch(baseline, revision []AnalyzedCase, renames pathRenames) targetSearch {
 	known := map[string]AnalyzedCase{}
 	for _, c := range baseline {
 		known[c.ID] = c
 	}
-	target, ok := known[targetID]
+	return targetSearch{baseline: known, revision: revision, renames: renames}
+}
+
+func (s targetSearch) classify(targetID string) TargetOutcome {
+	target, ok := s.baseline[targetID]
 	if !ok {
-		return TargetOutcome{Status: TargetUnknown, Reason: "rule 1: the target case is absent from the baseline analysis", NewCases: newCaseIDs(revision, known, "")}
+		return TargetOutcome{Status: TargetUnknown, Reason: "rule 1: the target case is absent from the baseline analysis", NewCases: s.newCaseIDs("")}
 	}
-	outcome := TargetOutcome{Baseline: &target}
-	if i := slices.IndexFunc(revision, func(c AnalyzedCase) bool { return c.ID == targetID }); i >= 0 {
-		outcome.Status, outcome.Match = TargetPersisted, &revision[i]
-		outcome.Reason = "rule 2: the same case ID is present in this revision"
-	} else if match, reason := successor(target, revision, known, renames); match != nil {
-		outcome.Status, outcome.Match, outcome.Reason = TargetPersistedChanged, match, reason
-	} else {
-		outcome.Status = TargetCleared
-		outcome.Reason = "rule 4: no same-ID case, and no new " + target.Smell + " case shares a declaration symbol or the primary file"
-	}
-	matchID := ""
-	if outcome.Match != nil {
-		matchID = outcome.Match.ID
-	}
-	outcome.NewCases = newCaseIDs(revision, known, matchID)
+	outcome := s.follow(target)
+	outcome.NewCases = s.newCaseIDs(outcome.matchID())
 	return outcome
 }
 
-// successor finds the revision case that carries the target forward under a
-// new ID. Only new cases of the same smell qualify, so a pre-existing case in
-// the same file cannot pose as the target.
-func successor(target AnalyzedCase, revision []AnalyzedCase, known map[string]AnalyzedCase, renames map[string]string) (*AnalyzedCase, string) {
-	symbols := target.symbols()
-	primary := target.Path
-	if renamed, ok := renames[primary]; ok {
-		primary = renamed
+func (s targetSearch) follow(target AnalyzedCase) TargetOutcome {
+	if i := slices.IndexFunc(s.revision, func(c AnalyzedCase) bool { return c.ID == target.ID }); i >= 0 {
+		return TargetOutcome{Status: TargetPersisted, Reason: "rule 2: the same case ID is present in this revision", Baseline: &target, Match: &s.revision[i]}
 	}
-	var bySymbol, byPath *AnalyzedCase
-	most := 0
-	for i := range revision {
-		candidate := &revision[i]
-		if _, existed := known[candidate.ID]; existed || candidate.Smell != target.Smell {
-			continue
-		}
-		if shared := candidate.sharedSymbols(symbols); shared > most {
-			bySymbol, most = candidate, shared
-		}
-		if byPath == nil && candidate.Path == primary {
-			byPath = candidate
-		}
+	if match, reason := s.successor(target); match != nil {
+		return TargetOutcome{Status: TargetPersistedChanged, Reason: reason, Baseline: &target, Match: match}
 	}
-	switch {
-	case bySymbol != nil:
-		return bySymbol, fmt.Sprintf("rule 3: new %s case %s shares %d declaration symbol(s) with the target", target.Smell, bySymbol.ID, most)
-	case byPath != nil:
-		return byPath, fmt.Sprintf("rule 3: new %s case %s shares the target's primary file %s", target.Smell, byPath.ID, primary)
+	return TargetOutcome{Status: TargetCleared, Reason: "rule 4: no same-ID case, and no new " + target.Smell + " case shares a declaration symbol or the primary file", Baseline: &target}
+}
+
+func (s targetSearch) successor(target AnalyzedCase) (*AnalyzedCase, string) {
+	candidates := s.introducedCasesOf(target.Smell)
+	if match, shared := target.closestBySymbols(candidates); match != nil {
+		return match, fmt.Sprintf("rule 3: new %s case %s shares %d declaration symbol(s) with the target", target.Smell, match.ID, shared)
+	}
+	primary := s.renames.current(target.Path)
+	if i := slices.IndexFunc(candidates, func(c *AnalyzedCase) bool { return c.Path == primary }); i >= 0 {
+		return candidates[i], fmt.Sprintf("rule 3: new %s case %s shares the target's primary file %s", target.Smell, candidates[i].ID, primary)
 	}
 	return nil, ""
+}
+
+func (s targetSearch) introducedCasesOf(smell string) []*AnalyzedCase {
+	var cases []*AnalyzedCase
+	for i := range s.revision {
+		if candidate := &s.revision[i]; s.introduced(*candidate) && candidate.Smell == smell {
+			cases = append(cases, candidate)
+		}
+	}
+	return cases
+}
+
+func (s targetSearch) introduced(c AnalyzedCase) bool {
+	_, existed := s.baseline[c.ID]
+	return !existed
+}
+
+func (s targetSearch) newCaseIDs(excluded string) []string {
+	ids := []string{}
+	for _, c := range s.revision {
+		if s.introduced(c) && c.ID != excluded {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids
+}
+
+func (o *TargetOutcome) matchID() string {
+	if o.Match == nil {
+		return ""
+	}
+	return o.Match.ID
+}
+
+func (c AnalyzedCase) closestBySymbols(candidates []*AnalyzedCase) (*AnalyzedCase, int) {
+	symbols := c.symbols()
+	var closest *AnalyzedCase
+	most := 0
+	for _, candidate := range candidates {
+		if shared := candidate.sharedSymbols(symbols); shared > most {
+			closest, most = candidate, shared
+		}
+	}
+	return closest, most
 }
 
 func (c AnalyzedCase) symbols() map[string]bool {
@@ -180,49 +226,87 @@ func (c AnalyzedCase) sharedSymbols(symbols map[string]bool) int {
 	return shared
 }
 
-func newCaseIDs(revision []AnalyzedCase, known map[string]AnalyzedCase, exclude string) []string {
-	ids := []string{}
-	for _, c := range revision {
-		if _, existed := known[c.ID]; !existed && c.ID != exclude {
-			ids = append(ids, c.ID)
-		}
+func (c AnalyzedCase) metric(kind string) (any, bool) {
+	i := slices.IndexFunc(c.Metrics, func(m snapshotdb.SummaryMetricsRow) bool { return m.Kind == kind })
+	if i < 0 {
+		return nil, false
 	}
-	return ids
+	return c.Metrics[i].NumericValue, true
 }
 
-// candidateRenames reports files the candidate renamed since baseline, old path to new.
-func candidateRenames(ctx context.Context, dir, baseline, module string) (map[string]string, error) {
-	if err := intendToAddUntracked(ctx, dir); err != nil {
+func (t *pilotTrial) candidateRenames(ctx context.Context) (pathRenames, error) {
+	if err := intendToAddUntracked(ctx, t.candidate); err != nil {
 		return nil, err
 	}
-	return renamedPaths(ctx, dir, module, baseline, "--", ".")
+	return moduleRelativeRenames(ctx, t.candidate, t.options.Module, t.finding.Before, "--", ".")
 }
 
-// renamedPaths maps repository paths renamed by a git diff to their new
-// paths, relative to the module because analyzer paths are module-relative.
-func renamedPaths(ctx context.Context, dir, module string, args ...string) (map[string]string, error) {
+func (t *pilotTrial) actualRenames(ctx context.Context) (pathRenames, error) {
+	return moduleRelativeRenames(ctx, t.finding.Latest.GitDir, t.options.Module, t.finding.Before, t.finding.After, "--")
+}
+
+func moduleRelativeRenames(ctx context.Context, dir, module string, args ...string) (pathRenames, error) {
 	out, err := git(ctx, dir, append([]string{"diff", "--no-ext-diff", "--no-textconv", "-M", "--name-status", "-z"}, args...)...)
 	if err != nil {
 		return nil, err
 	}
-	renames := map[string]string{}
-	fields := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
-	for i := 0; i < len(fields); {
-		if !strings.HasPrefix(fields[i], "R") && !strings.HasPrefix(fields[i], "C") {
-			i += 2
-			continue
-		}
-		if i+2 >= len(fields) {
-			return nil, errors.New("truncated git rename record")
-		}
-		oldPath, oldOK := moduleRelative(module, fields[i+1])
-		newPath, newOK := moduleRelative(module, fields[i+2])
-		if strings.HasPrefix(fields[i], "R") && oldOK && newOK {
-			renames[oldPath] = newPath
-		}
-		i += 3
+	return parseRenames(out, module)
+}
+
+type pathRenames map[string]string
+
+func (r pathRenames) current(path string) string {
+	if renamed, ok := r[path]; ok {
+		return renamed
+	}
+	return path
+}
+
+func parseRenames(nameStatus, module string) (pathRenames, error) {
+	records, err := nameStatusRecords(nameStatus)
+	if err != nil {
+		return nil, err
+	}
+	renames := pathRenames{}
+	for _, record := range records {
+		renames.record(module, record)
 	}
 	return renames, nil
+}
+
+func (r pathRenames) record(module string, record []string) {
+	if !strings.HasPrefix(record[0], "R") {
+		return
+	}
+	oldPath, oldOK := moduleRelative(module, record[1])
+	newPath, newOK := moduleRelative(module, record[2])
+	if oldOK && newOK {
+		r[oldPath] = newPath
+	}
+}
+
+func nameStatusRecords(nameStatus string) ([][]string, error) {
+	fields := strings.Split(strings.TrimSuffix(nameStatus, "\x00"), "\x00")
+	var records [][]string
+	for len(fields) > 0 {
+		width := min(nameStatusWidth(fields[0]), len(fields))
+		records, fields = append(records, fields[:width]), fields[width:]
+	}
+	if last := records[len(records)-1]; pairsPaths(last[0]) && len(last) < 3 {
+		return nil, errors.New("truncated git rename record")
+	}
+	return records, nil
+}
+
+func nameStatusWidth(status string) int {
+	if pairsPaths(status) {
+		return 3
+	}
+	return 2
+}
+
+func pairsPaths(status string) bool {
+	return strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C")
 }
 
 func moduleRelative(module, path string) (string, bool) {

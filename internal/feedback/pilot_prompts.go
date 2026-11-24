@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -46,10 +45,7 @@ Return ONLY one JSON object with these fields:
 `, finding.Before, finding.RevisionEvidence, finding.CaseID, finding.Rule, investigationText(finding.Finding.Body))
 }
 
-func refactoringPrompt(finding PilotCase, assessment DesignAssessment, attempts []RefactoringAttempt) string {
-	data, _ := json.MarshalIndent(assessment, "", "  ")
-	previous, _ := json.MarshalIndent(attempts, "", "  ")
-	return designFraming + fmt.Sprintf(`
+const refactoringTemplate = `
 Phase: refactor. This is a disposable checkout at %s. Make and test a refactoring that follows the design opportunity, including when Columbo's initial lead is unhelpful. Do not look for discussion, reactions, other trials or later revisions.
 Finding %s, rule %s:
 %s
@@ -62,7 +58,12 @@ Change the code in this checkout. Preserve behavior and public contracts. Add fo
 Bash permits only these commands: go build, go vet, go test, gofmt, go fmt and columbo. Format the Go files you change with gofmt.
 The runner will independently build, vet, test, check gofmt -l on changed Go files and rerun Columbo after you finish. If no useful refactoring is found within the limit, explain the failed direction and leave evidence of the attempt. A failed attempt is not proof that no useful design exists.
 Respond with a short account of the change, validation and remaining uncertainty. No JSON is required in this phase.
-`, finding.Before, finding.CaseID, finding.Rule, investigationText(finding.Finding.Body), data, previous)
+`
+
+func refactoringPrompt(finding PilotCase, assessment DesignAssessment, attempts []RefactoringAttempt) string {
+	data, _ := json.MarshalIndent(assessment, "", "  ")
+	previous, _ := json.MarshalIndent(attempts, "", "  ")
+	return designFraming + fmt.Sprintf(refactoringTemplate, finding.Before, finding.CaseID, finding.Rule, investigationText(finding.Finding.Body), data, previous)
 }
 
 func reviewPrompt(finding PilotCase, result TrialResult, before, candidate, actual string) string {
@@ -268,21 +269,29 @@ func (o *TargetOutcome) metricChanges() string {
 	if o.Baseline == nil || len(o.Baseline.Metrics) == 0 {
 		return "unavailable"
 	}
-	var changes []string
-	for _, before := range o.Baseline.Metrics {
-		after := "absent"
-		if o.Match != nil {
-			if i := slices.IndexFunc(o.Match.Metrics, func(m snapshotdb.SummaryMetricsRow) bool { return m.Kind == before.Kind }); i >= 0 {
-				after = fmt.Sprint(o.Match.Metrics[i].NumericValue)
-			}
-		}
-		change := fmt.Sprintf("%s %v→%s", before.Kind, before.NumericValue, after)
-		if before.LimitValue != nil {
-			change += fmt.Sprintf(" (limit %v)", before.LimitValue)
-		}
-		changes = append(changes, change)
+	changes := make([]string, len(o.Baseline.Metrics))
+	for i, before := range o.Baseline.Metrics {
+		changes[i] = metricChange(before, o.matchedMetric(before.Kind))
 	}
 	return markdown(strings.Join(changes, ", "))
+}
+
+func (o *TargetOutcome) matchedMetric(kind string) string {
+	if o.Match == nil {
+		return "absent"
+	}
+	if value, ok := o.Match.metric(kind); ok {
+		return fmt.Sprint(value)
+	}
+	return "absent"
+}
+
+func metricChange(before snapshotdb.SummaryMetricsRow, after string) string {
+	change := fmt.Sprintf("%s %v→%s", before.Kind, before.NumericValue, after)
+	if before.LimitValue != nil {
+		change += fmt.Sprintf(" (limit %v)", before.LimitValue)
+	}
+	return change
 }
 
 func (r DesignReview) report() string {
