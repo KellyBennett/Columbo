@@ -72,8 +72,9 @@ func unionPaths(sets ...[]string) []string {
 }
 
 type listedPackage struct {
-	ImportPath, Dir                    string
-	Imports, TestImports, XTestImports []string
+	ImportPath, Dir                             string
+	Imports, TestImports, XTestImports          []string
+	EmbedFiles, TestEmbedFiles, XTestEmbedFiles []string
 }
 
 func affectedScope(ctx context.Context, options PilotOptions, checkoutDir string, changed []string) TestScope {
@@ -86,41 +87,58 @@ func affectedScope(ctx context.Context, options PilotOptions, checkoutDir string
 		return moduleScope("no changed files")
 	}
 	module := filepath.Clean(options.Module)
+	var inModule []string
 	for _, path := range changed {
 		rel, err := filepath.Rel(module, filepath.FromSlash(path))
+		outside := err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 		switch {
-		case err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)):
-			return moduleScope(path + " is outside the module")
 		case slices.Contains([]string{"go.mod", "go.sum", "go.work"}, filepath.Base(path)):
 			return moduleScope(path + " changes module requirements")
-		case filepath.Ext(path) != ".go":
-			return moduleScope(path + " is not a Go source file")
+		case outside && filepath.Ext(path) == ".go":
+			return moduleScope(path + " is Go source outside the module")
+		case !outside:
+			inModule = append(inModule, rel)
 		}
 	}
 	packages, err := listPackages(ctx, options, filepath.Join(checkoutDir, module))
 	if err != nil {
 		return moduleScope("go list failed: " + err.Error())
 	}
-	root, err := filepath.EvalSymlinks(checkoutDir)
+	root, err := filepath.EvalSymlinks(filepath.Join(checkoutDir, module))
 	if err != nil {
 		return moduleScope(err.Error())
 	}
-	changedDirs := map[string]bool{}
-	for _, path := range changed {
-		changedDirs[filepath.Join(root, filepath.Dir(filepath.FromSlash(path)))] = true
-	}
-	importers := map[string][]string{}
-	var queue []string
+	byDir, embedders, importers := map[string]string{}, map[string][]string{}, map[string][]string{}
 	for _, pkg := range packages {
 		for _, imported := range slices.Concat(pkg.Imports, pkg.TestImports, pkg.XTestImports) {
 			importers[imported] = append(importers[imported], pkg.ImportPath)
 		}
-		if dir, err := filepath.EvalSymlinks(pkg.Dir); err == nil && changedDirs[dir] {
-			queue = append(queue, pkg.ImportPath)
+		dir, err := filepath.EvalSymlinks(pkg.Dir)
+		if err != nil {
+			continue
+		}
+		byDir[dir] = pkg.ImportPath
+		for _, embedded := range slices.Concat(pkg.EmbedFiles, pkg.TestEmbedFiles, pkg.XTestEmbedFiles) {
+			file := filepath.Join(dir, embedded)
+			embedders[file] = append(embedders[file], pkg.ImportPath)
+		}
+	}
+	var queue []string
+	for _, rel := range inModule {
+		file := filepath.Join(root, rel)
+		queue = append(queue, embedders[file]...)
+		for dir := filepath.Dir(file); strings.HasPrefix(dir, root); dir = filepath.Dir(dir) {
+			if pkg, ok := byDir[dir]; ok {
+				queue = append(queue, pkg)
+				break
+			}
+			if dir == root {
+				break
+			}
 		}
 	}
 	if len(queue) == 0 {
-		return moduleScope("no package matches the changed files")
+		return moduleScope("no package encloses the changed files")
 	}
 	affected := map[string]bool{}
 	for len(queue) > 0 {
@@ -144,7 +162,7 @@ func affectedScope(ctx context.Context, options PilotOptions, checkoutDir string
 func listPackages(ctx context.Context, options PilotOptions, dir string) ([]listedPackage, error) {
 	ctx, cancel := context.WithTimeout(ctx, options.CheckTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-json=ImportPath,Dir,Imports,TestImports,XTestImports", "./...")
+	cmd := exec.CommandContext(ctx, "go", "list", "-e", "-json=ImportPath,Dir,Imports,TestImports,XTestImports,EmbedFiles,TestEmbedFiles,XTestEmbedFiles", "./...")
 	var stdout, stderr bytes.Buffer
 	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, trialEnvironment(options.PassEnv...), &stdout, &stderr
 	if err := cmd.Run(); err != nil {
