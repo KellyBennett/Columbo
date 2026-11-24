@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/KellyBennett/Columbo/internal/snapshotdb"
 )
 
 const designFraming = `Columbo deliberately enforces strict coupling and cohesion policies. A finding does not have to establish that reasonable existing code is bad. Investigate what structural capability allows coupling to spread, whether a stricter design removes that capability, and what the change costs.
@@ -94,7 +98,7 @@ func pilotSummary(root string, plan PilotPlan) error {
 	var report strings.Builder
 	report.WriteString(plan.Options.reportHeader())
 	report.WriteString(actualChangeReport(plan.ActualChangeCounts))
-	report.WriteString("| PR | Finding | Rule | Reactions | Evaluation | Design assessment | Behavior checks | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	report.WriteString("| PR | Finding | Rule | Reactions | Evaluation | Design assessment | Behavior checks | Target (runner-observed) | Evidence |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, finding := range plan.Cases {
 		report.WriteString(finding.summaryRow(results[finding.ID]))
 	}
@@ -129,7 +133,24 @@ func (o PilotOptions) reportHeader() string {
 }
 
 func (c PilotCase) summaryRow(result TrialResult) string {
-	return fmt.Sprintf("| %d | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", c.PR, markdown(c.CaseID), markdown(c.Rule), c.Reaction, c.analysisMode(), c.outcome(result), c.verification(result), c.ID)
+	return fmt.Sprintf("| %d | %s | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", c.PR, markdown(c.CaseID), markdown(c.Rule), c.Reaction, c.analysisMode(), c.outcome(result), c.verification(result), c.target(result).status(), c.ID)
+}
+
+func (c PilotCase) target(result TrialResult) *TargetOutcome {
+	if !c.explores() {
+		return result.ActualTarget
+	}
+	if len(result.Attempts) == 0 {
+		return nil
+	}
+	return result.Attempts[len(result.Attempts)-1].Target
+}
+
+func (o *TargetOutcome) status() string {
+	if o == nil {
+		return "n/a"
+	}
+	return string(o.Status)
 }
 
 func (c PilotCase) outcome(result TrialResult) string {
@@ -189,6 +210,7 @@ func (c PilotCase) details(result TrialResult) string {
 	if result.Error != "" {
 		fmt.Fprintf(&report, "Incomplete: %s\n\n", result.Error)
 	}
+	report.WriteString(result.targetReport())
 	if result.Complete {
 		report.WriteString(result.testScopeReport())
 		report.WriteString(result.Review.report())
@@ -208,6 +230,59 @@ func (r TrialResult) testScopeReport() string {
 		}
 	}
 	return report.String()
+}
+
+func (r TrialResult) targetReport() string {
+	var report strings.Builder
+	for _, attempt := range r.Attempts {
+		report.WriteString(attempt.Target.report(fmt.Sprintf("attempt %d", attempt.Number)))
+	}
+	report.WriteString(r.ActualTarget.report("team revision"))
+	for _, attempt := range r.Attempts {
+		if len(attempt.Unformatted) > 0 {
+			fmt.Fprintf(&report, "* Unformatted Go files after attempt %d (runner gofmt -l): %s\n", attempt.Number, markdown(strings.Join(attempt.Unformatted, ", ")))
+		}
+	}
+	if report.Len() > 0 {
+		report.WriteByte('\n')
+	}
+	return report.String()
+}
+
+func (o *TargetOutcome) report(revision string) string {
+	if o == nil {
+		return ""
+	}
+	matched := "none"
+	if o.Match != nil {
+		matched = markdown(o.Match.ID)
+	}
+	newCases := "unknown"
+	if o.NewCases != nil {
+		newCases = strconv.Itoa(len(o.NewCases))
+	}
+	return fmt.Sprintf("* Runner-observed target (not agent judgment), %s: %s. %s. Matched case: %s. Metrics: %s. New cases: %s.\n", revision, o.Status, markdown(o.Reason), matched, o.metricChanges(), newCases)
+}
+
+func (o *TargetOutcome) metricChanges() string {
+	if o.Baseline == nil || len(o.Baseline.Metrics) == 0 {
+		return "unavailable"
+	}
+	var changes []string
+	for _, before := range o.Baseline.Metrics {
+		after := "absent"
+		if o.Match != nil {
+			if i := slices.IndexFunc(o.Match.Metrics, func(m snapshotdb.SummaryMetricsRow) bool { return m.Kind == before.Kind }); i >= 0 {
+				after = fmt.Sprint(o.Match.Metrics[i].NumericValue)
+			}
+		}
+		change := fmt.Sprintf("%s %v→%s", before.Kind, before.NumericValue, after)
+		if before.LimitValue != nil {
+			change += fmt.Sprintf(" (limit %v)", before.LimitValue)
+		}
+		changes = append(changes, change)
+	}
+	return markdown(strings.Join(changes, ", "))
 }
 
 func (r DesignReview) report() string {

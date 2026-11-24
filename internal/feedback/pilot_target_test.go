@@ -167,3 +167,34 @@ func TestRenamedPathsAreModuleRelative(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"old.go": "new.go"}, renames)
 }
+
+func TestReportShowsRunnerObservedTargetSeparatelyFromAgentJudgment(t *testing.T) {
+	root := t.TempDir()
+	limit := 3.0
+	target := syntheticCase("C-target", "data-clump", "a.go", "p.A", "p.B", "p.C")
+	target.Metrics = []snapshotdb.SummaryMetricsRow{{Kind: "clump-occurrences", NumericValue: 4.0, LimitValue: limit}}
+	successor := syntheticCase("C-successor", "data-clump", "a.go", "p.B", "p.C")
+	successor.Metrics = []snapshotdb.SummaryMetricsRow{{Kind: "clump-occurrences", NumericValue: 3.0, LimitValue: limit}}
+	narrowed := classifyTarget("C-target", []AnalyzedCase{target}, []AnalyzedCase{successor, syntheticCase("C-spawned", "long-function", "b.go", "p.D")}, nil)
+	untouched := classifyTarget("C-target", []AnalyzedCase{target}, []AnalyzedCase{target}, nil)
+	explored := PilotCase{ID: "explored", PR: 1, CaseID: "C-target", Rule: "data-clump", Reaction: "thumbs-down"}
+	actual := PilotCase{ID: "actual", PR: 2, CaseID: "C-target", Rule: "data-clump", Reaction: "thumbs-up"}
+	unobserved := PilotCase{ID: "unobserved", PR: 3, CaseID: "C-other", Rule: "data-clump", Reaction: "unreacted"}
+	require.NoError(t, saveJSON(filepath.Join(root, "trials", explored.ID, "result.json"), TrialResult{Attempts: []RefactoringAttempt{
+		{Number: 1, Target: &TargetOutcome{Status: TargetUnknown, Reason: "evidence unavailable: analyzer failed"}, Unformatted: []string{"a.go", "b.go"}},
+		{Number: 2, Target: &narrowed},
+	}, ActualTarget: &untouched}))
+	require.NoError(t, saveJSON(filepath.Join(root, "trials", actual.ID, "result.json"), TrialResult{ActualTarget: &untouched}))
+	require.NoError(t, pilotSummary(root, PilotPlan{Cases: []PilotCase{explored, actual, unobserved}}))
+	data, err := os.ReadFile(filepath.Join(root, "report.md"))
+	require.NoError(t, err)
+	report := string(data)
+	require.Contains(t, report, "| Behavior checks | Target (runner-observed) | Evidence |")
+	require.Contains(t, report, "| not verified | persisted-changed | [trial](trials/explored/result.json) |", "exploratory rows show the last attempt")
+	require.Contains(t, report, "| not verified | persisted | [trial](trials/actual/result.json) |", "actual-changes rows show the team revision")
+	require.Contains(t, report, "| not verified | n/a | [trial](trials/unobserved/result.json) |")
+	require.Contains(t, report, "* Runner-observed target (not agent judgment), attempt 1: unknown. evidence unavailable: analyzer failed. Matched case: none. Metrics: unavailable. New cases: unknown.")
+	require.Contains(t, report, "* Runner-observed target (not agent judgment), attempt 2: persisted-changed. rule 3: new data-clump case C-successor shares 2 declaration symbol(s) with the target. Matched case: C-successor. Metrics: clump-occurrences 4→3 (limit 3). New cases: 1.")
+	require.Contains(t, report, "* Runner-observed target (not agent judgment), team revision: persisted. rule 2: the same case ID is present in this revision. Matched case: C-target. Metrics: clump-occurrences 4→4 (limit 3). New cases: 0.")
+	require.Contains(t, report, "* Unformatted Go files after attempt 1 (runner gofmt -l): a.go, b.go")
+}
