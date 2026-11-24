@@ -78,6 +78,11 @@ SELECT c.id,c.smell,d.symbol,f.path,c.start_line,c.end_line,c.verdict,c.suppress
 FROM cases c JOIN declarations d ON d.id=c.primary_declaration_id
 JOIN files f ON f.id=d.file_id ORDER BY c.ordinal;
 
+-- name: SummaryCaseDeclarations :many
+SELECT cd.case_id,d.symbol,f.path,cd.role FROM case_declarations cd
+JOIN declarations d ON d.id=cd.declaration_id
+JOIN files f ON f.id=d.file_id ORDER BY cd.case_id,f.path,d.symbol,cd.role;
+
 -- name: SummarySuppressions :many
 SELECT f.path,s.line,s.justification FROM suppressions s
 JOIN files f ON f.id=s.file_id WHERE s.case_id=? ORDER BY s.ordinal;

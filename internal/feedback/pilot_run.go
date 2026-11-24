@@ -53,6 +53,7 @@ type RefactoringAttempt struct {
 	HasChanges    bool            `json:"has_changes"`
 	Gofmt         *CommandResult  `json:"gofmt,omitempty"`
 	Unformatted   []string        `json:"unformatted,omitempty"`
+	Target        *TargetOutcome  `json:"target,omitempty"`
 }
 
 type TrialResult struct {
@@ -76,6 +77,7 @@ type TrialResult struct {
 	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
 	ActualTestScope            *TestScope           `json:"actual_test_scope,omitempty"`
 	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
+	ActualTarget               *TargetOutcome       `json:"actual_target,omitempty"`
 	ActualAncestry             string               `json:"actual_ancestry"`
 	ReviewCommands             []CommandResult      `json:"review_commands"`
 	Review                     DesignReview         `json:"review"`
@@ -263,6 +265,8 @@ func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (Re
 	refactoring.checkFormatting(ctx, t.options, t.candidate, own, prefix)
 	refactoring.TestScope, refactoring.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
 	refactoring.Columbo = analyzeRevision(ctx, t.options, t.candidate, prefix+"-columbo")
+	renames, err := candidateRenames(ctx, t.candidate, t.finding.Before, t.options.Module)
+	refactoring.Target = t.observeTarget(refactoring.Columbo, prefix+"-columbo", renames, err)
 	return refactoring, refactoring.recordPatch(ctx, t.candidate, t.finding.Before, prefix)
 }
 
@@ -328,9 +332,12 @@ func (t *pilotTrial) checkoutActual(ctx context.Context) error {
 }
 
 func (t *pilotTrial) validateActual(ctx context.Context) {
-	columbo := analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
+	prefix := filepath.Join(t.root, "actual-columbo")
+	columbo := analyzeRevision(ctx, t.options, t.actual, prefix)
 	scope, checks := t.options.validateRevision(ctx, t.actual, filepath.Join(t.root, "actual"), t.result.ChangedPaths)
 	t.result.ActualColumbo, t.result.ActualTestScope, t.result.ActualChecks = &columbo, &scope, checks
+	renames, err := renamedPaths(ctx, t.finding.Latest.GitDir, t.options.Module, t.finding.Before, t.finding.After, "--")
+	t.result.ActualTarget = t.observeTarget(columbo, prefix, renames, err)
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {
@@ -474,9 +481,9 @@ func analyzeRevision(ctx context.Context, options PilotOptions, dir, prefix stri
 		return result
 	}
 	defer snapshot.Close()
-	cases, err := snapshot.Queries().SummaryCases(ctx)
+	cases, err := loadAnalyzedCases(ctx, snapshot.Queries())
 	if err == nil {
-		err = saveJSON(prefix+".cases.json", cases)
+		err = saveJSON(casesPath(prefix), cases)
 	}
 	if err != nil {
 		result.Error = "analysis evidence: " + err.Error()
@@ -546,7 +553,7 @@ func checksPassed(results []CommandResult) bool {
 }
 
 func sourcePatch(ctx context.Context, dir, baseline string) ([]byte, error) {
-	if _, err := git(ctx, dir, "add", "--intent-to-add", "--", "."); err != nil {
+	if err := intendToAddUntracked(ctx, dir); err != nil {
 		return nil, err
 	}
 	patch, err := git(ctx, dir, "diff", "--binary", "--no-ext-diff", "--no-textconv", baseline, "--", ".")

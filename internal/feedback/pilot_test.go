@@ -147,6 +147,7 @@ esac
 	require.Equal(t, group == "thumbs-down", result.BehaviorChecksPassed)
 	require.Equal(t, hasLater, result.ActualBehaviorChecksPassed)
 	require.True(t, result.BaselineColumbo.EvidenceValid)
+	require.Equal(t, hasLater, result.ActualTarget != nil, "every changed actual revision has a runner-observed target")
 	require.Equal(t, "default configuration", result.AnalysisConfigOrigin)
 	if hasLater || group == "thumbs-down" {
 		require.Equal(t, []string{"f.go"}, result.ChangedPaths)
@@ -160,6 +161,10 @@ esac
 		require.True(t, checksPassed(result.Attempts[1].Checks))
 		require.FileExists(t, result.Attempts[0].Patch)
 		require.FileExists(t, result.Attempts[1].Patch)
+		for _, attempt := range result.Attempts {
+			require.NotNil(t, attempt.Target, "every exploratory attempt has a runner-observed target")
+		}
+		require.Equal(t, []string{"f.go"}, result.Attempts[1].Unformatted)
 	} else {
 		require.Empty(t, result.Attempts)
 		require.Equal(t, "actual-changes", result.AnalysisMode)
