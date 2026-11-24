@@ -23,6 +23,8 @@ import (
 	"github.com/KellyBennett/Columbo/internal/feedbackdb"
 )
 
+const pilotVersion = 4
+
 type stringList []string
 
 func (s *stringList) String() string         { return strings.Join(*s, ",") }
@@ -53,6 +55,7 @@ type PilotOptions struct {
 	RunnerSHA256       string        `json:"runner_sha256"`
 	Config             string        `json:"config,omitempty"`
 	ConfigSHA256       string        `json:"config_sha256,omitempty"`
+	FullTests          bool          `json:"full_tests"`
 }
 
 type PilotCase struct {
@@ -97,7 +100,7 @@ func (c cli) pilot(args []string) int {
 	flags.Var(&o.AgentArgs, "agent-arg", "agent argument; repeat to replace the default Claude arguments")
 	flags.StringVar(&o.Model, "model", "", "requested model (default agent's configured model)")
 	flags.StringVar(&o.Columbo, "columbo", "columbo", "analyzer executable for before/after reconstructions")
-	flags.Var(&o.Checks, "check", "validation shell command; repeat to replace go build/vet/test ./...")
+	flags.Var(&o.Checks, "check", "validation shell command; repeat to replace the default go build, vet and test checks")
 	flags.IntVar(&o.Limit, "limit", 12, "maximum findings, balanced across reaction groups and rules")
 	flags.IntVar(&o.Turns, "turns", 30, "maximum turns per default Claude invocation")
 	flags.IntVar(&o.Attempts, "attempts", 2, "maximum refactoring attempts per finding")
@@ -109,6 +112,7 @@ func (c cli) pilot(args []string) int {
 	flags.BoolVar(&o.AllowReconstructed, "allow-reconstructed", false, "allow review-anchor revisions when the exact analyzed revision is unavailable")
 	flags.StringVar(&o.Module, "module", ".", "Go module subdirectory relative to the repository")
 	flags.Var(&o.PassEnv, "pass-env", "additional environment variable name to pass to agents and checks; repeat for more")
+	flags.BoolVar(&o.FullTests, "full-tests", false, "run the default go test check on the whole module instead of affected packages")
 	flags.StringVar(&o.Config, "config", "", "configuration path within the module (default captured CI config, then .columbo.yml)")
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -126,9 +130,6 @@ func (c cli) pilot(args []string) int {
 		if name == "" || strings.ContainsAny(name, "=\x00") {
 			return c.fail(2, errors.New("--pass-env takes a variable name, not a value"))
 		}
-	}
-	if len(o.Checks) == 0 {
-		o.Checks = stringList{"go build ./...", "go vet ./...", "go test ./..."}
 	}
 	var err error
 	if o.Out, err = filepath.Abs(o.Out); err != nil {
@@ -238,7 +239,7 @@ func resumePlan(data []byte, options PilotOptions) (PilotPlan, error) {
 	if err := json.Unmarshal(data, &plan); err != nil {
 		return plan, err
 	}
-	if plan.Version != 3 {
+	if plan.Version != pilotVersion {
 		return plan, fmt.Errorf("pilot analysis policy changed; choose a new --out directory to preserve earlier results")
 	}
 	before, _ := json.Marshal(plan.Options)
@@ -286,7 +287,7 @@ func saveJSON(path string, value any) error {
 var reactionGroupOrder = []string{"thumbs-down", "thumbs-up", "unreacted", "mixed", "other"}
 
 func makePilotPlan(ctx context.Context, options PilotOptions, observations []Observation) PilotPlan {
-	plan := PilotPlan{Version: 3, Options: options, ActualChangeCounts: map[string]ActualChangeCounts{}}
+	plan := PilotPlan{Version: pilotVersion, Options: options, ActualChangeCounts: map[string]ActualChangeCounts{}}
 	candidates, excluded := eligibleFindings(options, observations)
 	plan.Excluded = excluded
 	for i, finding := range candidates {

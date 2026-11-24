@@ -45,6 +45,7 @@ type RefactoringAttempt struct {
 	Number        int             `json:"number"`
 	Agent         CommandResult   `json:"agent"`
 	Checks        []CommandResult `json:"checks"`
+	TestScope     TestScope       `json:"test_scope"`
 	Columbo       CommandResult   `json:"columbo"`
 	Patch         string          `json:"patch"`
 	PolicyChanges []string        `json:"policy_changes,omitempty"`
@@ -63,12 +64,15 @@ type TrialResult struct {
 	Before                     string               `json:"before"`
 	After                      string               `json:"after,omitempty"`
 	RevisionEvidence           string               `json:"revision_evidence"`
+	ChangedPaths               []string             `json:"changed_paths,omitempty"`
 	BaselineChecks             []CommandResult      `json:"baseline_checks"`
+	BaselineTestScope          TestScope            `json:"baseline_test_scope"`
 	BaselineColumbo            CommandResult        `json:"baseline_columbo"`
 	AssessmentCommands         []CommandResult      `json:"assessment_commands"`
 	Assessment                 DesignAssessment     `json:"assessment"`
 	Attempts                   []RefactoringAttempt `json:"attempts"`
 	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
+	ActualTestScope            *TestScope           `json:"actual_test_scope,omitempty"`
 	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
 	ActualAncestry             string               `json:"actual_ancestry"`
 	ReviewCommands             []CommandResult      `json:"review_commands"`
@@ -85,6 +89,7 @@ type pilotTrial struct {
 	finding                         PilotCase
 	result                          TrialResult
 	root, before, candidate, actual string
+	actualPaths                     []string
 }
 
 func runPilotCase(ctx context.Context, options PilotOptions, finding PilotCase) (err error) {
@@ -113,7 +118,7 @@ func trialComplete(resultPath string) (bool, error) {
 	if err := json.Unmarshal(data, &previous); err != nil {
 		return false, err
 	}
-	return previous.Complete && previous.Version == 3, nil
+	return previous.Complete && previous.Version == pilotVersion, nil
 }
 
 func newPilotTrial(ctx context.Context, options PilotOptions, finding PilotCase) *pilotTrial {
@@ -125,14 +130,14 @@ func newPilotTrial(ctx context.Context, options PilotOptions, finding PilotCase)
 }
 
 func (c PilotCase) trialResult(execution string) TrialResult {
-	return TrialResult{Version: 3, ActualChange: c.ActualChange, AnalysisMode: c.analysisMode(), CaseID: c.CaseID, Execution: execution, Before: c.Before, After: c.After, RevisionEvidence: c.RevisionEvidence, ActualAncestry: "unavailable"}
+	return TrialResult{Version: pilotVersion, ActualChange: c.ActualChange, AnalysisMode: c.analysisMode(), CaseID: c.CaseID, Execution: execution, Before: c.Before, After: c.After, RevisionEvidence: c.RevisionEvidence, ActualAncestry: "unavailable"}
 }
 
 func (t *pilotTrial) steps() []func(context.Context) error {
 	if !t.finding.explores() && t.finding.ActualChange.Status == actualNoResponse {
 		return []func(context.Context) error{t.recordNoResponse}
 	}
-	return []func(context.Context) error{t.prepare, t.assess, t.refactor, t.collectActual, t.review}
+	return []func(context.Context) error{t.prepare, t.assess, t.refactor, t.collectActual, t.validateBaseline, t.review}
 }
 
 func (t *pilotTrial) recordNoResponse(context.Context) error {
@@ -178,9 +183,15 @@ func (t *pilotTrial) prepare(ctx context.Context) error {
 	if err := t.freezeConfig(); err != nil {
 		return err
 	}
-	options = t.options
-	result.BaselineColumbo = analyzeRevision(ctx, options, before, filepath.Join(root, "baseline-columbo"))
-	result.BaselineChecks = validateRevision(ctx, options, before, filepath.Join(root, "baseline"))
+	if finding.comparesActual() {
+		paths, err := changedPaths(ctx, finding.Latest.GitDir, finding.Before, finding.After, "--")
+		if err != nil {
+			return err
+		}
+		t.actualPaths = paths
+	}
+	result.ChangedPaths = t.actualPaths
+	result.BaselineColumbo = analyzeRevision(ctx, t.options, before, filepath.Join(root, "baseline-columbo"))
 	return nil
 }
 
@@ -215,7 +226,13 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 		prefix := filepath.Join(root, "attempt-"+strconv.Itoa(attempt))
 		refactoring := RefactoringAttempt{Number: attempt}
 		refactoring.Agent = invokeAgent(ctx, options, agentCall{phase: "refactor", dir: candidate, prompt: refactoringPrompt(finding, result.Assessment, result.Attempts), prefix: prefix + "-agent"})
-		refactoring.Checks = validateRevision(ctx, options, candidate, prefix)
+		paths, err := candidatePaths(ctx, candidate, finding.Before)
+		if err != nil {
+			return err
+		}
+		result.ChangedPaths = unionPaths(paths, t.actualPaths)
+		refactoring.TestScope = affectedScope(ctx, options, candidate, result.ChangedPaths)
+		refactoring.Checks = validateRevision(ctx, options, candidate, prefix, refactoring.TestScope)
 		refactoring.Columbo = analyzeRevision(ctx, options, candidate, prefix+"-columbo")
 		patch, err := sourcePatch(ctx, candidate, finding.Before)
 		if err != nil {
@@ -237,8 +254,6 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
-	last := result.Attempts[len(result.Attempts)-1]
-	result.BehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(last.Checks) && commandPassed(last.Agent) && last.HasChanges && len(last.PolicyChanges) == 0
 	return nil
 }
 
@@ -251,7 +266,18 @@ func (t *pilotTrial) collectActual(ctx context.Context) error {
 			return err
 		}
 	}
-	t.result.ActualBehaviorChecksPassed = checksPassed(t.result.BaselineChecks) && checksPassed(t.result.ActualChecks)
+	return nil
+}
+
+func (t *pilotTrial) validateBaseline(ctx context.Context) error {
+	result := &t.result
+	result.BaselineTestScope = affectedScope(ctx, t.options, t.before, result.ChangedPaths)
+	result.BaselineChecks = validateRevision(ctx, t.options, t.before, filepath.Join(t.root, "baseline"), result.BaselineTestScope)
+	result.ActualBehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(result.ActualChecks)
+	if attempts := result.Attempts; len(attempts) > 0 {
+		last := attempts[len(attempts)-1]
+		result.BehaviorChecksPassed = checksPassed(result.BaselineChecks) && checksPassed(last.Checks) && commandPassed(last.Agent) && last.HasChanges && len(last.PolicyChanges) == 0
+	}
 	return nil
 }
 
@@ -264,7 +290,9 @@ func (t *pilotTrial) checkoutActual(ctx context.Context) error {
 	result.ActualAncestry = finding.actualAncestry(ctx)
 	result.ActualColumbo = new(CommandResult)
 	*result.ActualColumbo = analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
-	result.ActualChecks = validateRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual"))
+	scope := affectedScope(ctx, t.options, t.actual, result.ChangedPaths)
+	result.ActualTestScope = &scope
+	result.ActualChecks = validateRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual"), scope)
 	if patch, err := finding.actualPatch(ctx); err == nil {
 		return writePrivate(filepath.Join(t.root, "actual.patch"), []byte(patch))
 	}
@@ -357,12 +385,12 @@ func checkModule(root, module string) error {
 	return nil
 }
 
-func validateRevision(ctx context.Context, options PilotOptions, dir, prefix string) []CommandResult {
+func validateRevision(ctx context.Context, options PilotOptions, dir, prefix string, scope TestScope) []CommandResult {
 	if err := checkModule(dir, options.Module); err != nil {
 		return []CommandResult{{Exit: -1, Error: err.Error()}}
 	}
 	var results []CommandResult
-	for i, check := range options.Checks {
+	for i, check := range options.checkCommands(scope) {
 		results = append(results, runTrialCommand(ctx, filepath.Join(dir, options.Module), []string{"/bin/sh", "-c", check}, "", prefix+"-check-"+strconv.Itoa(i+1), options.CheckTimeout, options.PassEnv...))
 	}
 	return results

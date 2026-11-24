@@ -116,12 +116,21 @@ func pilotSummary(root string, plan PilotPlan) error {
 			}
 		}
 		checks := "not verified"
-		passed := result.BehaviorChecksPassed
+		passed, scope := result.BehaviorChecksPassed, result.BaselineTestScope
+		if last := lastTestScope(result.Attempts); last != nil {
+			scope = *last
+		}
 		if !finding.explores() {
 			passed = result.ActualBehaviorChecksPassed
+			if result.ActualTestScope != nil {
+				scope = *result.ActualTestScope
+			}
 		}
 		if passed {
 			checks = "passed; coverage limits apply"
+			if len(scope.Packages) > 0 {
+				checks = fmt.Sprintf("passed in %d affected packages; coverage limits apply", len(scope.Packages))
+			}
 		}
 		fmt.Fprintf(&report, "| %d | %s | %s | %s | %s | %s | %s | [trial](trials/%s/result.json) |\n", finding.PR, markdown(finding.CaseID), markdown(finding.Rule), finding.Reaction, finding.analysisMode(), outcome, checks, finding.ID)
 	}
@@ -133,6 +142,14 @@ func pilotSummary(root string, plan PilotPlan) error {
 		}
 		if !result.Complete {
 			continue
+		}
+		for _, revision := range []struct {
+			name  string
+			scope *TestScope
+		}{{"original", &result.BaselineTestScope}, {"experimental", lastTestScope(result.Attempts)}, {"later PR", result.ActualTestScope}} {
+			if revision.scope != nil && revision.scope.Reason != "" {
+				fmt.Fprintf(&report, "Tests covered in the %s revision: %s.\n\n", revision.name, revision.scope.describe())
+			}
 		}
 		for _, item := range []struct {
 			name     string
@@ -176,4 +193,11 @@ func readOnlyGitCommands(dirs ...string) string {
 		}
 	}
 	return prompt.String()
+}
+
+func lastTestScope(attempts []RefactoringAttempt) *TestScope {
+	if len(attempts) == 0 {
+		return nil
+	}
+	return &attempts[len(attempts)-1].TestScope
 }

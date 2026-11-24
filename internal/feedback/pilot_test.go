@@ -126,7 +126,7 @@ review)
  ;;
 esac
 `)
-	options := PilotOptions{Repository: "o/r", Store: storePath, Out: filepath.Join(root, "pilot"), Agent: agent, AgentArgs: stringList{"{phase}"}, Columbo: analyzer, Checks: stringList{"go test ./..."}, Limit: 1, Turns: 3, Attempts: 2, Timeout: 5 * time.Second, CheckTimeout: 30 * time.Second, AllowReconstructed: true, Module: "."}
+	options := PilotOptions{Repository: "o/r", Store: storePath, Out: filepath.Join(root, "pilot"), Agent: agent, AgentArgs: stringList{"{phase}"}, Columbo: analyzer, Limit: 1, Turns: 3, Attempts: 2, Timeout: 5 * time.Second, CheckTimeout: 30 * time.Second, AllowReconstructed: true, Module: "."}
 	var out strings.Builder
 	require.ErrorContains(t, Pilot(context.Background(), options, &out), "1 trials incomplete")
 	require.NoError(t, os.WriteFile(ready, []byte("ready"), 0o600))
@@ -148,6 +148,12 @@ esac
 	require.Equal(t, hasLater, result.ActualBehaviorChecksPassed)
 	require.True(t, result.BaselineColumbo.EvidenceValid)
 	require.Equal(t, "default configuration", result.AnalysisConfigOrigin)
+	if hasLater || group == "thumbs-down" {
+		require.Equal(t, []string{"f.go"}, result.ChangedPaths)
+		require.Equal(t, TestScope{Packages: []string{"example.invalid/pilot"}, Reason: "affected packages"}, result.BaselineTestScope)
+	} else {
+		require.Equal(t, TestScope{Reason: "no changed files"}, result.BaselineTestScope)
+	}
 	if group == "thumbs-down" {
 		require.Len(t, result.Attempts, 2)
 		require.False(t, checksPassed(result.Attempts[0].Checks))
@@ -163,7 +169,8 @@ esac
 		report, err := os.ReadFile(filepath.Join(options.Out, "report.md"))
 		require.NoError(t, err)
 		if hasLater {
-			require.Contains(t, string(report), "actual-changes | no-demonstrated-benefit | passed")
+			require.Contains(t, string(report), "actual-changes | no-demonstrated-benefit | passed in 1 affected packages; coverage limits apply")
+			require.Contains(t, string(report), "Tests covered in the later PR revision: example.invalid/pilot.")
 		} else {
 			require.Equal(t, "inconclusive", result.Review.Actual.Outcome)
 			require.Contains(t, string(report), "actual-changes | inconclusive | not verified")
