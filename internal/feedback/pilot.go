@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -56,6 +57,7 @@ type PilotOptions struct {
 	Config             string        `json:"config,omitempty"`
 	ConfigSHA256       string        `json:"config_sha256,omitempty"`
 	FullTests          bool          `json:"full_tests"`
+	Parallel           int           `json:"-"`
 }
 
 type PilotCase struct {
@@ -112,12 +114,13 @@ func (c cli) pilot(args []string) int {
 	flags.BoolVar(&o.AllowReconstructed, "allow-reconstructed", false, "allow review-anchor revisions when the exact analyzed revision is unavailable")
 	flags.StringVar(&o.Module, "module", ".", "Go module subdirectory relative to the repository")
 	flags.Var(&o.PassEnv, "pass-env", "additional environment variable name to pass to agents and checks; repeat for more")
+	flags.IntVar(&o.Parallel, "parallel", 1, "number of trials to run at once")
 	flags.BoolVar(&o.FullTests, "full-tests", false, "run the default go test check on the whole module instead of affected packages")
 	flags.StringVar(&o.Config, "config", "", "configuration path within the module (default captured CI config, then .columbo.yml)")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if flags.NArg() != 0 || !repositoryPattern.MatchString(o.Repository) || o.Out == "" || o.Limit < 1 || o.Turns < 1 || o.Attempts < 1 || o.Timeout <= 0 || o.CheckTimeout <= 0 {
+	if flags.NArg() != 0 || !repositoryPattern.MatchString(o.Repository) || o.Out == "" || o.Limit < 1 || o.Parallel < 1 || o.Turns < 1 || o.Attempts < 1 || o.Timeout <= 0 || o.CheckTimeout <= 0 {
 		return c.fail(2, errors.New("pilot requires --repo owner/name, --out path, and positive limits"))
 	}
 	if filepath.IsAbs(o.Module) || o.Module == ".." || strings.HasPrefix(filepath.Clean(o.Module), ".."+string(filepath.Separator)) {
@@ -194,25 +197,53 @@ func Pilot(ctx context.Context, options PilotOptions, out io.Writer) error {
 	if len(plan.Cases) == 0 {
 		return fmt.Errorf("no eligible findings; see %s for exclusions", filepath.Join(options.Out, "plan.json"))
 	}
-	var failures []string
-	for i, finding := range plan.Cases {
-		fmt.Fprintf(out, "[%d/%d] PR %d %s (%s)\n", i+1, len(plan.Cases), finding.PR, finding.CaseID, finding.Reaction)
-		if err := runPilotCase(ctx, options, finding); err != nil {
-			failures = append(failures, finding.ID+": "+err.Error())
-			fmt.Fprintf(out, "  incomplete: %v\n", err)
-		}
-		if err := pilotSummary(options.Out, plan); err != nil {
-			return err
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+	failures := runPilotCases(ctx, options, plan.Cases, out)
+	if err := pilotSummary(options.Out, plan); err != nil {
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	fmt.Fprintln(out, "Pilot report:", filepath.Join(options.Out, "report.md"))
-	if len(failures) > 0 {
-		return fmt.Errorf("%d trials incomplete; rerun the same command to retry (earlier attempts retained)", len(failures))
+	if failures > 0 {
+		return fmt.Errorf("%d trials incomplete; rerun the same command to retry (earlier attempts retained)", failures)
 	}
 	return nil
+}
+
+func runPilotCases(ctx context.Context, options PilotOptions, cases []PilotCase, out io.Writer) (failures int) {
+	var mu sync.Mutex
+	var workers sync.WaitGroup
+	indices := make(chan int)
+	for range max(options.Parallel, 1) {
+		workers.Go(func() {
+			for i := range indices {
+				finding := cases[i]
+				label := fmt.Sprintf("[%d/%d] PR %d %s (%s)", i+1, len(cases), finding.PR, finding.CaseID, finding.Reaction)
+				mu.Lock()
+				fmt.Fprintln(out, label+": started")
+				mu.Unlock()
+				err := runPilotCase(ctx, options, finding)
+				mu.Lock()
+				if err != nil {
+					failures++
+					fmt.Fprintf(out, "%s: incomplete: %v\n", label, err)
+				} else {
+					fmt.Fprintln(out, label+": done")
+				}
+				mu.Unlock()
+			}
+		})
+	}
+	for i := 0; i < len(cases) && ctx.Err() == nil; i++ {
+		select {
+		case indices <- i:
+		case <-ctx.Done():
+		}
+	}
+	close(indices)
+	workers.Wait()
+	return failures
 }
 
 func loadOrPlan(ctx context.Context, options PilotOptions) (PilotPlan, error) {

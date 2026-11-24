@@ -77,7 +77,9 @@ Only thumbs-down findings receive exploratory refactoring, with up to two attemp
 
 Each phase receives a fresh agent context. Withholding later evidence is an experimental procedure, not a filesystem security boundary. Default read-only phases are checked for source edits. The trial checkouts have only the starting revision's reachable history until the review phase.
 
-`--attempts`, `--turns`, `--timeout`, and `--check-timeout` bound effort. Defaults are two refactoring attempts, thirty turns per default Claude invocation, ten minutes per agent invocation, and five minutes per check or analyzer invocation. Trials run sequentially. Failed checks do not turn an unverified change into a demonstrated benefit. A failed attempt does not establish that no useful refactoring exists.
+`--attempts`, `--turns`, `--timeout`, and `--check-timeout` bound effort. Defaults are two refactoring attempts, thirty turns per default Claude invocation, ten minutes per agent invocation, and five minutes per check or analyzer invocation. Failed checks do not turn an unverified change into a demonstrated benefit. A failed attempt does not establish that no useful refactoring exists.
+
+Trials run one at a time by default. `--parallel 3` runs up to three trials at once, each in its own checkouts and execution directory, and prefixes progress lines with the trial's label. Project checks and agents then run concurrently. Test suites that share external resources, such as a database or fixed ports, must tolerate that, or keep `--parallel 1`. Interrupting the pilot stops every running trial. The runner writes `report.md` once all trials finish or stop. `--parallel` is not part of the frozen settings, so a resumed pilot may use a different value.
 
 The runner records policy changes and test edits for review. A candidate that changes `.columbo.yml` or adds a suppression cannot be marked as a verified behavior-preserving candidate. The reviewer must examine changed assertions for weakened tests. Passing tests supports behavior preservation only within their coverage.
 
