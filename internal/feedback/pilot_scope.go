@@ -55,8 +55,13 @@ func changedPaths(ctx context.Context, dir string, args ...string) ([]string, er
 	return slices.DeleteFunc(strings.Split(names, "\x00"), func(name string) bool { return name == "" }), nil
 }
 
+func intendToAddUntracked(ctx context.Context, dir string) error {
+	_, err := git(ctx, dir, "add", "--intent-to-add", "--", ".")
+	return err
+}
+
 func candidatePaths(ctx context.Context, dir, baseline string) ([]string, error) {
-	if _, err := git(ctx, dir, "add", "--intent-to-add", "--", "."); err != nil {
+	if err := intendToAddUntracked(ctx, dir); err != nil {
 		return nil, err
 	}
 	return changedPaths(ctx, dir, baseline, "--", ".")

@@ -51,6 +51,9 @@ type RefactoringAttempt struct {
 	PolicyChanges []string        `json:"policy_changes,omitempty"`
 	TestChanges   []string        `json:"test_changes,omitempty"`
 	HasChanges    bool            `json:"has_changes"`
+	Gofmt         *CommandResult  `json:"gofmt,omitempty"`
+	Unformatted   []string        `json:"unformatted,omitempty"`
+	Target        *TargetOutcome  `json:"target,omitempty"`
 }
 
 type TrialResult struct {
@@ -74,6 +77,7 @@ type TrialResult struct {
 	ActualChecks               []CommandResult      `json:"actual_checks,omitempty"`
 	ActualTestScope            *TestScope           `json:"actual_test_scope,omitempty"`
 	ActualColumbo              *CommandResult       `json:"actual_columbo,omitempty"`
+	ActualTarget               *TargetOutcome       `json:"actual_target,omitempty"`
 	ActualAncestry             string               `json:"actual_ancestry"`
 	ReviewCommands             []CommandResult      `json:"review_commands"`
 	Review                     DesignReview         `json:"review"`
@@ -251,27 +255,34 @@ func (t *pilotTrial) refactor(ctx context.Context) error {
 }
 
 func (t *pilotTrial) attempt(ctx context.Context, number int, prefix string) (RefactoringAttempt, error) {
-	refactoring := RefactoringAttempt{Number: number}
-	refactoring.Agent = invokeAgent(ctx, t.options, t.refactoringCall(prefix))
-	if err := t.collectCandidatePaths(ctx); err != nil {
+	refactoring := RefactoringAttempt{Number: number, Agent: invokeAgent(ctx, t.options, t.refactoringCall(prefix))}
+	if err := t.evaluateCandidate(ctx, &refactoring, prefix); err != nil {
 		return refactoring, err
 	}
-	refactoring.TestScope, refactoring.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
-	refactoring.Columbo = analyzeRevision(ctx, t.options, t.candidate, prefix+"-columbo")
 	return refactoring, refactoring.recordPatch(ctx, t.candidate, t.finding.Before, prefix)
+}
+
+func (t *pilotTrial) evaluateCandidate(ctx context.Context, attempt *RefactoringAttempt, prefix string) error {
+	own, err := t.collectCandidatePaths(ctx)
+	if err != nil {
+		return err
+	}
+	attempt.Gofmt, attempt.Unformatted = t.options.unformattedFiles(ctx, t.candidate, prefix, own)
+	attempt.TestScope, attempt.Checks = t.options.validateRevision(ctx, t.candidate, prefix, t.result.ChangedPaths)
+	attempt.Columbo, attempt.Target = t.analyzeWithTarget(ctx, t.candidate, prefix+"-columbo", t.candidateRenames)
+	return nil
 }
 
 func (t *pilotTrial) refactoringCall(prefix string) agentCall {
 	return agentCall{phase: "refactor", dir: t.candidate, prompt: refactoringPrompt(t.finding, t.result.Assessment, t.result.Attempts), prefix: prefix + "-agent"}
 }
 
-func (t *pilotTrial) collectCandidatePaths(ctx context.Context) error {
-	paths, err := candidatePaths(ctx, t.candidate, t.finding.Before)
-	if err != nil {
-		return err
+func (t *pilotTrial) collectCandidatePaths(ctx context.Context) ([]string, error) {
+	own, err := candidatePaths(ctx, t.candidate, t.finding.Before)
+	if err == nil {
+		t.result.ChangedPaths = unionPaths(own, t.actualPaths)
 	}
-	t.result.ChangedPaths = unionPaths(paths, t.actualPaths)
-	return nil
+	return own, err
 }
 
 func (a *RefactoringAttempt) recordPatch(ctx context.Context, dir, baseline, prefix string) error {
@@ -332,9 +343,10 @@ func (t *pilotTrial) checkoutActual(ctx context.Context) error {
 }
 
 func (t *pilotTrial) validateActual(ctx context.Context) {
-	columbo := analyzeRevision(ctx, t.options, t.actual, filepath.Join(t.root, "actual-columbo"))
+	columbo, target := t.analyzeWithTarget(ctx, t.actual, filepath.Join(t.root, "actual-columbo"), t.actualRenames)
+	t.result.ActualColumbo, t.result.ActualTarget = &columbo, target
 	scope, checks := t.options.validateRevision(ctx, t.actual, filepath.Join(t.root, "actual"), t.result.ChangedPaths)
-	t.result.ActualColumbo, t.result.ActualTestScope, t.result.ActualChecks = &columbo, &scope, checks
+	t.result.ActualTestScope, t.result.ActualChecks = &scope, checks
 }
 
 func (t *pilotTrial) review(ctx context.Context) error {
@@ -478,9 +490,9 @@ func analyzeRevision(ctx context.Context, options PilotOptions, dir, prefix stri
 		return result
 	}
 	defer snapshot.Close()
-	cases, err := snapshot.Queries().SummaryCases(ctx)
+	cases, err := loadAnalyzedCases(ctx, snapshot.Queries())
 	if err == nil {
-		err = saveJSON(prefix+".cases.json", cases)
+		err = saveJSON(casesPath(prefix), cases)
 	}
 	if err != nil {
 		result.Error = "analysis evidence: " + err.Error()
@@ -550,7 +562,7 @@ func checksPassed(results []CommandResult) bool {
 }
 
 func sourcePatch(ctx context.Context, dir, baseline string) ([]byte, error) {
-	if _, err := git(ctx, dir, "add", "--intent-to-add", "--", "."); err != nil {
+	if err := intendToAddUntracked(ctx, dir); err != nil {
 		return nil, err
 	}
 	patch, err := git(ctx, dir, "diff", "--binary", "--no-ext-diff", "--no-textconv", baseline, "--", ".")

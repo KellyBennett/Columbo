@@ -23,7 +23,7 @@ import (
 	"github.com/KellyBennett/Columbo/internal/feedbackdb"
 )
 
-const pilotVersion = 4
+const pilotVersion = 5
 
 type stringList []string
 

@@ -2293,6 +2293,47 @@ func (q *Queries) SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error
 	return items, nil
 }
 
+const summaryCaseDeclarations = `-- name: SummaryCaseDeclarations :many
+SELECT cd.case_id,d.symbol,f.path,cd.role FROM case_declarations cd
+JOIN declarations d ON d.id=cd.declaration_id
+JOIN files f ON f.id=d.file_id ORDER BY cd.case_id,f.path,d.symbol,cd.role
+`
+
+type SummaryCaseDeclarationsRow struct {
+	CaseID string
+	Symbol string
+	Path   string
+	Role   string
+}
+
+func (q *Queries) SummaryCaseDeclarations(ctx context.Context) ([]SummaryCaseDeclarationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, summaryCaseDeclarations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryCaseDeclarationsRow
+	for rows.Next() {
+		var i SummaryCaseDeclarationsRow
+		if err := rows.Scan(
+			&i.CaseID,
+			&i.Symbol,
+			&i.Path,
+			&i.Role,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const summaryCases = `-- name: SummaryCases :many
 SELECT c.id,c.smell,d.symbol,f.path,c.start_line,c.end_line,c.verdict,c.suppressed
 FROM cases c JOIN declarations d ON d.id=c.primary_declaration_id

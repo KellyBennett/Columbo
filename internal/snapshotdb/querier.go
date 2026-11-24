@@ -95,6 +95,7 @@ type Querier interface {
 	ReportIdentity(ctx context.Context) (ReportIdentityRow, error)
 	StageCollectors(ctx context.Context, arg StageCollectorsParams) ([]StageCollector, error)
 	SummaryAdvisories(ctx context.Context) ([]AdvisoryGroup, error)
+	SummaryCaseDeclarations(ctx context.Context) ([]SummaryCaseDeclarationsRow, error)
 	SummaryCases(ctx context.Context) ([]SummaryCasesRow, error)
 	SummaryClueSets(ctx context.Context, arg SummaryClueSetsParams) ([]SummaryClueSetsRow, error)
 	SummaryCorrelationCases(ctx context.Context, arg SummaryCorrelationCasesParams) ([]SummaryCorrelationCasesRow, error)
